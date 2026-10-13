@@ -1,0 +1,197 @@
+# ─────────────────────────────────────────────────────────────────
+# Job Hunter — Aday ve Sistem Konfigürasyonu
+# Bu dosya hem Go orchestrator hem Python scraper tarafından okunur.
+# Gizli bilgiler (API key, şifre) buraya yazılmaz — .env'e gider.
+# ─────────────────────────────────────────────────────────────────
+
+candidate:
+  name: "Ulaş Dursun"
+  location: "Istanbul"
+  status: "new_grad"
+  graduation_year: 2026
+
+  skills:
+    languages:  ["Go", "Java", "Python", "Rust"]
+    frameworks: ["Spring Boot"]
+    databases:  ["PostgreSQL", "MongoDB", "Redis"]
+    os:         ["Linux (Bash/Shell Scripting)"]
+    infra:      ["Docker", "Docker Compose", "Kubernetes (Basics)", "Prometheus", "Grafana"]
+    cloud:      ["AWS EC2", "AWS S3", "AWS IAM", "AWS VPC"]
+    concepts:   ["REST API", "JWT", "Concurrency", "Worker Pool",
+                 "Distributed Systems", "TCP/UDP", "Microservices"]
+
+  target_roles:
+    primary:
+      - "Backend Developer"
+      - "Backend Engineer"
+      - "Software Engineer"
+      - "Software Developer"
+      - "Go Developer"
+      - "Golang Developer"
+      - "Java Developer"
+      - "Python Developer"
+      - "Platform Engineer"
+      - "Cloud Engineer"
+      - "DevOps Engineer"
+      - "Site Reliability Engineer"
+      - "SRE"
+      - "System Engineer"
+    secondary:
+      - "Data Engineer"
+      - "Analytics Engineer"
+      - "Data Platform Engineer"
+      - "Pipeline Engineer"
+      - "Database Engineer"
+      - "Data Analyst"
+
+  seniority:
+    preferred:  ["junior", "entry-level", "new grad", "0-1 yıl", "0-2 years"]
+    acceptable: ["mid-level", "2-3 yıl", "1-3 years"]
+    rejected:   ["senior", "staff", "principal", "manager", "lead", "head of"]
+
+  work_preference: ["hybrid", "remote", "on-site"]
+
+  blacklist_keywords:
+    - ".NET"
+    - "C#"
+    - "PHP"
+    - "Ruby on Rails"
+    - "SAP"
+    - "COBOL"
+    - "QA Engineer"
+    - "Test Engineer"
+    - "iOS Developer"
+    - "Android Developer"
+    - "React Developer"
+    - "Angular Developer"
+    - "6+ years"
+    - "7+ years"
+    - "8+ years"
+    - "10+ years"
+    - "Senior"
+    - "Principal"
+    - "Staff"
+    - "Manager"
+    - "Lead"
+    - "Satış"
+    - "Sales"
+    - "Üretim"
+    - "Destek"
+    - "Support"
+    - "Pazarlama"
+
+  priority_companies:
+    - "Trendyol"
+    - "Getir"
+    - "Insider"
+    - "Dream Games"
+    - "Peak Games"
+    - "Papara"
+    - "Param"
+    - "Sahibinden"
+    - "Hepsiburada"
+    - "Yemeksepeti"
+    - "Commencis"
+    - "BtcTurk"
+    - "Çiçeksepeti"
+    - "Intertech"
+    - "Vodafone"
+    - "Iyzico"
+    - "Letgo"
+    - "Garanti BBVA Teknoloji"
+    - "Migros One"
+    - "Lidio"
+    - "Huawei"
+    - "Bitfinex"
+    - "Tether"
+    - "QNB Teknoloji"
+    - "Akbank Teknoloji"
+    - "Figopara"
+    - "Vispera"
+    - "Hopi"
+    - "Mediamarkt Turkey"
+    - "Otomobilen"
+    - "PayTR"
+
+scoring:
+  telegram_threshold_primary:   7.5
+  telegram_threshold_secondary: 8.0
+  save_threshold:               5.0
+
+sources:
+  kariyer_net:
+    enabled: false
+
+  linkedin_rss:
+    enabled: false
+
+  indeed:
+    enabled: false
+
+  jobspy:
+    enabled: true
+    poll_interval_minutes: 30
+    max_age_days: 7
+    results_per_keyword: 20
+    location: "Istanbul, Turkey"
+    keywords:
+      # ── Backend — Go/Java ─────────────────────
+      - "backend developer"
+      - "backend engineer"
+      - "software engineer"
+      - "software developer"
+      - "go developer"
+      - "golang developer"
+      - "java developer"
+      - "java spring boot developer"
+      - "distributed systems"
+
+      # ── Backend — Python (YENİ) ───────────────
+      - "python developer"
+      - "python backend developer"
+      - "junior python developer"
+
+      # ── Cloud / DevOps ────────────────────────
+      - "cloud engineer"
+      - "devops engineer"
+      - "platform engineer"
+      - "site reliability engineer"
+      - "sre"
+      - "aws engineer"
+      - "infrastructure engineer"
+
+      # ── Geniş Net — Junior/Grad sinyalleri (YENİ) ──
+      - "graduate software engineer"
+      - "trainee software engineer"
+      - "junior software developer"
+
+      # ── Data (secondary track) ────────────────
+      - "data engineer"
+      - "data platform engineer"
+      - "analytics engineer"
+      - "data analyst"
+      - "junior data analyst"
+
+redis:
+  stream_raw:      "jobs:raw"
+  stream_filtered: "jobs:filtered"
+  stream_failed:   "jobs:failed"
+  consumer_group:  "job-hunter"
+  consumer_name:   "orchestrator-1"
+  dedup_set_key:   "jobs:seen"
+  dedup_ttl_days:  30
+
+server:
+  metrics_port: 9091
+  dashboard_port: 8080
+
+gemini:
+  model: "llama-3.3-70b-versatile"
+  max_tokens: 1500
+  rate_limit_rpm: 6
+
+worker:
+  pool_size: 1
+
+notifications:
+  telegram_enabled: true

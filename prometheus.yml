@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Go orchestrator — host makinede çalışıyor
+  # Linux'ta host.docker.internal çalışmazsa: 172.17.0.1:9091 kullan
+  - job_name: "job-hunter-orchestrator"
+    static_configs:
+      - targets: ["host.docker.internal:9091"]
+    scrape_interval: 10s

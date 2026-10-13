@@ -1,0 +1,39 @@
+# Secrets & Local Environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Go
+bin/
+*.exe
+*.test
+coverage.out
+*.coverprofile
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Temporary & Debug Files
+debug_*
+*.log
+tmp/
+
+# IDE & Machine-specific
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
