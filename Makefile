@@ -39,7 +39,7 @@ infra-up:
 	@sleep 4
 	@echo ""
 	@echo "✓ Infrastructure çalışıyor:"
-	@echo "  PostgreSQL  → localhost:5432"
+	@echo "  PostgreSQL  → localhost:5433"
 	@echo "  Redis       → localhost:6379"
 	@echo "  Prometheus  → http://localhost:9090"
 	@echo "  Grafana     → http://localhost:3000  (admin / admin)"
@@ -54,7 +54,10 @@ run-orchestrator:
 	go run ./cmd/orchestrator/...
 
 run-scraper:
-	PYTHONPATH=. python -m scraper.main
+	python -m scraper.main
+
+run-scraper-once:
+	python -m scraper.main --once
 
 # ── Testler ──────────────────────────────────────────────────────────────────
 test:
