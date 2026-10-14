@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -98,6 +98,12 @@
         .badge { padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.05em }
         .badge-linkedin { background:rgba(10,102,194,.18);color:#60A5FA }
         .badge-indeed   { background:rgba(42,104,194,.14);color:#93C5FD }
+        .badge-greenhouse { background:rgba(16,185,129,.18);color:#34D399 }
+        .badge-lever      { background:rgba(245,158,11,.18);color:#FBBF24 }
+        .badge-smartrecruiters { background:rgba(168,85,247,.18);color:#C084FC }
+        .badge-eurocontrol { background:rgba(34,211,238,.2);color:#22D3EE;border:1px solid rgba(34,211,238,.4) }
+        .badge-techcareer  { background:rgba(236,72,153,.18);color:#F472B6 }
+        .badge-arbeitnow   { background:rgba(59,130,246,.18);color:#93C5FD }
         .badge-primary  { background:rgba(167,139,250,.12);color:#C4B5FD }
         .badge-secondary{ background:rgba(34,211,238,.1); color:var(--cyan) }
 
@@ -199,6 +205,7 @@
         <!-- Right controls -->
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
             <span id="last-upd" class="num" style="font-size:11px;color:var(--text-lo)">—</span>
+            <button onclick="clearAllJobs()" class="btn" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#FCA5A5;font-size:11px" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'" title="Veritabanındaki tüm ilanları kalıcı olarak temizler">🗑️ Tümünü Temizle</button>
             <button onclick="load()" class="btn" style="background:var(--card);border:1px solid var(--border);color:var(--text);font-size:11px" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">↻ Yenile</button>
         </div>
     </div>
@@ -235,6 +242,10 @@
             <button class="ftab"    data-status="interview" onclick="setStat('interview')">Mülakat</button>
             <button class="ftab"    data-status="offer"     onclick="setStat('offer')">Teklif 🎉</button>
             <button class="ftab"    data-status=""          onclick="setStat('')">Tümü</button>
+            <span style="color:var(--border);margin:0 4px">|</span>
+            <button class="ftab" onclick="filterPreset('eurocontrol')" style="border-color:rgba(34,211,238,0.3);color:var(--cyan)">✈️ Havacılık / Brüksel</button>
+            <button class="ftab" onclick="filterPreset('techcareer')" style="border-color:rgba(236,72,153,0.3);color:#F472B6">🇹🇷 Techcareer & MT</button>
+            <button class="ftab" onclick="filterPreset('top')" style="border-color:rgba(16,185,129,0.3);color:#6EE7B7">🌟 Skor >= 8.0</button>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
             <input class="inp" id="search-inp" placeholder="🔍 Şirket / pozisyon..." style="width:200px" oninput="handleSearch(this.value)">
@@ -268,7 +279,8 @@
     ════════════════════════════════════════════════════════════════════ */
     const api = {
         get: path => fetch(path).then(r => { if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
-        patch: (path,body) => fetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+        patch: (path,body) => fetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
+        delete: path => fetch(path,{method:'DELETE'}).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return true })
     }
 
     /* ════════════════════════════════════════════════════════════════════
@@ -406,15 +418,24 @@
         const over = (j.skill_overlap  || []).slice(0,7)
         const miss = (j.missing_skills || []).slice(0,4)
         const flag = (j.red_flags      || []).slice(0,2)
-        const src  = j.source === 'linkedin' ? 'linkedin' : 'indeed'
-        const srcL = j.source === 'linkedin' ? 'LinkedIn'  : 'Indeed'
+        const srcMap = {
+            linkedin: { cls: 'linkedin', lbl: 'LinkedIn' },
+            indeed: { cls: 'indeed', lbl: 'Indeed' },
+            greenhouse: { cls: 'greenhouse', lbl: 'Greenhouse' },
+            lever: { cls: 'lever', lbl: 'Lever' },
+            smartrecruiters: { cls: 'smartrecruiters', lbl: 'SmartRecruiters' },
+            eurocontrol: { cls: 'eurocontrol', lbl: 'EUROCONTROL ✈️' },
+            techcareer: { cls: 'techcareer', lbl: 'techcareer.net' },
+            arbeitnow: { cls: 'arbeitnow', lbl: 'Arbeitnow (EU)' }
+        }
+        const sInfo = srcMap[j.source] || { cls: 'secondary', lbl: j.source || 'Direct' }
 
         return `
   <div class="card status-${j.status}" id="c-${j.id}" style="padding:15px;animation:fade-in .25s ease">
     <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">
       <div style="flex:1;min-width:0">
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:7px">
-          <span class="badge badge-${src}">${srcL}</span>
+          <span class="badge badge-${sInfo.cls}">${sInfo.lbl}</span>
           ${j.role_family ? `<span class="badge badge-${j.role_family}">${j.role_family}</span>` : ''}
           ${stBadge(j.status)}
           <span class="num" style="font-size:10px;color:var(--text-lo);margin-left:auto">${ago(j.scraped_at)}</span>
@@ -440,6 +461,7 @@
         <button class="btn btn-int   ${j.status==='interview' ?'on':''}" onclick="upd('${j.id}','interview')">🎯 Mülakat</button>
         <button class="btn btn-rej   ${j.status==='rejected'  ?'on':''}" onclick="upd('${j.id}','rejected')">✗ Red</button>
         <button class="btn btn-skip  ${j.status==='skipped'   ?'on':''}" onclick="upd('${j.id}','skipped')">Geç</button>
+        <button class="btn" style="background:transparent;border:1px solid var(--border);color:var(--text-lo)" onclick="delJob('${j.id}')" title="İlanı Kalıcı Sil">🗑️</button>
       </div>
       <a href="${esc(j.url)}" target="_blank" rel="noopener noreferrer" class="btn-link">İlana Git →</a>
     </div>
@@ -569,6 +591,53 @@
                 }
             }
         } catch(err) { console.error('status update:', err) }
+    }
+
+    async function delJob(id) {
+        if (!confirm('Bu ilanı kalıcı olarak silmek istediğine emin misin?')) return
+        try {
+            await api.delete(`/api/jobs/${id}`)
+            S.jobs = S.jobs.filter(x => x.id !== id)
+            S.total = Math.max(0, S.total - 1)
+            renderJobs()
+            loadStats()
+        } catch(err) {
+            alert('İlan silinemedi: ' + err.message)
+        }
+    }
+
+    async function clearAllJobs() {
+        if (!confirm('⚠️ DİKKAT: Veritabanındaki tüm ilanlar kalıcı olarak silinecek. Onaylıyor musun?')) return
+        try {
+            await api.delete('/api/jobs')
+            S.jobs = []
+            S.total = 0
+            renderJobs()
+            loadStats()
+        } catch(err) {
+            alert('İlanlar temizlenemedi: ' + err.message)
+        }
+    }
+
+    function filterPreset(type) {
+        F.offset = 0
+        if (type === 'eurocontrol') {
+            F.search = 'EUROCONTROL'
+            F.action = ''
+            F.status = ''
+            document.getElementById('search-inp').value = 'EUROCONTROL'
+        } else if (type === 'techcareer') {
+            F.search = ''
+            F.action = ''
+            F.status = ''
+            document.getElementById('search-inp').value = ''
+        } else if (type === 'top') {
+            F.action = 'apply'
+            F.status = ''
+            F.search = ''
+            document.getElementById('search-inp').value = ''
+        }
+        load()
     }
 
     /* ════════════════════════════════════════════════════════════════════

@@ -253,3 +253,16 @@ func (r *Repository) topCompanies(ctx context.Context) ([]CompanyDTO, error) {
 	}
 	return companies, rows.Err()
 }
+
+// DeleteJob deletes a single job by id.
+func (r *Repository) DeleteJob(ctx context.Context, id string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM jobs WHERE id = $1`, id)
+	return err
+}
+
+// ClearAllJobs truncates the jobs table.
+func (r *Repository) ClearAllJobs(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `TRUNCATE TABLE jobs`)
+	return err
+}
+

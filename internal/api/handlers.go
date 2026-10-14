@@ -87,6 +87,34 @@ func (h *Handlers) UpdateJobStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, job)
 }
 
+// DeleteJob handles DELETE /api/jobs/{id}
+func (h *Handlers) DeleteJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, errBadRequest("missing job id"))
+		return
+	}
+
+	if err := h.repo.DeleteJob(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	slog.Info("job deleted", "id", id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ClearJobs handles DELETE /api/jobs
+func (h *Handlers) ClearJobs(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.ClearAllJobs(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	slog.Info("all jobs cleared from db")
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 func nullableParam(v string) *string {

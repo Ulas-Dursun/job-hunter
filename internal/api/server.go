@@ -20,6 +20,8 @@ func StartServer(port int, pool *pgxpool.Pool) {
 	mux.HandleFunc("GET /api/jobs", h.ListJobs)
 	mux.HandleFunc("GET /api/stats", h.GetStats)
 	mux.HandleFunc("PATCH /api/jobs/{id}/status", h.UpdateJobStatus)
+	mux.HandleFunc("DELETE /api/jobs/{id}", h.DeleteJob)
+	mux.HandleFunc("DELETE /api/jobs", h.ClearJobs)
 
 	// ── Static frontend ──────────────────────────────────────────────────────
 	// Everything under web/ is served as-is; index.html is the dashboard entry point.
@@ -40,7 +42,7 @@ func StartServer(port int, pool *pgxpool.Pool) {
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
