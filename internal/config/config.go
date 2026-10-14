@@ -67,6 +67,11 @@ type SourcesConfig struct {
 	KariyerNet  SourceConfig `yaml:"kariyer_net"`
 	LinkedInRSS SourceConfig `yaml:"linkedin_rss"`
 	Indeed      SourceConfig `yaml:"indeed"`
+	JobSpy      SourceConfig `yaml:"jobspy"`
+	ATS         SourceConfig `yaml:"ats"`
+	Eurocontrol SourceConfig `yaml:"eurocontrol"`
+	Techcareer  SourceConfig `yaml:"techcareer"`
+	Arbeitnow   SourceConfig `yaml:"arbeitnow"`
 }
 
 type SourceConfig struct {

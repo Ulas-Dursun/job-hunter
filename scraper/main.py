@@ -15,6 +15,10 @@ from dotenv import load_dotenv
 from scraper.config import load_config, get_redis_url
 from scraper.publisher.redis_producer import RedisProducer
 from scraper.sources.jobspy_source import JobSpySource
+from scraper.sources.ats_source import ATSSource
+from scraper.sources.eurocontrol_source import EurocontrolSource
+from scraper.sources.techcareer_source import TechcareerSource
+from scraper.sources.arbeitnow_source import ArbeitnowSource
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,6 +90,22 @@ def main() -> None:
     if cfg["sources"].get("jobspy", {}).get("enabled", False):
         sources.append(JobSpySource(cfg["sources"]["jobspy"]))
         logger.info("jobspy source enabled (linkedin + indeed)")
+
+    if cfg["sources"].get("ats", {}).get("enabled", False):
+        sources.append(ATSSource(cfg["sources"]["ats"]))
+        logger.info("ats source enabled (greenhouse + lever + smartrecruiters)")
+
+    if cfg["sources"].get("eurocontrol", {}).get("enabled", False):
+        sources.append(EurocontrolSource(cfg["sources"]["eurocontrol"]))
+        logger.info("eurocontrol source enabled (official brussels portal)")
+
+    if cfg["sources"].get("techcareer", {}).get("enabled", False):
+        sources.append(TechcareerSource(cfg["sources"]["techcareer"]))
+        logger.info("techcareer source enabled (techcareer.net)")
+
+    if cfg["sources"].get("arbeitnow", {}).get("enabled", False):
+        sources.append(ArbeitnowSource(cfg["sources"]["arbeitnow"]))
+        logger.info("arbeitnow source enabled (eu tech jobs)")
 
     if not sources:
         logger.warning("no sources enabled — check config.yaml")

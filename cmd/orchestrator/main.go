@@ -155,5 +155,20 @@ func countEnabledSources(cfg *config.Config) int {
 	if cfg.Sources.Indeed.Enabled {
 		count++
 	}
+	if cfg.Sources.JobSpy.Enabled {
+		count++
+	}
+	if cfg.Sources.ATS.Enabled {
+		count++
+	}
+	if cfg.Sources.Eurocontrol.Enabled {
+		count++
+	}
+	if cfg.Sources.Techcareer.Enabled {
+		count++
+	}
+	if cfg.Sources.Arbeitnow.Enabled {
+		count++
+	}
 	return count
 }

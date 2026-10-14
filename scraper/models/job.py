@@ -76,7 +76,7 @@ class Job:
             "title":        self.title,
             "company":      self.company,
             "location":     self.location,
-            "description":  self.description[:2000],
+            "description":  self.description[:4000],
             "posted_at":    self.posted_at or "",
             "scraped_at":   self.scraped_at,
             "dedup_hash":   self.dedup_hash(),

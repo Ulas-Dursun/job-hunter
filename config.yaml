@@ -163,6 +163,37 @@ sources:
   indeed:
     enabled: false
 
+  ats:
+    enabled: true
+    greenhouse:
+      - name: "Dream Games"
+        token: "dreamgames"
+      - name: "Peak Games"
+        token: "peak"
+      - name: "Adyen"
+        token: "adyen"
+    lever:
+      - name: "Trendyol"
+        slug: "trendyol"
+      - name: "Commencis"
+        slug: "commencis"
+      - name: "Iyzico"
+        slug: "iyzico"
+    smartrecruiters:
+      - name: "Frequentis"
+        company_id: "frequentis"
+      - name: "Delivery Hero"
+        company_id: "DeliveryHero"
+
+  eurocontrol:
+    enabled: true
+
+  techcareer:
+    enabled: true
+
+  arbeitnow:
+    enabled: true
+
   jobspy:
     enabled: true
     poll_interval_minutes: 30
