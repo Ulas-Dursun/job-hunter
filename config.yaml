@@ -151,7 +151,7 @@ candidate:
 scoring:
   telegram_threshold_primary:   7.5
   telegram_threshold_secondary: 8.0
-  save_threshold:               5.0
+  save_threshold:               0.0 # Tüm puanlanan ilanlar DB'ye kaydedilir
 
 sources:
   kariyer_net:

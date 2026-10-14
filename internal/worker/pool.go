@@ -173,13 +173,9 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 		"latency_s", fmt.Sprintf("%.2f", elapsed),
 	)
 
-	// ── Save threshold filtresi ───────────────────────────────────────────────
-	if result.MatchScore < p.scoring.SaveThreshold {
-		p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
-		return
-	}
-
 	// ── PostgreSQL'e yaz ──────────────────────────────────────────────────────
+	// Tüm puanlanan ilanlar (skip/watch/apply) veritabanına kaydedilir.
+	// Bu sayede dashboard'da elenen ilanlar incelenebilir ve pazar analizi tam veriyle çalışır.
 	if err := p.jobStore.Upsert(ctx, store.JobRecord{
 		Source:      source,
 		ExternalID:  externalID,
