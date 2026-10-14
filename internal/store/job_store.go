@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,10 +37,11 @@ func NewJobStore(pool *pgxpool.Pool) *JobStore {
 // Upsert, iş ilanını ve AI analiz sonucunu PostgreSQL'e yazar.
 // ON CONFLICT: aynı ilan tekrar gelirse sadece score güncellenir.
 func (s *JobStore) Upsert(ctx context.Context, rec JobRecord) error {
-	// posted_at boşsa nil gönder — PostgreSQL TIMESTAMPTZ boş string kabul etmez
-	var postedAt *string
+	var postedAt *time.Time
 	if rec.PostedAt != "" && rec.PostedAt != "None" {
-		postedAt = &rec.PostedAt
+		if t, err := parsePostedAt(rec.PostedAt); err == nil {
+			postedAt = &t
+		}
 	}
 
 	var (
@@ -132,4 +135,31 @@ func (s *JobStore) MarkNotified(ctx context.Context, source, externalID string) 
 		source, externalID,
 	)
 	return err
+}
+
+func parsePostedAt(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	// UNIX epoch in seconds (e.g. 1791988821)
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		if n > 1e11 { // milliseconds
+			return time.UnixMilli(n), nil
+		}
+		return time.Unix(n, 0), nil
+	}
+
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		time.DateOnly,
+		time.RFC1123,
+		time.RFC822,
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unknown date format: %s", s)
 }

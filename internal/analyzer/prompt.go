@@ -18,9 +18,9 @@ func NewPromptBuilder(cfg *config.CandidateConfig) *PromptBuilder {
 }
 
 // Build, tek bir iş ilanı için tam prompt'u üretir.
-// Description 2500 rune ile sınırlandırılır — gereksinimlerin kesilmesini önler.
+// Description 1500 rune ile sınırlandırılır — TPM kotasını korur ve temel gereksinimleri kapsar.
 func (p *PromptBuilder) Build(title, company, location, description string) string {
-	desc := truncateUTF8(strings.TrimSpace(description), 2500)
+	desc := truncateUTF8(strings.TrimSpace(description), 1500)
 
 	return fmt.Sprintf(`You are a strict job matching assistant for a NEW GRADUATE / JUNIOR backend engineer.
 Analyze this job posting and return ONLY a valid JSON object. No markdown. No explanation. No extra text.

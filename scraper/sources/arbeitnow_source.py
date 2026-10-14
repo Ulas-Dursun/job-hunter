@@ -6,6 +6,7 @@ Arbeitnow, vize sponsorluğu ve uzaktan çalışma etiketleri sunan,
 ücretsiz ve resmi bir JSON API sağlar.
 """
 
+from datetime import datetime, timezone
 import html
 import logging
 import re
@@ -92,6 +93,13 @@ class ArbeitnowSource(BaseSource):
                 if visa:
                     loc = f"{loc} [Visa Sponsored]"
 
+                posted_str = None
+                if posted_at:
+                    try:
+                        posted_str = datetime.fromtimestamp(int(posted_at), tz=timezone.utc).isoformat()
+                    except Exception:
+                        posted_str = str(posted_at)
+
                 jobs.append(Job(
                     source="arbeitnow",
                     external_id=f"an:{slug}",
@@ -100,7 +108,7 @@ class ArbeitnowSource(BaseSource):
                     company=company,
                     location=loc,
                     description=desc,
-                    posted_at=str(posted_at) if posted_at else None,
+                    posted_at=posted_str,
                 ))
 
             logger.info("arbeitnow fetched %d jobs", len(jobs))

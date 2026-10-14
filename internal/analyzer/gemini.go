@@ -62,7 +62,7 @@ func (g *GeminiAnalyzer) Analyze(
 	ctx context.Context,
 	title, company, location, description string,
 ) (*ScoreResult, error) {
-	maxRetries := 3
+	maxRetries := 5
 
 	for i := 0; i < maxRetries; i++ {
 		if err := g.limiter.Wait(ctx); err != nil {
@@ -75,11 +75,12 @@ func (g *GeminiAnalyzer) Analyze(
 		if err != nil {
 			// Eğer hata 429 (Rate Limit) ise biraz bekleyip tekrar dene
 			if strings.Contains(err.Error(), "429") {
-				backoffDuration := time.Duration((i+1)*15) * time.Second // 15s, 30s, 45s bekleme
+				backoffDuration := time.Duration((i+1)*20) * time.Second // 20s, 40s, 60s, 80s, 100s bekleme
 				slog.Warn("groq rate limited (429), backing off...",
 					"attempt", i+1,
 					"wait", backoffDuration.String(),
 					"company", company,
+					"error", err.Error(),
 				)
 
 				select {
@@ -132,7 +133,8 @@ func (g *GeminiAnalyzer) call(ctx context.Context, prompt string) (*ScoreResult,
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("groq rate limited (429)")
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("groq rate limited (429): %s", string(b))
 	}
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
