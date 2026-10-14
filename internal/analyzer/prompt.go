@@ -111,6 +111,15 @@ CRITICAL RULES (MUST OBEY):
    - If the job explicitly states "EU citizenship mandatory / No visa sponsorship", flag "EU citizenship required" in red_flags.
    - For EUROCONTROL and international aerospace/EU-agency bodies where Turkey is a member state or English is the official language, the candidate is fully eligible.
 
+9. STEALTH SENIORITY & SCOPE DETECTION:
+   - If a job does not explicitly state a numerical years requirement, but lists expectations such as:
+     * Leading architectural design, system architecture, or tech roadmap
+     * Mentoring mid/senior engineers or direct team leadership
+     * Ownership of company-wide production infrastructure or enterprise strategies
+     * Extensive multi-year track record in high-scale distributed systems in production
+   - This role is implicitly Senior/Lead/Architect. You MUST set match_score below 4.5, set action to "skip", and add "Implicit senior scope / Architectural ownership" to red_flags.
+   - Do NOT let a job pass as junior just because it omitted a numerical year requirement.
+
 OUTPUT RULES:
 - Return ONLY the JSON object.
 - Use double quotes for all strings.

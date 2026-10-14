@@ -26,25 +26,34 @@ class JobSpySource(BaseSource):
         self._max_age_days = source_config.get("max_age_days", 7)
         self._results_per_keyword = source_config.get("results_per_keyword", 20)
         self._country_indeed = source_config.get("country_indeed", "Turkey")
+        self._locations = source_config.get("locations", [])
 
     def fetch(self, keywords: list[str], location: str) -> list[Job]:
         all_jobs: list[Job] = []
+        target_locations = self._locations if self._locations else [location]
 
-        for keyword in keywords:
-            logger.info("fetching jobspy  keyword=%r  location=%r", keyword, location)
-            try:
-                jobs = self._fetch_keyword(keyword, location)
-                all_jobs.extend(jobs)
-                logger.info(
-                    "jobspy result  keyword=%r  found=%d",
-                    keyword, len(jobs),
-                )
-            except Exception as exc:
-                logger.error(
-                    "jobspy error  keyword=%r  error=%s",
-                    keyword, exc,
-                )
-            time.sleep(random.uniform(3.0, 6.0))
+        for loc in target_locations:
+            is_tr = any(w in loc.lower() for w in ["turkey", "türkiye", "istanbul", "ankara", "izmir"])
+
+            for keyword in keywords:
+                # Yurt dışı (örn: Brüksel) aranırken Türkçe anahtar kelimeleri atlayarak API limitlerini koru
+                if not is_tr and any(tw in keyword.lower() for tw in ["yazılım", "mühendis", "geliştirici", "yeni mezun", "genç yetenek", "uzman"]):
+                    continue
+
+                logger.info("fetching jobspy  keyword=%r  location=%r", keyword, loc)
+                try:
+                    jobs = self._fetch_keyword(keyword, loc)
+                    all_jobs.extend(jobs)
+                    logger.info(
+                        "jobspy result  keyword=%r  location=%r  found=%d",
+                        keyword, loc, len(jobs),
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "jobspy error  keyword=%r  location=%r  error=%s",
+                        keyword, loc, exc,
+                    )
+                time.sleep(random.uniform(3.0, 5.0))
 
         return all_jobs
 
