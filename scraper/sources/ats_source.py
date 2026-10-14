@@ -19,6 +19,19 @@ from scraper.sources.base import BaseSource
 logger = logging.getLogger("scraper.ats")
 
 
+TECH_TITLE_KEYWORDS = [
+    "developer", "engineer", "software", "backend", "frontend", "fullstack",
+    "programmer", "architect", "geliştirici", "mühendis", "yazılım",
+    "devops", "cloud", "platform engineer", "sre", "site reliability",
+    "infrastructure", "sysadmin", "systems engineer",
+    "data engineer", "data analyst", "database administrator", "database engineer",
+    "golang", "python", "java developer", "java engineer", "rust", "c++",
+    "cns", "avionics", "atm", "asterix", "surveillance",
+    "genç yetenek", "mt programı", "yazılım uzman yardımcısı",
+    "security engineer", "cybersecurity", "qa engineer", "test engineer"
+]
+
+
 def clean_html(text: str) -> str:
     """HTML etiketlerini temizler ve düz metne dönüştürür."""
     if not text:
@@ -27,6 +40,14 @@ def clean_html(text: str) -> str:
     soup = BeautifulSoup(text, "html.parser")
     # Fazla boşlukları düzenle
     return re.sub(r"\n{3,}", "\n\n", soup.get_text("\n")).strip()
+
+
+def is_tech_title(title: str) -> bool:
+    """Yalnızca yazılım, mühendislik, veri ve altyapı pozisyonlarını kabul eder."""
+    if not title:
+        return False
+    title_lower = title.lower()
+    return any(re.search(r"\b" + re.escape(kw) + r"\b", title_lower) for kw in TECH_TITLE_KEYWORDS)
 
 
 class ATSSource(BaseSource):
@@ -91,6 +112,8 @@ class ATSSource(BaseSource):
 
                 if not title or not job_url:
                     continue
+                if not is_tech_title(title):
+                    continue
 
                 jobs.append(Job(
                     source="greenhouse",
@@ -129,6 +152,8 @@ class ATSSource(BaseSource):
 
                 if not title or not job_url:
                     continue
+                if not is_tech_title(title):
+                    continue
 
                 jobs.append(Job(
                     source="lever",
@@ -163,6 +188,8 @@ class ATSSource(BaseSource):
                 job_url = f"https://jobs.smartrecruiters.com/{company_id}/{ext_id}"
 
                 if not title or not ext_id:
+                    continue
+                if not is_tech_title(title):
                     continue
 
                 jobs.append(Job(

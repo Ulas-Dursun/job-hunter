@@ -87,10 +87,6 @@ def main() -> None:
 
     # ── Sources ───────────────────────────────────────────────────────────
     sources = []
-    if cfg["sources"].get("jobspy", {}).get("enabled", False):
-        sources.append(JobSpySource(cfg["sources"]["jobspy"]))
-        logger.info("jobspy source enabled (linkedin + indeed)")
-
     if cfg["sources"].get("ats", {}).get("enabled", False):
         sources.append(ATSSource(cfg["sources"]["ats"]))
         logger.info("ats source enabled (greenhouse + lever + smartrecruiters)")
@@ -106,6 +102,10 @@ def main() -> None:
     if cfg["sources"].get("arbeitnow", {}).get("enabled", False):
         sources.append(ArbeitnowSource(cfg["sources"]["arbeitnow"]))
         logger.info("arbeitnow source enabled (eu tech jobs)")
+
+    if cfg["sources"].get("jobspy", {}).get("enabled", False):
+        sources.append(JobSpySource(cfg["sources"]["jobspy"]))
+        logger.info("jobspy source enabled (linkedin + indeed)")
 
     if not sources:
         logger.warning("no sources enabled — check config.yaml")

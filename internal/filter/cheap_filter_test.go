@@ -71,6 +71,48 @@ func TestCheapFilter_PassesRelevantTitles(t *testing.T) {
 	}
 }
 
+func TestCheapFilter_RejectsNonTechRoles(t *testing.T) {
+	f := testFilter()
+
+	nonTechTitles := []string{
+		"Physical Therapist",
+		"Clinic Director",
+		"Facharzt Allgemeine Innere Medizin",
+		"Plumbing and Maintenance - Installer",
+		"Commercial Director, AU",
+		"Psychotherapeut:in in Weiterbildung",
+		"Account Executive",
+		"Chef / Cook",
+		"Barista",
+	}
+
+	for _, title := range nonTechTitles {
+		result := f.Check(title, "Acme Corp", "")
+		if !result.Rejected {
+			t.Errorf("expected rejection for non-tech role %q, but passed", title)
+		}
+		if result.Reason != "non_tech_role" {
+			t.Errorf("expected reason 'non_tech_role' for %q, got %q", title, result.Reason)
+		}
+	}
+}
+
+func TestCheapFilter_EurocontrolException(t *testing.T) {
+	f := testFilter()
+
+	// Normalde "intern" kara listede olduğu için reddedilmeli
+	resNormal := f.Check("CNS Engineering Intern", "AviationCorp", "")
+	if !resNormal.Rejected {
+		t.Errorf("expected normal intern to be rejected")
+	}
+
+	// Ancak eurocontrol kaynağı için staj/traineeship serbest olmalı
+	resEuro := f.Check("CNS Engineering Trainee", "EUROCONTROL", "", "eurocontrol")
+	if resEuro.Rejected {
+		t.Errorf("expected EUROCONTROL trainee to pass, got rejected: %s", resEuro.Reason)
+	}
+}
+
 func TestCheapFilter_RejectsEmptyCompany(t *testing.T) {
 	f := testFilter()
 

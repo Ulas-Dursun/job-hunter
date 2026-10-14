@@ -81,12 +81,26 @@ candidate:
     - "Staff"
     - "Manager"
     - "Lead"
+    - "Director"
+    - "Head of"
+    - "VP"
+    - "Vice President"
+    - "Chief"
     - "Satış"
     - "Sales"
+    - "Account Executive"
     - "Üretim"
     - "Destek"
     - "Support"
     - "Pazarlama"
+    - "Marketing"
+    - "Recruiter"
+    - "Talent Acquisition"
+    - "Human Resources"
+    - "HR"
+    - "Therapist"
+    - "Physiotherapist"
+    - "Nurse"
 
   priority_companies:
     # ── Havacılık Devleri (TR + EU) ───────────
@@ -168,8 +182,6 @@ sources:
     greenhouse:
       - name: "Dream Games"
         token: "dreamgames"
-      - name: "Peak Games"
-        token: "peak"
       - name: "Adyen"
         token: "adyen"
     lever:
@@ -179,6 +191,8 @@ sources:
         slug: "commencis"
       - name: "Iyzico"
         slug: "iyzico"
+      - name: "Peak Games"
+        slug: "peakgames"
     smartrecruiters:
       - name: "Frequentis"
         company_id: "frequentis"

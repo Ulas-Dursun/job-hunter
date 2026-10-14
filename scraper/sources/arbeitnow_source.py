@@ -51,6 +51,18 @@ class ArbeitnowSource(BaseSource):
             data = r.json()
             items = data.get("data", [])
 
+            TECH_KEYWORDS = [
+                "developer", "engineer", "software", "backend", "frontend", "fullstack",
+                "programmer", "architect", "geliştirici", "mühendis", "yazılım",
+                "devops", "cloud", "platform engineer", "sre", "site reliability",
+                "infrastructure", "sysadmin", "systems engineer",
+                "data engineer", "data analyst", "database administrator", "database engineer",
+                "golang", "python", "java developer", "java engineer", "rust", "c++",
+                "cns", "avionics", "atm", "asterix", "surveillance",
+                "genç yetenek", "mt programı", "yazılım uzman yardımcısı",
+                "security engineer", "cybersecurity", "qa engineer", "test engineer"
+            ]
+
             for item in items:
                 title = item.get("title", "").strip()
                 company = item.get("company_name", "").strip()
@@ -61,8 +73,14 @@ class ArbeitnowSource(BaseSource):
                 visa = item.get("visa_sponsorship", False)
                 desc = clean_html(item.get("description", ""))
                 posted_at = item.get("created_at")
+                tags = [str(t).lower() for t in item.get("tags", [])]
 
                 if not title or not job_url:
+                    continue
+
+                # Yalnızca teknoloji/yazılım/mühendislik odaklı pozisyonları kabul et
+                combined_text = f"{title.lower()} {' '.join(tags)}"
+                if not any(re.search(r"\b" + re.escape(kw) + r"\b", combined_text) for kw in TECH_KEYWORDS):
                     continue
 
                 if remote and not loc:

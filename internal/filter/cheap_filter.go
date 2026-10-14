@@ -31,25 +31,50 @@ func NewCheapFilter(cfg *config.CandidateConfig) *CheapFilter {
 	return &CheapFilter{blacklist: blacklist}
 }
 
-// Check, ilanı üç katmanda filtreler:
+var techTitleKeywords = []string{
+	"developer", "engineer", "software", "backend", "frontend", "fullstack",
+	"programmer", "architect", "geliştirici", "mühendis", "yazılım",
+	"devops", "cloud", "platform engineer", "sre", "site reliability",
+	"infrastructure", "sysadmin", "systems engineer",
+	"data engineer", "data analyst", "database administrator", "database engineer",
+	"golang", "python", "java developer", "java engineer", "rust", "c++",
+	"cns", "avionics", "atm", "asterix", "surveillance",
+	"genç yetenek", "mt programı", "yazılım uzman yardımcısı",
+	"security engineer", "cybersecurity", "qa engineer", "test engineer",
+}
+
+// Check, ilanı dört katmanda filtreler:
 //
 //  1. Şirket adı geçerli mi?
-//  2. Title'da blacklist keyword var mı?
-//  3. Description'da yanlış stack veya aşırı deneyim var mı?
-func (f *CheapFilter) Check(title, company, description string) FilterResult {
+//  2. Pozisyon bir teknoloji/yazılım/mühendislik rolü mü?
+//  3. Title'da blacklist keyword var mı? (EUROCONTROL stajları hariç)
+//  4. Description'da yanlış stack veya aşırı deneyim var mı?
+func (f *CheapFilter) Check(title, company, description string, source ...string) FilterResult {
+	sourceName := ""
+	if len(source) > 0 {
+		sourceName = strings.ToLower(strings.TrimSpace(source[0]))
+	}
+
 	// ── Katman 1: Şirket geçerlilik ──────────────────────────────────────────
-	// jobspy bazen boş veya "nan" company döndürür — bunlar işlenemez.
 	companyLower := strings.ToLower(strings.TrimSpace(company))
 	if companyLower == "" || companyLower == "nan" {
 		return FilterResult{Rejected: true, Reason: "empty_company"}
 	}
 
-	// ── Katman 2: Title blacklist ─────────────────────────────────────────────
-	// Config'deki blacklist_keywords title'da aranır.
-	// "Senior", "Manager", "Sales", "QA" gibi kesin red flag'lar kelime sınırıyla aranır.
-	// Bu sayede "intern" -> "international" gibi false positive'ler engellenir.
+	// ── Katman 2: Pozitif Teknoloji/Mühendislik Uygunluğu ────────────────────
+	// Tıbbi, idari, satış veya tesisat gibi alakasız rolleri AI'ya göndermeden kes.
 	titleLower := strings.ToLower(title)
+	if sourceName != "eurocontrol" && !hasAnyTechKeyword(titleLower) {
+		return FilterResult{Rejected: true, Reason: "non_tech_role"}
+	}
+
+	// ── Katman 3: Title blacklist ─────────────────────────────────────────────
+	// Config'deki blacklist_keywords title'da aranır.
+	// EUROCONTROL resmi staj pozisyonları Kural 2 (staj reddi) istisnasıdır.
 	for _, kw := range f.blacklist {
+		if sourceName == "eurocontrol" && isInternshipKeyword(kw) {
+			continue
+		}
 		if containsWord(titleLower, kw) {
 			return FilterResult{Rejected: true, Reason: "title_blacklist:" + kw}
 		}
@@ -163,4 +188,22 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func hasAnyTechKeyword(titleLower string) bool {
+	for _, kw := range techTitleKeywords {
+		if containsWord(titleLower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+func isInternshipKeyword(kw string) bool {
+	switch strings.ToLower(kw) {
+	case "intern", "internship", "stajyer", "staj", "working student", "werkstudent", "part-time intern", "long-term intern":
+		return true
+	default:
+		return false
+	}
 }

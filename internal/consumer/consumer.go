@@ -109,8 +109,7 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 	description := stringField(msg.Values, "description")
 
 	// Cheap filter kontrolü
-	// Cheap filter kontrolü
-	result := c.filter.Check(title, company, description)
+	result := c.filter.Check(title, company, description, source)
 
 	if result.Rejected {
 		slog.Debug("cheap filter rejected",
