@@ -34,16 +34,34 @@ class Job:
 
     def dedup_hash(self) -> str:
         """
-        URL bazlı 16-karakter deduplication hash'i.
-        LinkedIn/Indeed URL'lerindeki tracking query parametreleri (utm_*, refId,
-        trackingId, currentJobId vb.) temizlenir — aksi halde aynı ilan farklı
-        keyword aramalarında farklı hash üretir ve dedup'tan kaçar.
+        URL ve kaynak bazlı 16-karakter deduplication hash'i.
+        - Indeed: 'jk' veya 'vjk' parametresini korur, tracking parametrelerini (utm_*, from, tk vb.) temizler.
+        - LinkedIn: '/jobs/view/<id>' yolunu normalize eder, query string'i temizler.
+        - Diğer kaynaklar: source + external_id veya canonical host+path üzerinden deterministik hash üretir.
         """
-        parsed = urlparse(self.url)
-        # Query string'i tamamen at — LinkedIn/Indeed'de path zaten ilanı tekil tanımlar
-        clean_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
+        from urllib.parse import urlparse, parse_qs
 
-        return hashlib.sha256(clean_url.encode("utf-8")).hexdigest()[:16]
+        parsed = urlparse(self.url)
+        netloc = (parsed.netloc or "").lower()
+        path = (parsed.path or "").rstrip("/")
+
+        if "indeed" in netloc:
+            qs = parse_qs(parsed.query)
+            jk = qs.get("jk", [None])[0] or qs.get("vjk", [None])[0]
+            if jk:
+                canonical = f"{netloc}{path}?jk={jk}"
+            elif self.external_id:
+                canonical = f"indeed:{self.external_id}"
+            else:
+                canonical = f"{netloc}{path}?{parsed.query}"
+        elif "linkedin" in netloc:
+            canonical = f"linkedin:{path}"
+        elif self.source and self.external_id:
+            canonical = f"{self.source}:{self.external_id}"
+        else:
+            canonical = f"{netloc}{path}"
+
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
     def to_redis_fields(self) -> dict[str, str]:
         """

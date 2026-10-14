@@ -18,9 +18,9 @@ func NewPromptBuilder(cfg *config.CandidateConfig) *PromptBuilder {
 }
 
 // Build, tek bir iş ilanı için tam prompt'u üretir.
-// Description 1200 rune ile sınırlandırılır — token maliyeti kontrolü.
+// Description 2500 rune ile sınırlandırılır — gereksinimlerin kesilmesini önler.
 func (p *PromptBuilder) Build(title, company, location, description string) string {
-	desc := truncateUTF8(strings.TrimSpace(description), 1200)
+	desc := truncateUTF8(strings.TrimSpace(description), 2500)
 
 	return fmt.Sprintf(`You are a strict job matching assistant for a NEW GRADUATE / JUNIOR backend engineer.
 Analyze this job posting and return ONLY a valid JSON object. No markdown. No explanation. No extra text.
@@ -69,12 +69,10 @@ CRITICAL RULES (MUST OBEY):
 
 2b. TOOL GAP FLEXIBILITY:
    If the candidate is missing only 1-2 secondary infrastructure/tool requirements
-   (e.g., Kubernetes production experience, Terraform, a specific cloud certification)
-   but core backend fundamentals AND primary tech stack (languages, databases,
-   concurrency, APIs, containerization basics) align well:
-   - Do NOT treat this as disqualifying.
-   - Assume the candidate can learn additional tools quickly given demonstrated
-     fundamentals and hands-on project experience.
+   (e.g., deep Kubernetes production experience, Terraform, a specific cloud provider nuance)
+   but core backend fundamentals AND primary tech stack (Go/Java/Python/Rust, databases,
+   concurrency, APIs, containerization basics with Docker) align well:
+   - Do NOT treat this as disqualifying. The candidate is actively open to learning and has demonstrated fast adaptation across multiple backend stacks.
    - Score in the 7.0-8.5 range depending on overall fit.
    - List the specific gap in missing_skills — do not skip solely because of it.
 
@@ -107,6 +105,11 @@ CRITICAL RULES (MUST OBEY):
    a software role. Set match_score below 3.0 and action "skip", regardless
    of any coincidental keyword overlap.
 
+8. EU / LANGUAGE & ELIGIBILITY CHECK:
+   - If the job explicitly mandates fluent French ("Français obligatoire / courant") or Dutch ("Nederlands vereist") and does not accept English as primary working language, deduct 2.5 from match_score and add "Requires French/Dutch" to red_flags.
+   - If the job explicitly states "EU citizenship mandatory / No visa sponsorship", flag "EU citizenship required" in red_flags.
+   - For EUROCONTROL and international aerospace/EU-agency bodies where Turkey is a member state or English is the official language, the candidate is fully eligible.
+
 OUTPUT RULES:
 - Return ONLY the JSON object.
 - Use double quotes for all strings.
@@ -122,17 +125,16 @@ The output must be valid JSON and must match the schema exactly.`,
 }
 
 // buildProfile, config'den prompt'a eklenecek aday profil metnini oluşturur.
-// buildProfile, config'den prompt'a eklenecek aday profil metnini oluşturur.
 func buildProfile(cfg *config.CandidateConfig) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Name: %s\n", cfg.Name))
 	sb.WriteString(fmt.Sprintf("Status: %s, Graduation: %d\n", cfg.Status, cfg.GraduationYear))
-	sb.WriteString(fmt.Sprintf("Location: %s\n", cfg.Location))
+	sb.WriteString(fmt.Sprintf("Location: %s (Open to Turkey & Brussels/Belgium/Europe)\n", cfg.Location))
 	sb.WriteString(fmt.Sprintf("Languages: %s\n", strings.Join(cfg.Skills.Languages, ", ")))
 	sb.WriteString(fmt.Sprintf("Frameworks: %s\n", strings.Join(cfg.Skills.Frameworks, ", ")))
 	sb.WriteString(fmt.Sprintf("Databases: %s\n", strings.Join(cfg.Skills.Databases, ", ")))
 	sb.WriteString(fmt.Sprintf("Infrastructure: %s\n", strings.Join(cfg.Skills.Infra, ", ")))
-	sb.WriteString(fmt.Sprintf("Cloud: %s\n", strings.Join(cfg.Skills.Cloud, ", ")))
+	sb.WriteString(fmt.Sprintf("Cloud & Certs: %s\n", strings.Join(cfg.Skills.Cloud, ", ")))
 	sb.WriteString(fmt.Sprintf("Concepts: %s\n", strings.Join(cfg.Skills.Concepts, ", ")))
 	sb.WriteString(fmt.Sprintf("OS & Tools: %s\n", strings.Join(cfg.Skills.OS, ", ")))
 	sb.WriteString(fmt.Sprintf("Primary roles: %s\n", strings.Join(cfg.TargetRoles.Primary, ", ")))
@@ -143,8 +145,16 @@ func buildProfile(cfg *config.CandidateConfig) string {
 	rejectedStr := strings.Join(cfg.Seniority.Rejected, ", ")
 	sb.WriteString(fmt.Sprintf("Explicitly Rejected Roles: %s (CRITICAL: The candidate must NEVER be matched to these roles, regardless of how well the tech stack aligns.)\n", rejectedStr))
 
-	sb.WriteString("Work Experience: 3-month internship at Sanlab — built Go API with JWT auth, RBAC, MongoDB persistence, and Rust backend integration with TCP/UDP communication layer.\n")
-	sb.WriteString("Key Projects: (1) Distributed Job Processing System — Go worker pool with Redis-backed queue, exponential backoff retry, Prometheus metrics, Dockerized with CI/CD. (2) Order & Inventory Management API — Java Spring Boot REST API with JWT auth, RBAC, order state machine, pessimistic locking for concurrency safety, Testcontainers integration tests. (3) AWS cloud deployment project — hands-on experience deploying and configuring AWS services (EC2, S3, IAM).\n")
+	sb.WriteString("Work Experience:\n")
+	sb.WriteString("- EUROCONTROL (Brussels, Belgium | Nov 2026 – Apr 2027): Software Engineering Trainee (NMD/INF/CNS Unit). Contributing to ASTERIX E-ARCO surveillance data library (C++, Python client, JSON validation, test automation within CI/CD).\n")
+	sb.WriteString("- Sanlab (Istanbul | Aug 2024 – Oct 2024): Software Engineering Internship. Web-based market management system integrating JWT-authenticated Go API with Rust REST API across 12 endpoints (MongoDB, atomic sequence ID generation), TCP/UDP socket communication in Rust, Agile/Scrum.\n")
+
+	sb.WriteString("Key Projects:\n")
+	sb.WriteString("- Distributed Job Processing System: Go, Redis worker pool with exponential backoff retries, Prometheus metrics, Docker, CI/CD with GitHub Actions.\n")
+	sb.WriteString("- Order & Inventory Management API: Java 21, Spring Boot, REST API, JWT auth, RBAC, order state machine, pessimistic locking for concurrency safety, Testcontainers integration tests against PostgreSQL.\n")
+	sb.WriteString("- IoT-Based Smart Indoor Plant Control System (Capstone): ESP32 sensor system, React/Firebase real-time dashboard, remote irrigation, >99% successful data delivery, ~500ms latency.\n")
+
+	sb.WriteString("Certifications & Languages: AWS Certified AI Practitioner (2026). English: Fluent (C1/C2 professional working proficiency), Turkish: Native, German: Beginner.\n")
 
 	return sb.String()
 }

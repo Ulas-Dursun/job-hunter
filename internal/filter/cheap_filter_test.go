@@ -16,6 +16,7 @@ func testFilter() *filter.CheapFilter {
 			"7+ years", "8+ years", "10+ years",
 			"Senior", "Manager", "Lead", "Principal",
 			"Sales", "Satış", "Üretim", "6+ years",
+			"intern", "stajyer", "working student", "werkstudent",
 		},
 	}
 	return filter.NewCheapFilter(cfg)
@@ -31,6 +32,9 @@ func TestCheapFilter_RejectsTitleBlacklist(t *testing.T) {
 		{"iOS Developer - Remote", "Apple"},
 		{"Senior Developer", "Firm"},
 		{"Sales Engineer", "SalesCo"},
+		{"Software Engineer Intern", "BigCo"},
+		{"Stajyer Yazılım Mühendisi", "Trendyol"},
+		{"Werkstudent Backend", "Siemens"},
 	}
 
 	for _, tc := range cases {
@@ -45,6 +49,7 @@ func TestCheapFilter_PassesRelevantTitles(t *testing.T) {
 	f := testFilter()
 
 	cases := []struct{ title, company string }{
+		{"International Software Engineer", "GlobalCo"}, // "intern" içermesine rağmen tam kelime olmadığı için geçmeli
 		{"Backend Developer", "Trendyol"},
 		{"Go Developer", "Getir"},
 		{"Java Software Engineer", "Insider"},

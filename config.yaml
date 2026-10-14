@@ -11,14 +11,14 @@ candidate:
   graduation_year: 2026
 
   skills:
-    languages:  ["Go", "Java", "Python", "Rust"]
+    languages:  ["Go", "Java", "Python", "Rust", "SQL", "C++ (Working Knowledge)"]
     frameworks: ["Spring Boot"]
     databases:  ["PostgreSQL", "MongoDB", "Redis"]
     os:         ["Linux (Bash/Shell Scripting)"]
-    infra:      ["Docker", "Docker Compose", "Kubernetes (Basics)", "Prometheus", "Grafana"]
-    cloud:      ["AWS EC2", "AWS S3", "AWS IAM", "AWS VPC"]
+    infra:      ["Docker", "Docker Compose", "CI/CD (GitHub Actions)", "Prometheus", "Grafana"]
+    cloud:      ["AWS (Certified AI Practitioner)"]
     concepts:   ["REST API", "JWT", "Concurrency", "Worker Pool",
-                 "Distributed Systems", "TCP/UDP", "Microservices"]
+                 "Distributed Systems", "TCP/UDP", "Microservices", "Testcontainers"]
 
   target_roles:
     primary:
@@ -64,6 +64,14 @@ candidate:
     - "Android Developer"
     - "React Developer"
     - "Angular Developer"
+    - "intern"
+    - "internship"
+    - "stajyer"
+    - "staj"
+    - "working student"
+    - "werkstudent"
+    - "part-time intern"
+    - "long-term intern"
     - "6+ years"
     - "7+ years"
     - "8+ years"
@@ -81,6 +89,37 @@ candidate:
     - "Pazarlama"
 
   priority_companies:
+    # ── Havacılık Devleri (TR + EU) ───────────
+    - "EUROCONTROL"
+    - "skeyes"
+    - "Turkish Technology"
+    - "THY Teknoloji"
+    - "Pegasus Airlines"
+    - "TAV Technologies"
+    - "HAVELSAN"
+    - "Aselsan"
+    - "Thales"
+    - "Frequentis"
+    - "Airbus"
+    - "Indra"
+    - "SITA"
+
+    # ── Banka İştirakleri & IT Outsourcing ────
+    - "Softtech"
+    - "Akbank Teknoloji"
+    - "Garanti BBVA Teknoloji"
+    - "Intertech"
+    - "QNB Teknoloji"
+    - "Kuveyt Türk Bilişim"
+    - "Ziraat Teknoloji"
+    - "Turkcell Teknoloji"
+    - "Innova"
+    - "Etiya"
+    - "Kafein Teknoloji"
+    - "BilgeAdam Teknoloji"
+    - "OBSS"
+
+    # ── Tech & E-Ticaret ──────────────────────
     - "Trendyol"
     - "Getir"
     - "Insider"
@@ -94,18 +133,14 @@ candidate:
     - "Commencis"
     - "BtcTurk"
     - "Çiçeksepeti"
-    - "Intertech"
     - "Vodafone"
     - "Iyzico"
     - "Letgo"
-    - "Garanti BBVA Teknoloji"
     - "Migros One"
     - "Lidio"
     - "Huawei"
     - "Bitfinex"
     - "Tether"
-    - "QNB Teknoloji"
-    - "Akbank Teknoloji"
     - "Figopara"
     - "Vispera"
     - "Hopi"
@@ -146,7 +181,7 @@ sources:
       - "java spring boot developer"
       - "distributed systems"
 
-      # ── Backend — Python (YENİ) ───────────────
+      # ── Backend — Python ──────────────────────
       - "python developer"
       - "python backend developer"
       - "junior python developer"
@@ -160,10 +195,23 @@ sources:
       - "aws engineer"
       - "infrastructure engineer"
 
-      # ── Geniş Net — Junior/Grad sinyalleri (YENİ) ──
+      # ── Türkçe — Yeni Mezun & MT Programları ────
+      - "yazılım mühendisi"
+      - "yeni mezun yazılım"
+      - "yeni mezun mühendis"
+      - "genç yetenek"
+      - "mt programı"
+      - "yazılım uzman yardımcısı"
+      - "backend geliştirici"
+
+      # ── English — Junior & Entry Signals ────────
       - "graduate software engineer"
       - "trainee software engineer"
+      - "associate software engineer"
       - "junior software developer"
+      - "junior backend engineer"
+      - "junior devops engineer"
+      - "junior cloud engineer"
 
       # ── Data (secondary track) ────────────────
       - "data engineer"

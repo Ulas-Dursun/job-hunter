@@ -2,6 +2,8 @@ package filter
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ulasdursun/job-hunter/internal/config"
 )
@@ -44,19 +46,19 @@ func (f *CheapFilter) Check(title, company, description string) FilterResult {
 
 	// ── Katman 2: Title blacklist ─────────────────────────────────────────────
 	// Config'deki blacklist_keywords title'da aranır.
-	// "Senior", "Manager", "Sales", "QA" gibi kesin red flag'lar burada yakalanır.
+	// "Senior", "Manager", "Sales", "QA" gibi kesin red flag'lar kelime sınırıyla aranır.
+	// Bu sayede "intern" -> "international" gibi false positive'ler engellenir.
 	titleLower := strings.ToLower(title)
 	for _, kw := range f.blacklist {
-		if strings.Contains(titleLower, kw) {
+		if containsWord(titleLower, kw) {
 			return FilterResult{Rejected: true, Reason: "title_blacklist:" + kw}
 		}
 	}
 
 	// ── Katman 3: Description kontrolü ───────────────────────────────────────
-	// Description'ın ilk 800 karakteri kontrol edilir — requirements genellikle
-	// başta gelir. Tüm description'ı taramak false positive riskini artırır.
-	// Örnek: "We don't use .NET" dese bile match eder — bu yüzden 800 ile sınırlı.
-	checkLen := 800
+	// Şirket tanıtım metinleri 500-1000 karakter sürebildiği için tarama derinliği
+	// 2500 karakter ile genişletildi (gereksinimler genelde ortada gelir).
+	checkLen := 2500
 	if len(description) < checkLen {
 		checkLen = len(description)
 	}
@@ -108,6 +110,52 @@ func (f *CheapFilter) Check(title, company, description string) FilterResult {
 	}
 
 	return FilterResult{Rejected: false}
+}
+
+// containsWord, s metninde word kelimesinin/ifadesinin tam kelime sınırı ile geçip geçmediğini
+// Unicode (Türkçe ve İngilizce) karakter uyumlu olarak denetler.
+// Örneğin: "intern" arandığında "international" eşleşmez, ama "Software Engineer Intern" eşleşir.
+func containsWord(s, word string) bool {
+	if len(word) == 0 {
+		return false
+	}
+	start := 0
+	for {
+		idx := strings.Index(s[start:], word)
+		if idx == -1 {
+			return false
+		}
+		actualIdx := start + idx
+		endIdx := actualIdx + len(word)
+
+		// Önceki karakter harf/rakam olmamalı
+		beforeOk := true
+		if actualIdx > 0 {
+			r, _ := utf8.DecodeLastRuneInString(s[:actualIdx])
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				beforeOk = false
+			}
+		}
+
+		// Sonraki karakter harf/rakam olmamalı
+		afterOk := true
+		if endIdx < len(s) {
+			r, _ := utf8.DecodeRuneInString(s[endIdx:])
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				afterOk = false
+			}
+		}
+
+		if beforeOk && afterOk {
+			return true
+		}
+
+		start = actualIdx + 1
+		if start >= len(s) {
+			break
+		}
+	}
+	return false
 }
 
 func min(a, b int) int {
