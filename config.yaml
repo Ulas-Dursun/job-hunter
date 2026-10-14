@@ -282,9 +282,9 @@ server:
   dashboard_port: 8080
 
 gemini:
-  model: "gemini-2.0-flash"
+  model: "gemini-flash-lite-latest"
   max_tokens: 1000
-  rate_limit_rpm: 15
+  rate_limit_rpm: 20
 
 worker:
   pool_size: 1

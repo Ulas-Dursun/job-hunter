@@ -66,9 +66,12 @@ func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConf
 	if geminiKey != "" {
 		provider = ProviderGemini
 		apiKey = geminiKey
-		model = "gemini-2.0-flash"
-		rpm = 15 // Gemini free tier: 15 RPM, 1.000.000 TPM, 1.500 RPD
-		slog.Info("ai analyzer: Google Gemini 2.0 Flash aktif", "provider", "gemini", "model", model, "rpm", rpm)
+		model = "gemini-flash-lite-latest"
+		if cfg.Model != "" && strings.HasPrefix(cfg.Model, "gemini") {
+			model = cfg.Model
+		}
+		rpm = 20 // Gemini free tier: 15-30 RPM, 1.000.000 TPM, 1.500 RPD
+		slog.Info("ai analyzer: Google Gemini Flash aktif", "provider", "gemini", "model", model, "rpm", rpm)
 	} else if groqKey != "" {
 		provider = ProviderGroq
 		apiKey = groqKey
@@ -94,7 +97,7 @@ func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConf
 	}
 }
 
-// Analyze, bir iş ilanını AI ile analiz eder. 429 (Rate Limit) durumunda otomatik tekrar dener.
+// Analyze, bir iş ilanını AI ile analiz eder. 429 (Rate Limit) veya 503 durumunda otomatik tekrar dener.
 func (g *GeminiAnalyzer) Analyze(
 	ctx context.Context,
 	title, company, location, description string,
@@ -117,9 +120,9 @@ func (g *GeminiAnalyzer) Analyze(
 		}
 
 		if err != nil {
-			if strings.Contains(err.Error(), "429") {
-				backoffDuration := time.Duration((i+1)*15) * time.Second
-				slog.Warn("ai rate limited (429), backing off...",
+			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
+				backoffDuration := time.Duration((i+1)*5) * time.Second
+				slog.Warn("ai rate limited or busy (429/503), backing off...",
 					"provider", g.provider,
 					"attempt", i+1,
 					"wait", backoffDuration.String(),
@@ -181,6 +184,10 @@ func (g *GeminiAnalyzer) callGemini(ctx context.Context, prompt string) (*ScoreR
 	if resp.StatusCode == 429 {
 		b, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("gemini rate limited (429): %s", string(b))
+	}
+	if resp.StatusCode == 503 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gemini server busy (503): %s", string(b))
 	}
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
