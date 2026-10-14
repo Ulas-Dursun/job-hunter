@@ -18,11 +18,11 @@ func NewPromptBuilder(cfg *config.CandidateConfig) *PromptBuilder {
 }
 
 // Build, tek bir iş ilanı için tam prompt'u üretir.
-// Description 1500 rune ile sınırlandırılır — TPM kotasını korur ve temel gereksinimleri kapsar.
+// Description 3500 rune ile sınırlandırılır — Gemini Flash kotasında tam gereksinimleri kapsar.
 func (p *PromptBuilder) Build(title, company, location, description string) string {
-	desc := truncateUTF8(strings.TrimSpace(description), 1500)
+	desc := truncateUTF8(strings.TrimSpace(description), 3500)
 
-	return fmt.Sprintf(`You are a strict job matching assistant for a NEW GRADUATE / JUNIOR backend engineer.
+	return fmt.Sprintf(`You are an elite technical talent partner and hiring advisor evaluating career opportunities for a versatile Software Engineering graduate (Ulaş Dursun).
 Analyze this job posting and return ONLY a valid JSON object. No markdown. No explanation. No extra text.
 
 CANDIDATE PROFILE:
@@ -36,11 +36,16 @@ Description: %s
 === END JOB POSTING ===
 
 Your task:
-Compare the job posting against the candidate profile and determine whether this role is a strong fit for a NEW GRADUATE / JUNIOR backend engineer.
+Determine whether this role is a strong career match for the candidate across his 4 core target pillars:
+1. Backend & Systems Software: Go, Java (Spring Boot), Python, Distributed Systems, Concurrency, REST APIs, Microservices.
+2. Cloud, Platform & DevOps / SRE: Docker, Linux (Bash), AWS, CI/CD (GitHub Actions), Prometheus, Grafana.
+3. Data Engineering & Analytics: SQL, Python, PostgreSQL, Data Pipelines, Analytics, Business Intelligence.
+4. Systems & Aerospace Software: Surveillance data decoding, ASTERIX E-ARCO, JSON validation, TCP/UDP sockets, C++/Go.
+
 Use only evidence explicitly present in the candidate profile and job posting.
 Do not hallucinate skills, experience, or projects.
-Prefer "watch" over "skip" when the role is plausible but not clearly aligned.
-Prefer "apply" only when there is strong evidence of fit.
+Prefer "watch" over "skip" when the role is entry/junior level or an adjacent growth opportunity.
+Prefer "apply" when there is strong alignment with any of the 4 pillars.
 
 Return this exact JSON structure:
 {
@@ -56,35 +61,46 @@ Return this exact JSON structure:
 CRITICAL RULES (MUST OBEY):
 
 1. EXPERIENCE & SCORING MATRIX:
-   - 0-2 Years Required: If the candidate's core stack aligns and backend fundamentals are present, give 8.5 - 10.0. First priority.
+   - 0-2 Years Required: If the candidate's core stack aligns with any pillar and fundamentals are present, give 8.5 - 10.0. Top priority.
    - 3 Years Required: If the candidate's tech stack matches well, give 7.5 - 8.4.
-   - 4-5 Years Required WITH strong tech stack match: Give 6.0 - 6.9. This is a stretch — worth trying but should NOT be treated as a high-confidence match.
-   - 4-5 Years Required WITHOUT strong tech stack match: Give below 5.0.
+   - 4-5 Years Required WITH strong tech stack match: Give 6.0 - 6.9. This is a stretch — worth trying (watch) but not a guaranteed match.
+   - 4-5 Years Required WITHOUT strong tech stack match: Give below 5.0 (skip).
    - 6+ Years Required OR explicitly matching any role in the "Explicitly Rejected Roles" list: You MUST set match_score below 4.0. Add "Too senior" to red_flags.
+
 2. NEW GRAD / JUNIOR FLEXIBILITY:
-   - If the job is explicitly for "New Grad", "Junior", or "Entry Level", prioritize backend fundamentals over exact syntax or exact years.
-   - Strong fundamentals include: REST, HTTP, APIs, databases, SQL/NoSQL, OOP, Git, Docker, cloud, testing, concurrency.
+   - If the job is explicitly for "New Grad", "Junior", "Associate", "Graduate", or "Trainee", prioritize engineering fundamentals over exact syntax or exact years.
+   - Strong fundamentals include: REST, HTTP, APIs, databases, SQL/NoSQL, OOP, Git, Docker, cloud basics, testing, concurrency.
    - Do not penalize heavily for missing years if the role is clearly entry-level and the candidate shows learning potential plus adjacent stack fit.
-   - Do not inflate the score unless there is clear evidence of fundamentals and role alignment.
 
 2b. TOOL GAP FLEXIBILITY:
    If the candidate is missing only 1-2 secondary infrastructure/tool requirements
    (e.g., deep Kubernetes production experience, Terraform, a specific cloud provider nuance)
-   but core backend fundamentals AND primary tech stack (Go/Java/Python/Rust, databases,
+   but core fundamentals AND primary tech stack (Go/Java/Python/Rust, databases,
    concurrency, APIs, containerization basics with Docker) align well:
    - Do NOT treat this as disqualifying. The candidate is actively open to learning and has demonstrated fast adaptation across multiple backend stacks.
    - Score in the 7.0-8.5 range depending on overall fit.
    - List the specific gap in missing_skills — do not skip solely because of it.
 
+2c. SOFTWARE ENGINEER / FULLSTACK FLEXIBILITY:
+   If a role is titled "Software Engineer", "Associate Software Engineer", or "Full Stack Developer",
+   and the core workload is fundamentally backend, APIs, databases, or cloud infrastructure (with minor secondary
+   frontend tasks like React/TypeScript):
+   - Do NOT disqualify. Candidate has foundational React/HTML/CSS exposure from capstone IoT project.
+   - Disqualify only if the role is exclusively/primarily frontend UI design (e.g., pure React/Angular/Vue/CSS developer).
+
 3. HARD FILTERS:
    - If the role title explicitly matches the "Explicitly Rejected Roles", it is an immediate skip.
-   - If the role is clearly unrelated to backend/software/cloud/platform/devops/sre/infrastructure/data engineering, set action to "skip" and keep the score low.
+   - If the role is clearly unrelated to any of the 4 target pillars (e.g. sales, marketing, HR, legal, mobile-only), set action to "skip" and keep the score low (< 3.5).
    - If the posting contains a senior title but the description is junior-sounding, use the stricter interpretation.
 
-4. ROLE FAMILY:
-   - "primary" for Backend / Software / Cloud / DevOps / Platform / SRE / Infrastructure AND Data roles (Data Engineer, Data Analyst, Data Scientist, Analytics Engineer).
-   - Candidate is strongly open and interested in DATA ROLES (Data Analyst, Data Scientist, Data Engineer). If entry-level/junior and aligns with Python, SQL, databases, or analytics, score high (7.5 - 9.0) and action "apply".
-   - "secondary" for BI Developer / Machine Learning Research / Pipeline Developer
+4. ROLE FAMILY & THE 4 TARGET PILLARS:
+   - "primary" for:
+     * Backend Engineering: Backend Developer, Software Engineer, Go/Java/Python Engineer.
+     * Cloud / DevOps / SRE: Platform Engineer, Cloud Engineer, DevOps Engineer, Site Reliability Engineer, Systems Engineer.
+     * Data Engineering & Analytics: Data Engineer, Data Analyst, Data Scientist, Analytics Engineer.
+     * Aerospace & Air Traffic Management Systems: Surveillance data, ATM systems, CNS engineering.
+   - If entry-level/junior in ANY of these primary tracks, score high (7.5 - 9.5) and action "apply".
+   - "secondary" for BI Developer, ML Research, Pipeline Developer, or adjacent technical support roles.
 
 5. DECISION TIE-BREAKERS:
    - If the role is junior and the stack is adjacent, prefer "watch" over "skip".
@@ -93,23 +109,16 @@ CRITICAL RULES (MUST OBEY):
    - Do not reward buzzwords without concrete evidence.
 
 6. DOMAIN SPECIALIZATION CHECK:
-   Do not inflate the score just because a single language/tool matches
-   (e.g., "Rust" matches but the role requires deep domain expertise like
-   quantitative trading, algorithmic finance, embedded systems, or robotics).
-   If the role requires specialized domain knowledge the candidate has no
-   evidence of, cap the score at 6.0 even if the programming language matches.
+   Do not inflate the score just because a single language matches (e.g., "Rust" matches but the role requires quantitative finance, algorithmic trading, or computer vision). Cap at 6.0 unless it aligns with candidate's actual projects.
 
 7. UNRELATED FIELD CHECK:
-   If the posting is from an unrelated engineering discipline (mechanical,
-   chemical, civil, electrical, biotech/process engineering) that merely
-   contains the word "engineer" or "developer" in the title, this is NOT
-   a software role. Set match_score below 3.0 and action "skip", regardless
-   of any coincidental keyword overlap.
+   If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical) that merely contains the word "engineer" in the title, set match_score below 3.0 and action "skip".
 
-8. EU / LANGUAGE & ELIGIBILITY CHECK:
-   - If the job explicitly mandates fluent French ("Français obligatoire / courant") or Dutch ("Nederlands vereist") and does not accept English as primary working language, deduct 2.5 from match_score and add "Requires French/Dutch" to red_flags.
-   - If the job explicitly states "EU citizenship mandatory / No visa sponsorship", flag "EU citizenship required" in red_flags.
-   - For EUROCONTROL and international aerospace/EU-agency bodies where Turkey is a member state or English is the official language, the candidate is fully eligible.
+8. LOCATION & LANGUAGE ADVANTAGE:
+   - The candidate is based in Brussels, Belgium (Software Engineering Trainee at EUROCONTROL) and Istanbul, Turkey.
+   - Positions in Belgium (Brussels), Netherlands (Amsterdam), Germany (Berlin/Munich), Switzerland, UK, or Remote EU are prime local/regional targets.
+   - If the job explicitly mandates fluent French ("Français obligatoire / courant") or Dutch ("Nederlands vereist") and does NOT accept English as primary working language, deduct 2.5 from match_score and flag "Requires French/Dutch" in red_flags.
+   - If English is accepted or the company operates in English, treat the candidate as fully language-eligible (Fluent English C1/C2).
 
 9. STEALTH SENIORITY & SCOPE DETECTION:
    - If a job does not explicitly state a numerical years requirement, but lists expectations such as:

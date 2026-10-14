@@ -206,8 +206,8 @@ candidate:
     - "PayTR"
 
 scoring:
-  telegram_threshold_primary:   7.5
-  telegram_threshold_secondary: 8.0
+  telegram_threshold_primary:   8.5
+  telegram_threshold_secondary: 8.5
   save_threshold:               0.0 # Tüm puanlanan ilanlar DB'ye kaydedilir
 
 sources:
@@ -260,6 +260,9 @@ sources:
     locations:
       - "Istanbul, Turkey"
       - "Brussels, Belgium"
+      - "Amsterdam, Netherlands"
+      - "Berlin, Germany"
+      - "Munich, Germany"
     keywords:
       # ── Backend — Go/Java ─────────────────────
       - "backend developer"
