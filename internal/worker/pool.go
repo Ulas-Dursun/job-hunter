@@ -91,13 +91,24 @@ func (p *Pool) runWorker(ctx context.Context, id int) {
 }
 
 func (p *Pool) processNext(ctx context.Context, workerID int) {
+	// 1. Önce bekleyen (pending) mesajları kontrol et (ID: "0")
 	streams, err := p.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    p.cfg.ConsumerGroup,
 		Consumer: p.cfg.ConsumerName,
-		Streams:  []string{p.cfg.StreamFiltered, ">"},
+		Streams:  []string{p.cfg.StreamFiltered, "0"},
 		Count:    1,
-		Block:    2 * time.Second,
 	}).Result()
+
+	// Eğer pending mesaj yoksa veya boşsa, yeni mesajları bekle (ID: ">", Block: 2s)
+	if err != nil || len(streams) == 0 || len(streams[0].Messages) == 0 {
+		streams, err = p.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    p.cfg.ConsumerGroup,
+			Consumer: p.cfg.ConsumerName,
+			Streams:  []string{p.cfg.StreamFiltered, ">"},
+			Count:    1,
+			Block:    2 * time.Second,
+		}).Result()
+	}
 
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, redis.Nil) {
@@ -214,6 +225,14 @@ func (p *Pool) toFailed(ctx context.Context, msg redis.XMessage) {
 		Stream: p.cfg.StreamFailed,
 		Values: msg.Values,
 	}).Result()
+
+	// Başarısız ilanın dedup hash'ini jobs:seen kümesinden kaldır.
+	// Bu sayede sonraki taramada veya yeniden denemede ilan kalıcı olarak kilitli kalmaz.
+	dedupHash := field(msg.Values, "dedup_hash")
+	if dedupHash != "" && p.cfg.DedupSetKey != "" {
+		_ = p.client.SRem(ctx, p.cfg.DedupSetKey, dedupHash).Err()
+	}
+
 	p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
 }
 

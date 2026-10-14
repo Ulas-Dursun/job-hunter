@@ -57,15 +57,27 @@ func (c *Consumer) Run(ctx context.Context) {
 }
 
 // processBatch, stream'den en fazla 10 mesaj okur ve işler.
-// BLOCK 2s: mesaj yoksa 2 saniye bekler — CPU'yu boşa harcamaz.
+// Önce çökme/yeniden başlatma sonrası bekleyen (pending) mesajları kurtarır,
+// ardından yeni mesajları bekler.
 func (c *Consumer) processBatch(ctx context.Context) {
+	// 1. Önce bekleyen (pending) mesajları kontrol et (ID: "0")
 	streams, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    c.cfg.ConsumerGroup,
 		Consumer: c.cfg.ConsumerName,
-		Streams:  []string{c.cfg.StreamRaw, ">"},
+		Streams:  []string{c.cfg.StreamRaw, "0"},
 		Count:    10,
-		Block:    2 * time.Second,
 	}).Result()
+
+	// Eğer pending mesaj yoksa veya boşsa, yeni mesajları bekle (ID: ">", Block: 2s)
+	if err != nil || len(streams) == 0 || len(streams[0].Messages) == 0 {
+		streams, err = c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    c.cfg.ConsumerGroup,
+			Consumer: c.cfg.ConsumerName,
+			Streams:  []string{c.cfg.StreamRaw, ">"},
+			Count:    10,
+			Block:    2 * time.Second,
+		}).Result()
+	}
 
 	if err != nil {
 		// Context iptal edildi — normal shutdown

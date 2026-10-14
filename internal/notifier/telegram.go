@@ -161,3 +161,51 @@ func (t *Telegram) SendRaw(ctx context.Context, message string) error {
 	// Gerçekten mesajı göndermek için dosyadaki mevcut 'send' fonksiyonunu çağırıyoruz
 	return t.send(ctx, message)
 }
+
+// DailyDigestItem, günlük özette listelenecek ilan özet bilgisini tutar.
+type DailyDigestItem struct {
+	Title   string
+	Company string
+	Score   float64
+	URL     string
+}
+
+// SendDailyDigest, günlük tarama tamamlandığında tek bir toplu özet mesajı gönderir.
+func (t *Telegram) SendDailyDigest(
+	ctx context.Context,
+	totalScraped, applyCount, watchCount, filteredCount int,
+	topJobs []DailyDigestItem,
+) error {
+	if !t.IsConfigured() {
+		return nil
+	}
+
+	dateStr := time.Now().Format("02.01.2006")
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("📊 <b>Günün İlan Özeti (%s)</b>\n\n", dateStr))
+	sb.WriteString(fmt.Sprintf("🔍 <b>Taranan:</b> %d ilan\n", totalScraped))
+	sb.WriteString(fmt.Sprintf("✅ <b>Başvuruya Uygun (Apply):</b> %d\n", applyCount))
+	sb.WriteString(fmt.Sprintf("👀 <b>İncelemeye Değer (Watch):</b> %d\n", watchCount))
+	sb.WriteString(fmt.Sprintf("🗑️ <b>Elenen (Filtre/Düşük):</b> %d\n\n", filteredCount))
+
+	if len(topJobs) > 0 {
+		sb.WriteString("🔥 <b>Öne Çıkan Fırsatlar:</b>\n")
+		for i, job := range topJobs {
+			cleanComp := strings.ReplaceAll(strings.ReplaceAll(job.Company, "&", "&amp;"), "<", "&lt;")
+			cleanTitle := strings.ReplaceAll(strings.ReplaceAll(job.Title, "&", "&amp;"), "<", "&lt;")
+			cleanURL := strings.ReplaceAll(job.URL, "&", "&amp;")
+
+			sb.WriteString(fmt.Sprintf(
+				"%d. <b>%s</b> — %s (🎯 <b>%.1f/10</b>)\n   🔗 <a href=\"%s\">İlana Git</a>\n",
+				i+1, cleanComp, cleanTitle, job.Score, cleanURL,
+			))
+		}
+	} else {
+		sb.WriteString("<i>Bugün yüksek eşleşen yeni ilan bulunamadı. Filtreler arka planda çalışmaya devam ediyor.</i>\n")
+	}
+
+	sb.WriteString("\n💻 <i>Tüm detayları görmek ve başvuru durumunu yönetmek için dashboard: http://localhost:8080</i>")
+
+	return t.send(ctx, sb.String())
+}

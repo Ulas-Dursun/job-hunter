@@ -41,9 +41,6 @@ func NewScheduler(
 func (s *Scheduler) Run(ctx context.Context) {
 	slog.Info("market report scheduler started")
 
-	// İlk başlatmada hemen bir rapor üret — sistemi test etmek için
-	s.generateAndSend(ctx)
-
 	// Sonraki rapor için Pazartesi 09:00'ı hesapla
 	ticker := time.NewTicker(s.untilNextMonday())
 	defer ticker.Stop()
