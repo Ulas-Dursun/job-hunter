@@ -75,7 +75,7 @@ func (g *GeminiAnalyzer) Analyze(
 		if err != nil {
 			// Eğer hata 429 (Rate Limit) ise biraz bekleyip tekrar dene
 			if strings.Contains(err.Error(), "429") {
-				backoffDuration := time.Duration((i+1)*10) * time.Second // 10s, 20s, 30s bekleme
+				backoffDuration := time.Duration((i+1)*15) * time.Second // 15s, 30s, 45s bekleme
 				slog.Warn("groq rate limited (429), backing off...",
 					"attempt", i+1,
 					"wait", backoffDuration.String(),

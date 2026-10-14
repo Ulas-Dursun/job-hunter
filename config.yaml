@@ -234,9 +234,9 @@ server:
   dashboard_port: 8080
 
 gemini:
-  model: "llama-3.3-70b-versatile"
-  max_tokens: 1500
-  rate_limit_rpm: 6
+  model: "qwen/qwen3.8-27b"
+  max_tokens: 1000
+  rate_limit_rpm: 5
 
 worker:
   pool_size: 1
