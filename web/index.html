@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Hunter · AI Destekli Kariyer Radarı</title>
+    <title>Job Hunter · AI Destekli Kariyer Radarı (v2.2)</title>
+    <!-- Anti-cache meta headers -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js for stats -->
@@ -162,35 +166,45 @@
         <!-- 1. CATEGORY / REGION TABS (Senior Level Segmentation) -->
         <div class="bg-dark-surface p-2 rounded-2xl border border-dark-border shadow-xl">
             <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar" id="category-tabs">
-                <button onclick="setCategory('all')" data-cat="all" class="cat-btn active flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition bg-brand-500/15 text-cyan-300 border border-brand-500/30">
+                <button onclick="setCategory('all')" data-cat="all" class="cat-btn active flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition bg-brand-500/15 text-cyan-300 border border-brand-500/30">
                     <span>🌐</span>
                     <span>Tüm İlanlar</span>
                     <span id="count-all" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono">0</span>
                 </button>
-                <button onclick="setCategory('tr')" data-cat="tr" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
-                    <span>🇹🇷</span>
-                    <span>İstanbul & Türkiye</span>
-                    <span id="count-tr" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                <button onclick="setCategory('top')" data-cat="top" class="cat-btn flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>⭐</span>
+                    <span>En İyiler (≥ 7.5)</span>
+                    <span id="count-top" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
                 </button>
-                <button onclick="setCategory('eu')" data-cat="eu" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
-                    <span>🇪🇺</span>
-                    <span>Brüksel & Avrupa</span>
-                    <span id="count-eu" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                <button onclick="setCategory('backend')" data-cat="backend" class="cat-btn flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>⚙️</span>
+                    <span>Backend (Go/Java/Py)</span>
+                    <span id="count-backend" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
                 </button>
-                <button onclick="setCategory('ats')" data-cat="ats" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
-                    <span>🏢</span>
-                    <span>Şirket Kariyer ATS</span>
-                    <span id="count-ats" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                <button onclick="setCategory('devops')" data-cat="devops" class="cat-btn flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>☁️</span>
+                    <span>DevOps & Cloud</span>
+                    <span id="count-devops" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
                 </button>
-                <button onclick="setCategory('data')" data-cat="data" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                <button onclick="setCategory('data')" data-cat="data" class="cat-btn flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
                     <span>📊</span>
                     <span>Data & Analitik</span>
                     <span id="count-data" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
                 </button>
-                <button onclick="setCategory('top')" data-cat="top" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
-                    <span>⭐</span>
-                    <span>Skor ≥ 7.5 (Apply)</span>
-                    <span id="count-top" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                <button onclick="setCategory('tr')" data-cat="tr" class="cat-btn flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>🇹🇷</span>
+                    <span>İstanbul & TR</span>
+                    <span id="count-tr" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                </button>
+                <button onclick="setCategory('eu')" data-cat="eu" class="cat-btn flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>🇪🇺</span>
+                    <span>Brüksel & Avrupa</span>
+                    <span id="count-eu" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                </button>
+                <button onclick="setCategory('ats')" data-cat="ats" class="cat-btn flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>🏢</span>
+                    <span>Şirket ATS</span>
+                    <span id="count-ats" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
                 </button>
             </div>
         </div>
@@ -207,6 +221,12 @@
             <!-- Right: Secondary Filters & Sort -->
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 
+                <!-- Quick Toggle: Only Relevant (Score >= 5.0) -->
+                <button id="relevance-btn" onclick="toggleOnlyRelevant()" class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-semibold text-xs transition shadow-sm hover:bg-emerald-500/25" title="Sadece profiline uyan (Skor ≥ 5.0) ve elenmemiş ilanları gösterir">
+                    <span id="relevance-indicator">✓</span>
+                    <span>Sadece Uygunlar (≥ 5.0)</span>
+                </button>
+
                 <!-- Action Filter Dropdown -->
                 <select id="action-filter" onchange="setAction(this.value)" class="px-3 py-2 rounded-lg bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/60">
                     <option value="">🎯 Tüm AI Kararları</option>
@@ -369,6 +389,7 @@
             filteredJobs: [],   // After applying client-side category/search filters
             stats: null,
             category: 'all',
+            onlyRelevant: true, // Default: hide noise (< 5.0 or skip)
             search: '',
             action: '',
             status: '',
@@ -445,22 +466,49 @@
             const all = STATE.rawJobs
             const count = {
                 all: all.length,
+                top: all.filter(j => (j.match_score || 0) >= 7.5).length,
+                backend: all.filter(isBackendJob).length,
+                devops: all.filter(isDevopsJob).length,
+                data: all.filter(isDataJob).length,
                 tr: all.filter(isTurkeyJob).length,
                 eu: all.filter(isEuropeJob).length,
-                ats: all.filter(isAtsJob).length,
-                data: all.filter(isDataJob).length,
-                top: all.filter(j => (j.match_score || 0) >= 7.5).length
+                ats: all.filter(isAtsJob).length
             }
 
             document.getElementById('count-all').textContent = count.all
+            document.getElementById('count-top').textContent = count.top
+            document.getElementById('count-backend').textContent = count.backend
+            document.getElementById('count-devops').textContent = count.devops
+            document.getElementById('count-data').textContent = count.data
             document.getElementById('count-tr').textContent = count.tr
             document.getElementById('count-eu').textContent = count.eu
             document.getElementById('count-ats').textContent = count.ats
-            document.getElementById('count-data').textContent = count.data
-            document.getElementById('count-top').textContent = count.top
         }
 
         // Category Classification Helpers
+        function isBackendJob(j) {
+            const t = (j.title || '').toLowerCase()
+            const rf = (j.role_family || '').toLowerCase()
+            if (isDevopsJob(j) || isDataJob(j)) return false
+            return t.includes('backend') || t.includes('back-end') || t.includes('software') || 
+                   t.includes('developer') || t.includes('engineer') || t.includes('go') || 
+                   t.includes('golang') || t.includes('java') || t.includes('python') || rf === 'primary'
+        }
+
+        function isDevopsJob(j) {
+            const t = (j.title || '').toLowerCase()
+            return t.includes('devops') || t.includes('cloud') || t.includes('platform') || 
+                   t.includes('sre') || t.includes('site reliability') || t.includes('infrastructure') || 
+                   t.includes('kubernetes') || t.includes('ci/cd') || t.includes('system engineer')
+        }
+
+        function isDataJob(j) {
+            const t = (j.title || '').toLowerCase()
+            const rf = (j.role_family || '').toLowerCase()
+            return t.includes('data') || t.includes('analyst') || t.includes('analytics') || 
+                   t.includes('scientist') || t.includes('bi ') || t.includes('business intelligence') || rf === 'secondary'
+        }
+
         function isTurkeyJob(j) {
             const loc = (j.location || '').toLowerCase()
             const src = (j.source || '').toLowerCase()
@@ -484,27 +532,44 @@
             return src === 'lever' || src === 'greenhouse' || src === 'smartrecruiters'
         }
 
-        function isDataJob(j) {
-            const title = (j.title || '').toLowerCase()
-            const role = (j.role_family || '').toLowerCase()
-            return title.includes('data') || title.includes('analyst') || title.includes('analytics') || title.includes('scientist') || role === 'secondary'
+        function toggleOnlyRelevant() {
+            STATE.onlyRelevant = !STATE.onlyRelevant
+            const btn = document.getElementById('relevance-btn')
+            const ind = document.getElementById('relevance-indicator')
+            if (STATE.onlyRelevant) {
+                btn.className = "flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-semibold text-xs transition shadow-sm hover:bg-emerald-500/25"
+                ind.textContent = "✓"
+            } else {
+                btn.className = "flex items-center gap-1.5 px-3 py-2 rounded-lg bg-dark-card border border-dark-border text-dark-textMuted font-medium text-xs transition hover:text-dark-text"
+                ind.textContent = "○"
+            }
+            applyFilters()
         }
 
         // ── Filter Application ────────────────────────────────────────────
         function applyFilters() {
             let list = [...STATE.rawJobs]
 
+            // 0. Only Relevant Filter (Hide noise: < 5.0 or action == skip)
+            if (STATE.onlyRelevant) {
+                list = list.filter(j => (j.match_score || 0) >= 5.0 && (j.ai_action || '').toLowerCase() !== 'skip')
+            }
+
             // 1. Category Filter
-            if (STATE.category === 'tr') {
+            if (STATE.category === 'top') {
+                list = list.filter(j => (j.match_score || 0) >= 7.5)
+            } else if (STATE.category === 'backend') {
+                list = list.filter(isBackendJob)
+            } else if (STATE.category === 'devops') {
+                list = list.filter(isDevopsJob)
+            } else if (STATE.category === 'data') {
+                list = list.filter(isDataJob)
+            } else if (STATE.category === 'tr') {
                 list = list.filter(isTurkeyJob)
             } else if (STATE.category === 'eu') {
                 list = list.filter(isEuropeJob)
             } else if (STATE.category === 'ats') {
                 list = list.filter(isAtsJob)
-            } else if (STATE.category === 'data') {
-                list = list.filter(isDataJob)
-            } else if (STATE.category === 'top') {
-                list = list.filter(j => (j.match_score || 0) >= 7.5)
             }
 
             // 2. Search Filter

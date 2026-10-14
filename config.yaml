@@ -282,9 +282,9 @@ server:
   dashboard_port: 8080
 
 gemini:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-2.0-flash"
   max_tokens: 1000
-  rate_limit_rpm: 4
+  rate_limit_rpm: 15
 
 worker:
   pool_size: 1

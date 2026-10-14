@@ -28,35 +28,72 @@ type ScoreResult struct {
 	Reasoning     string   `json:"reasoning"`
 }
 
-// GeminiAnalyzer, Groq API üzerinden iş ilanı analizi yapar.
-// Groq: ücretsiz tier, 14400 RPD, llama-3.1-70b model.
+type Provider string
+
+const (
+	ProviderGemini Provider = "gemini"
+	ProviderGroq   Provider = "groq"
+)
+
+// GeminiAnalyzer, Google Gemini veya Groq API üzerinden iş ilanı analizi yapar.
 type GeminiAnalyzer struct {
-	apiKey  string
-	model   string
-	client  *http.Client
-	limiter *rate.Limiter
-	builder *PromptBuilder
-	maxTok  int
+	provider Provider
+	apiKey   string
+	model    string
+	client   *http.Client
+	limiter  *rate.Limiter
+	builder  *PromptBuilder
+	maxTok   int
 }
 
-const groqAPIURL = "https://api.groq.com/openai/v1/chat/completions"
+const (
+	groqAPIURL   = "https://api.groq.com/openai/v1/chat/completions"
+	geminiAPIURL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s"
+)
 
 func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConfig) *GeminiAnalyzer {
-	// 20 RPM — Groq free tier çok daha cömert
-	interval := time.Duration(60000/cfg.RateLimitRPM) * time.Millisecond
+	geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+	groqKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
+
+	provider := ProviderGroq
+	apiKey := groqKey
+	model := cfg.Model
+	rpm := cfg.RateLimitRPM
+	if rpm <= 0 {
+		rpm = 4
+	}
+
+	if geminiKey != "" {
+		provider = ProviderGemini
+		apiKey = geminiKey
+		model = "gemini-2.0-flash"
+		rpm = 15 // Gemini free tier: 15 RPM, 1.000.000 TPM, 1.500 RPD
+		slog.Info("ai analyzer: Google Gemini 2.0 Flash aktif", "provider", "gemini", "model", model, "rpm", rpm)
+	} else if groqKey != "" {
+		provider = ProviderGroq
+		apiKey = groqKey
+		if model == "" || strings.HasPrefix(model, "gemini") {
+			model = "qwen/qwen3.8-27b"
+		}
+		slog.Info("ai analyzer: Groq aktif (GEMINI_API_KEY bulunamadı)", "provider", "groq", "model", model, "rpm", rpm)
+	} else {
+		slog.Warn("ai analyzer: ne GEMINI_API_KEY ne de GROQ_API_KEY ortamda bulunamadı!")
+	}
+
+	interval := time.Duration(60000/rpm) * time.Millisecond
 	limiter := rate.NewLimiter(rate.Every(interval), 1)
 
 	return &GeminiAnalyzer{
-		apiKey:  os.Getenv("GROQ_API_KEY"),
-		model:   cfg.Model,
-		client:  &http.Client{Timeout: 30 * time.Second},
-		limiter: limiter,
-		builder: NewPromptBuilder(candidate),
-		maxTok:  cfg.MaxTokens,
+		provider: provider,
+		apiKey:   apiKey,
+		model:    model,
+		client:   &http.Client{Timeout: 35 * time.Second},
+		limiter:  limiter,
+		builder:  NewPromptBuilder(candidate),
+		maxTok:   cfg.MaxTokens,
 	}
 }
 
-// Analyze, bir iş ilanını AI ile analiz eder.
 // Analyze, bir iş ilanını AI ile analiz eder. 429 (Rate Limit) durumunda otomatik tekrar dener.
 func (g *GeminiAnalyzer) Analyze(
 	ctx context.Context,
@@ -70,13 +107,20 @@ func (g *GeminiAnalyzer) Analyze(
 		}
 
 		prompt := g.builder.Build(title, company, location, description)
-		res, err := g.call(ctx, prompt)
+		var res *ScoreResult
+		var err error
+
+		if g.provider == ProviderGemini {
+			res, err = g.callGemini(ctx, prompt)
+		} else {
+			res, err = g.callGroq(ctx, prompt)
+		}
 
 		if err != nil {
-			// Eğer hata 429 (Rate Limit) ise biraz bekleyip tekrar dene
 			if strings.Contains(err.Error(), "429") {
-				backoffDuration := time.Duration((i+1)*20) * time.Second // 20s, 40s, 60s, 80s, 100s bekleme
-				slog.Warn("groq rate limited (429), backing off...",
+				backoffDuration := time.Duration((i+1)*15) * time.Second
+				slog.Warn("ai rate limited (429), backing off...",
+					"provider", g.provider,
 					"attempt", i+1,
 					"wait", backoffDuration.String(),
 					"company", company,
@@ -85,22 +129,87 @@ func (g *GeminiAnalyzer) Analyze(
 
 				select {
 				case <-time.After(backoffDuration):
-					continue // Bekleme süresi bitti, döngünün başına dönüp tekrar dene
+					continue
 				case <-ctx.Done():
-					return nil, ctx.Err() // Uygulama kapanıyorsa iptal et
+					return nil, ctx.Err()
 				}
 			}
-			return nil, err // 429 dışı bir hataysa doğrudan fırlat
+			return nil, err
 		}
 
-		return res, nil // Başarılıysa sonucu dön
+		return res, nil
 	}
 
-	return nil, fmt.Errorf("groq rate limited heavily, gave up after %d retries", maxRetries)
+	return nil, fmt.Errorf("%s rate limited heavily, gave up after %d retries", g.provider, maxRetries)
 }
 
-func (g *GeminiAnalyzer) call(ctx context.Context, prompt string) (*ScoreResult, error) {
-	// Groq, OpenAI-compatible API kullanır
+func (g *GeminiAnalyzer) callGemini(ctx context.Context, prompt string) (*ScoreResult, error) {
+	reqURL := fmt.Sprintf(geminiAPIURL, g.model, g.apiKey)
+
+	reqPayload := map[string]any{
+		"contents": []map[string]any{
+			{
+				"parts": []map[string]any{
+					{"text": prompt},
+				},
+			},
+		},
+		"generationConfig": map[string]any{
+			"temperature":      0.1,
+			"maxOutputTokens":  g.maxTok,
+			"responseMimeType": "application/json",
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqPayload)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling gemini payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("creating gemini request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gemini http call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 429 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gemini rate limited (429): %s", string(b))
+	}
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gemini status %d: %s", resp.StatusCode, string(b))
+	}
+
+	var geminiResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
+		return nil, fmt.Errorf("decoding gemini response: %w", err)
+	}
+
+	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("empty gemini response candidates")
+	}
+
+	rawText := geminiResp.Candidates[0].Content.Parts[0].Text
+	return parseResult(rawText)
+}
+
+func (g *GeminiAnalyzer) callGroq(ctx context.Context, prompt string) (*ScoreResult, error) {
 	reqBody := map[string]any{
 		"model": g.model,
 		"messages": []map[string]any{
@@ -111,7 +220,6 @@ func (g *GeminiAnalyzer) call(ctx context.Context, prompt string) (*ScoreResult,
 		},
 		"max_tokens":  g.maxTok,
 		"temperature": 0.1,
-		// 🟢 BU ALANI EKLE: Groq'un kesinlikle JSON dönmesini zorunlu kılar
 		"response_format": map[string]any{
 			"type": "json_object",
 		},
@@ -121,7 +229,7 @@ func (g *GeminiAnalyzer) call(ctx context.Context, prompt string) (*ScoreResult,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, groqAPIURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return nil, fmt.Errorf("creating groq request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+g.apiKey)
@@ -141,7 +249,6 @@ func (g *GeminiAnalyzer) call(ctx context.Context, prompt string) (*ScoreResult,
 		return nil, fmt.Errorf("groq status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	// OpenAI-compatible response format
 	var apiResp struct {
 		Choices []struct {
 			Message struct {
@@ -159,8 +266,6 @@ func (g *GeminiAnalyzer) call(ctx context.Context, prompt string) (*ScoreResult,
 	}
 
 	rawText := apiResp.Choices[0].Message.Content
-	slog.Debug("groq raw response", "text", rawText[:min(len(rawText), 300)])
-
 	return parseResult(rawText)
 }
 
