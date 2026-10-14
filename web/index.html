@@ -1,678 +1,970 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Hunter · Dashboard</title>
+    <title>Job Hunter · AI Destekli Kariyer Radarı</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for stats -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#ecfeff',
+                            100: '#cffafe',
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            900: '#164e63',
+                        },
+                        dark: {
+                            bg: '#060913',
+                            surface: '#0b1120',
+                            card: '#0f172a',
+                            cardHover: '#131e36',
+                            border: '#1e293b',
+                            borderHover: '#334155',
+                            text: '#94a3b8',
+                            textMuted: '#64748b',
+                            textHeading: '#f1f5f9',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        :root {
-            --bg:          #04080F;
-            --surface:     #060C18;
-            --card:        #0A1020;
-            --card-h:      #0E1628;
-            --border:      #15243A;
-            --border-h:    #1E3A5F;
-            --cyan:        #22D3EE;
-            --cyan-dim:    rgba(34,211,238,0.12);
-            --cyan-glow:   0 0 0 2px rgba(34,211,238,0.15);
-            --apply:       #10B981;
-            --apply-dim:   rgba(16,185,129,0.12);
-            --watch:       #F59E0B;
-            --watch-dim:   rgba(245,158,11,0.1);
-            --danger:      #F87171;
-            --danger-dim:  rgba(248,113,113,0.1);
-            --purple:      #A78BFA;
-            --text:        #94A3B8;
-            --text-hi:     #E2E8F0;
-            --text-lo:     #2E4060;
-            --mono:        'SF Mono','Fira Code',Consolas,monospace;
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #060913; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+        /* Subtle grid background */
+        .bg-grid {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(30, 41, 59, 0.3) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(30, 41, 59, 0.3) 1px, transparent 1px);
         }
 
-        *{box-sizing:border-box;margin:0;padding:0}
-
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
-            font-size: 13px;
-            min-height: 100vh;
-            background-image:
-                    linear-gradient(rgba(34,211,238,0.018) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(34,211,238,0.018) 1px, transparent 1px);
-            background-size: 48px 48px;
+        /* Glassmorphism */
+        .glass-header {
+            background: rgba(11, 17, 32, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
-        @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.75)} }
-        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes fade-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-
-        /* ── Cards ───────────────────────────────────────────────────────── */
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            transition: border-color .18s, box-shadow .18s, background .18s;
-        }
-        .card:hover {
-            background: var(--card-h);
-            border-color: var(--border-h);
-            box-shadow: 0 0 0 1px var(--cyan-dim), 0 8px 28px rgba(0,0,0,.45);
-        }
-        .card.status-applied   { border-left: 3px solid var(--apply) }
-        .card.status-interview { border-left: 3px solid var(--cyan)  }
-        .card.status-rejected  { border-left: 3px solid var(--danger); opacity:.55 }
-        .card.status-skipped   { border-left: 3px solid var(--text-lo); opacity:.45 }
-        .card.status-offer     { border-left: 3px solid var(--purple) }
-
-        .stat-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 14px 16px;
-            position: relative;
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        .stat-card::after {
-            content:'';
-            position:absolute;
-            top:0;left:0;right:0;
-            height:2px;
-            background: var(--accent, var(--cyan));
-            opacity:.55;
+
+        .line-clamp-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
 
-        /* ── Chips ───────────────────────────────────────────────────────── */
-        .chip {
-            display:inline-flex;align-items:center;
-            padding:2px 7px;border-radius:4px;
-            font-size:11px;font-weight:500;
-            font-family:var(--mono);white-space:nowrap;
+        /* Smooth card hover lift */
+        .job-card {
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .chip-green  { background:var(--apply-dim);  color:#6EE7B7; border-left:2px solid var(--apply) }
-        .chip-amber  { background:var(--watch-dim);  color:#FCD34D; border-left:2px solid var(--watch) }
-        .chip-red    { background:var(--danger-dim); color:#FCA5A5; border-left:2px solid var(--danger) }
-
-        /* ── Badges ──────────────────────────────────────────────────────── */
-        .badge { padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.05em }
-        .badge-linkedin { background:rgba(10,102,194,.18);color:#60A5FA }
-        .badge-indeed   { background:rgba(42,104,194,.14);color:#93C5FD }
-        .badge-greenhouse { background:rgba(16,185,129,.18);color:#34D399 }
-        .badge-lever      { background:rgba(245,158,11,.18);color:#FBBF24 }
-        .badge-smartrecruiters { background:rgba(168,85,247,.18);color:#C084FC }
-        .badge-eurocontrol { background:rgba(34,211,238,.2);color:#22D3EE;border:1px solid rgba(34,211,238,.4) }
-        .badge-techcareer  { background:rgba(236,72,153,.18);color:#F472B6 }
-        .badge-arbeitnow   { background:rgba(59,130,246,.18);color:#93C5FD }
-        .badge-primary  { background:rgba(167,139,250,.12);color:#C4B5FD }
-        .badge-secondary{ background:rgba(34,211,238,.1); color:var(--cyan) }
-
-        /* ── Buttons ─────────────────────────────────────────────────────── */
-        .btn {
-            padding:5px 11px;border-radius:6px;font-size:11px;font-weight:600;
-            cursor:pointer;border:1px solid transparent;transition:all .14s;white-space:nowrap;
+        .job-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 211, 238, 0.2);
         }
-        .btn:active{transform:scale(.97)}
-        .btn-apply  { background:var(--apply-dim);  color:#6EE7B7; border-color:rgba(16,185,129,.2) }
-        .btn-apply.on, .btn-apply:hover  { background:var(--apply);  color:#fff;border-color:var(--apply) }
-        .btn-int    { background:var(--cyan-dim);   color:var(--cyan);border-color:rgba(34,211,238,.2) }
-        .btn-int.on,.btn-int:hover       { background:var(--cyan);   color:#000;border-color:var(--cyan) }
-        .btn-rej    { background:var(--danger-dim); color:var(--danger);border-color:rgba(248,113,113,.18) }
-        .btn-rej.on,.btn-rej:hover       { background:var(--danger); color:#fff;border-color:var(--danger) }
-        .btn-skip   { background:transparent;color:var(--text-lo);border-color:var(--border) }
-        .btn-skip.on{ background:rgba(46,64,96,.4);color:var(--text);border-color:var(--border-h) }
-        .btn-skip:hover{color:var(--text);border-color:var(--border-h)}
-        .btn-link {
-            padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;
-            background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(34,211,238,.25);
-            text-decoration:none;transition:all .14s;display:inline-block;white-space:nowrap;
-        }
-        .btn-link:hover{background:var(--cyan);color:#000}
-
-        /* ── Filter tabs ─────────────────────────────────────────────────── */
-        .ftab {
-            padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;
-            cursor:pointer;border:1px solid transparent;transition:all .14s;
-            color:var(--text);background:transparent;
-        }
-        .ftab:hover{color:var(--text-hi);background:rgba(255,255,255,.04)}
-        .ftab.on{background:var(--cyan-dim);color:var(--cyan);border-color:rgba(34,211,238,.2)}
-
-        /* ── Inputs ──────────────────────────────────────────────────────── */
-        .inp {
-            background:var(--card);border:1px solid var(--border);border-radius:8px;
-            padding:7px 12px;color:var(--text-hi);font-size:12px;outline:none;
-            transition:border-color .18s;
-        }
-        .inp::placeholder{color:var(--text-lo)}
-        .inp:focus{border-color:var(--cyan);box-shadow:var(--cyan-glow)}
-        .sel {
-            background:var(--card);border:1px solid var(--border);border-radius:8px;
-            padding:7px 28px 7px 12px;color:var(--text-hi);font-size:12px;outline:none;cursor:pointer;
-            appearance:none;
-            background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-            background-repeat:no-repeat;background-position:right 10px center;
-        }
-        .sel:focus{border-color:var(--cyan)}
-
-        /* ── Skeleton ────────────────────────────────────────────────────── */
-        .skel {
-            background:linear-gradient(90deg,var(--card) 25%,var(--card-h) 50%,var(--card) 75%);
-            background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:5px;
-        }
-
-        /* ── Misc ────────────────────────────────────────────────────────── */
-        .num{ font-family:var(--mono);font-variant-numeric:tabular-nums }
-        .lc2{ display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden }
-        .pipe-node{ width:7px;height:7px;border-radius:50%;animation:pulse-dot 2s ease-in-out infinite }
-
-        ::-webkit-scrollbar{width:5px}
-        ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px}
-        ::-webkit-scrollbar-thumb:hover{background:#2A3F5F}
     </style>
 </head>
-<body>
+<body class="bg-dark-bg text-dark-text font-sans antialiased min-h-screen bg-grid selection:bg-brand-500 selection:text-black">
 
-<!-- ══════════════════════════════════════════════ HEADER ══════════ -->
-<header style="background:var(--surface);border-bottom:1px solid var(--border);padding:11px 24px;position:sticky;top:0;z-index:50">
-    <div style="max-width:1380px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <!-- ═════════════════════════════════════════════════════════════════════
+         TOP NAVBAR (Sticky Glassmorphic)
+    ═════════════════════════════════════════════════════════════════════ -->
+    <header class="sticky top-0 z-40 glass-header border-b border-dark-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16 gap-4">
+                
+                <!-- Left: Brand / Logo -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-white font-bold text-lg">
+                        🎯
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-base font-bold text-dark-textHeading tracking-tight">Job Hunter AI</h1>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                Canlı Radar
+                            </span>
+                        </div>
+                        <p class="text-xs text-dark-textMuted">Ulaş Dursun · Backend, Cloud & Data</p>
+                    </div>
+                </div>
 
-        <!-- Logo -->
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-            <div style="width:32px;height:32px;background:var(--cyan-dim);border:1px solid rgba(34,211,238,.3);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px">🎯</div>
-            <div>
-                <div style="font-weight:700;font-size:14px;color:var(--text-hi);letter-spacing:-.02em">Job Hunter</div>
-                <div style="font-size:10px;color:var(--text-lo);letter-spacing:.07em;text-transform:uppercase;font-family:var(--mono)">Pipeline Dashboard</div>
+                <!-- Center: Live Key Stats Summary -->
+                <div class="hidden lg:flex items-center gap-6 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="text-dark-textMuted">Toplam:</span>
+                        <span id="nav-total" class="font-bold text-dark-textHeading font-mono text-sm">—</span>
+                    </div>
+                    <div class="w-px h-4 bg-dark-border"></div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-emerald-400">🔥 Hemen Başvur:</span>
+                        <span id="nav-apply" class="font-bold text-emerald-400 font-mono text-sm">—</span>
+                    </div>
+                    <div class="w-px h-4 bg-dark-border"></div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-cyan-400">⚡ İncele:</span>
+                        <span id="nav-watch" class="font-bold text-cyan-400 font-mono text-sm">—</span>
+                    </div>
+                    <div class="w-px h-4 bg-dark-border"></div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-dark-textMuted">Ort. Skor:</span>
+                        <span id="nav-avg" class="font-bold text-purple-400 font-mono text-sm">—</span>
+                    </div>
+                </div>
+
+                <!-- Right: Action Controls -->
+                <div class="flex items-center gap-2.5">
+                    <button onclick="load(true)" class="p-2 rounded-lg bg-dark-card border border-dark-border hover:border-cyan-500/40 text-dark-text hover:text-cyan-400 transition" title="Yenile">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    </button>
+
+                    <!-- Prominent Clear All Button -->
+                    <button onclick="openClearModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition shadow-sm" title="Tüm ilanları veritabanından kalıcı olarak siler">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        Tümünü Temizle
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- ═════════════════════════════════════════════════════════════════════
+         MAIN CONTAINER
+    ═════════════════════════════════════════════════════════════════════ -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- 1. CATEGORY / REGION TABS (Senior Level Segmentation) -->
+        <div class="bg-dark-surface p-2 rounded-2xl border border-dark-border shadow-xl">
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar" id="category-tabs">
+                <button onclick="setCategory('all')" data-cat="all" class="cat-btn active flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition bg-brand-500/15 text-cyan-300 border border-brand-500/30">
+                    <span>🌐</span>
+                    <span>Tüm İlanlar</span>
+                    <span id="count-all" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono">0</span>
+                </button>
+                <button onclick="setCategory('tr')" data-cat="tr" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>🇹🇷</span>
+                    <span>İstanbul & Türkiye</span>
+                    <span id="count-tr" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                </button>
+                <button onclick="setCategory('eu')" data-cat="eu" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>🇪🇺</span>
+                    <span>Brüksel & Avrupa</span>
+                    <span id="count-eu" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                </button>
+                <button onclick="setCategory('ats')" data-cat="ats" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>🏢</span>
+                    <span>Şirket Kariyer ATS</span>
+                    <span id="count-ats" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                </button>
+                <button onclick="setCategory('data')" data-cat="data" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>📊</span>
+                    <span>Data & Analitik</span>
+                    <span id="count-data" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                </button>
+                <button onclick="setCategory('top')" data-cat="top" class="cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent">
+                    <span>⭐</span>
+                    <span>Skor ≥ 7.5 (Apply)</span>
+                    <span id="count-top" class="ml-1 px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono">0</span>
+                </button>
             </div>
         </div>
 
-        <!-- Pipeline — signature element -->
-        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);letter-spacing:.04em;color:var(--text-lo)">
-            <span class="pipe-node" style="background:var(--apply);animation-delay:0s"></span>
-            <span style="color:var(--apply)">Scraper</span>
-            <svg width="22" height="8" viewBox="0 0 22 8"><line x1="0" y1="4" x2="22" y2="4" stroke="#1E3A5F" stroke-width="1.5" stroke-dasharray="3 2"/></svg>
-            <span class="pipe-node" style="background:var(--cyan);animation-delay:.6s"></span>
-            <span style="color:var(--cyan)">Queue</span>
-            <svg width="22" height="8" viewBox="0 0 22 8"><line x1="0" y1="4" x2="22" y2="4" stroke="#1E3A5F" stroke-width="1.5" stroke-dasharray="3 2"/></svg>
-            <span class="pipe-node" style="background:var(--watch);animation-delay:1.2s"></span>
-            <span style="color:var(--watch)">AI Score</span>
-            <svg width="22" height="8" viewBox="0 0 22 8"><line x1="0" y1="4" x2="22" y2="4" stroke="#1E3A5F" stroke-width="1.5" stroke-dasharray="3 2"/></svg>
-            <span class="pipe-node" style="background:var(--purple);animation-delay:1.8s"></span>
-            <span style="color:var(--purple)">Notify</span>
+        <!-- 2. SEARCH, SORT & STATUS FILTER TOOLBAR -->
+        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-dark-surface/60 p-3 rounded-xl border border-dark-border">
+            
+            <!-- Left: Search Box -->
+            <div class="relative flex-1 max-w-md">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-dark-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="Pozisyon, şirket, teknoloji (Go, Java, Docker, Python)..." class="w-full pl-9 pr-3 py-2 rounded-lg bg-dark-card border border-dark-border text-xs text-dark-textHeading placeholder-dark-textMuted focus:outline-none focus:border-cyan-400/60 focus:ring-1 focus:ring-cyan-400/30 transition">
+            </div>
+
+            <!-- Right: Secondary Filters & Sort -->
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                
+                <!-- Action Filter Dropdown -->
+                <select id="action-filter" onchange="setAction(this.value)" class="px-3 py-2 rounded-lg bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/60">
+                    <option value="">🎯 Tüm AI Kararları</option>
+                    <option value="apply">🔥 Apply (Başvur)</option>
+                    <option value="watch">👀 Watch (İncele)</option>
+                    <option value="skip">✗ Skip (Atlandı)</option>
+                </select>
+
+                <!-- Status Filter Dropdown -->
+                <select id="status-filter" onchange="setStatus(this.value)" class="px-3 py-2 rounded-lg bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/60">
+                    <option value="">📌 Tüm Durumlar</option>
+                    <option value="new">Yeni</option>
+                    <option value="applied">Başvurdum</option>
+                    <option value="interview">Mülakat</option>
+                    <option value="offer">Teklif 🎉</option>
+                    <option value="skipped">Geçildi</option>
+                </select>
+
+                <!-- Sort Dropdown -->
+                <select id="sort-select" onchange="setSort(this.value)" class="px-3 py-2 rounded-lg bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/60">
+                    <option value="score">↓ En Yüksek Skor</option>
+                    <option value="date">↓ En Yeni İlanlar</option>
+                </select>
+            </div>
         </div>
 
-        <!-- Right controls -->
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-            <span id="last-upd" class="num" style="font-size:11px;color:var(--text-lo)">—</span>
-            <button onclick="clearAllJobs()" class="btn" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#FCA5A5;font-size:11px" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'" title="Veritabanındaki tüm ilanları kalıcı olarak temizler">🗑️ Tümünü Temizle</button>
-            <button onclick="load()" class="btn" style="background:var(--card);border:1px solid var(--border);color:var(--text);font-size:11px" onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">↻ Yenile</button>
+        <!-- 3. FEED HEADER / META -->
+        <div class="flex items-center justify-between text-xs text-dark-textMuted px-1">
+            <div id="results-count">Yükleniyor...</div>
+            <div id="filter-indicator" class="flex items-center gap-2"></div>
+        </div>
+
+        <!-- 4. JOBS FEED GRID -->
+        <div id="jobs-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Dynamic Cards Rendered by JS -->
+        </div>
+
+        <!-- 5. PAGINATION -->
+        <div id="pagination" class="flex items-center justify-center gap-2 pt-4 pb-12"></div>
+
+    </main>
+
+    <!-- ═════════════════════════════════════════════════════════════════════
+         JOB DETAIL MODAL / DRAWER
+    ═════════════════════════════════════════════════════════════════════ -->
+    <div id="detail-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div class="bg-dark-surface border border-dark-border rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            
+            <!-- Modal Header -->
+            <div class="p-6 border-b border-dark-border flex items-start justify-between gap-4 bg-dark-card/50">
+                <div class="space-y-1.5 flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap" id="modal-badges"></div>
+                    <h2 id="modal-title" class="text-xl font-bold text-dark-textHeading truncate"></h2>
+                    <div class="flex items-center gap-3 text-xs text-dark-textMuted flex-wrap">
+                        <span id="modal-company" class="font-semibold text-cyan-400"></span>
+                        <span>•</span>
+                        <span id="modal-location"></span>
+                        <span>•</span>
+                        <span id="modal-posted"></span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 flex-shrink-0">
+                    <div id="modal-score" class="text-center px-3 py-1.5 rounded-xl border font-mono font-bold text-base"></div>
+                    <button onclick="closeDetailModal()" class="p-2 rounded-lg text-dark-text hover:text-white bg-dark-card border border-dark-border hover:border-slate-500 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Body (Scrollable) -->
+            <div class="p-6 overflow-y-auto space-y-6 text-xs text-dark-text leading-relaxed">
+                
+                <!-- AI Evaluation Breakdown -->
+                <div class="p-4 rounded-xl bg-dark-card border border-dark-border space-y-3">
+                    <div class="flex items-center gap-2 font-semibold text-dark-textHeading text-sm">
+                        <span>🤖</span>
+                        <span>AI Eşleşme Analizi & Gerekçesi</span>
+                    </div>
+                    <p id="modal-reasoning" class="text-dark-text text-xs italic bg-black/20 p-3 rounded-lg border border-white/5"></p>
+
+                    <!-- Skills Matrix -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                        <div>
+                            <div class="font-semibold text-emerald-400 text-[11px] mb-1.5 flex items-center gap-1">
+                                <span>✓</span> Eşleşen Beceriler
+                            </div>
+                            <div id="modal-overlap" class="flex flex-wrap gap-1"></div>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-amber-400 text-[11px] mb-1.5 flex items-center gap-1">
+                                <span>⚡</span> Eksik / İstenenler
+                            </div>
+                            <div id="modal-missing" class="flex flex-wrap gap-1"></div>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-rose-400 text-[11px] mb-1.5 flex items-center gap-1">
+                                <span>⚠</span> Kırmızı Bayraklar
+                            </div>
+                            <div id="modal-flags" class="flex flex-wrap gap-1"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full Job Description -->
+                <div>
+                    <h3 class="font-bold text-sm text-dark-textHeading mb-2">İlan Açıklaması</h3>
+                    <div id="modal-desc" class="whitespace-pre-line p-4 rounded-xl bg-dark-card/60 border border-dark-border font-mono text-[11px] text-slate-300 max-h-80 overflow-y-auto leading-normal"></div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 border-t border-dark-border bg-dark-card/50 flex items-center justify-between gap-3">
+                <button id="modal-delete-btn" class="px-3 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition">
+                    🗑️ Bu İlanı Sil
+                </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeDetailModal()" class="px-4 py-2 rounded-lg text-xs font-medium bg-dark-card border border-dark-border text-dark-text hover:text-white transition">Kapat</button>
+                    <a id="modal-apply-link" href="#" target="_blank" rel="noopener noreferrer" class="px-5 py-2 rounded-lg text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-black transition shadow-lg shadow-cyan-500/20 flex items-center gap-1.5">
+                        <span>İlana Git & Başvur</span>
+                        <span>↗</span>
+                    </a>
+                </div>
+            </div>
+
         </div>
     </div>
-</header>
 
-<!-- ══════════════════════════════════════════════ MAIN ════════════ -->
-<div style="max-width:1380px;margin:0 auto;padding:20px 24px">
-
-    <!-- STATS -->
-    <div id="stats-row" style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px"></div>
-
-    <!-- CHART + COMPANIES -->
-    <div style="display:grid;grid-template-columns:1fr 270px;gap:14px;margin-bottom:18px">
-        <div class="stat-card" style="--accent:var(--cyan);padding:16px">
-            <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text-lo);margin-bottom:10px">Score Dağılımı</div>
-            <div style="height:80px;position:relative"><canvas id="score-chart"></canvas></div>
-        </div>
-        <div class="stat-card" style="--accent:var(--purple);padding:16px">
-            <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text-lo);margin-bottom:12px">Aktif Şirketler</div>
-            <div id="top-companies"></div>
-        </div>
-    </div>
-
-    <!-- FILTERS -->
-    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
-        <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">
-            <button class="ftab on" data-action="" onclick="setAction('')">Tümü</button>
-            <button class="ftab" data-action="apply" onclick="setAction('apply')">🔥 Apply</button>
-            <button class="ftab" data-action="watch" onclick="setAction('watch')">👀 Watch</button>
-            <button class="ftab" data-action="skip"  onclick="setAction('skip')">✗ Skip</button>
-            <span style="color:var(--border);margin:0 4px">|</span>
-            <button class="ftab on" data-status="new"       onclick="setStat('new')">Yeni</button>
-            <button class="ftab"    data-status="applied"   onclick="setStat('applied')">Başvurdum</button>
-            <button class="ftab"    data-status="interview" onclick="setStat('interview')">Mülakat</button>
-            <button class="ftab"    data-status="offer"     onclick="setStat('offer')">Teklif 🎉</button>
-            <button class="ftab"    data-status=""          onclick="setStat('')">Tümü</button>
-            <span style="color:var(--border);margin:0 4px">|</span>
-            <button class="ftab" onclick="filterPreset('eurocontrol')" style="border-color:rgba(34,211,238,0.3);color:var(--cyan)">✈️ Havacılık / Brüksel</button>
-            <button class="ftab" onclick="filterPreset('techcareer')" style="border-color:rgba(236,72,153,0.3);color:#F472B6">🇹🇷 Techcareer & MT</button>
-            <button class="ftab" onclick="filterPreset('top')" style="border-color:rgba(16,185,129,0.3);color:#6EE7B7">🌟 Skor >= 8.0</button>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-            <input class="inp" id="search-inp" placeholder="🔍 Şirket / pozisyon..." style="width:200px" oninput="handleSearch(this.value)">
-            <select class="sel" id="sort-sel" onchange="handleSort(this.value)">
-                <option value="score">↓ Score</option>
-                <option value="date">↓ Tarih</option>
-            </select>
+    <!-- ═════════════════════════════════════════════════════════════════════
+         CONFIRMATION MODAL (Tümünü Temizle)
+    ═════════════════════════════════════════════════════════════════════ -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div class="bg-dark-surface border border-rose-500/30 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 text-xl mx-auto">
+                🗑️
+            </div>
+            <div class="text-center space-y-1">
+                <h3 class="text-base font-bold text-dark-textHeading">Tüm İlanları Temizle?</h3>
+                <p class="text-xs text-dark-textMuted">Veritabanındaki tüm ilanlar kalıcı olarak silinecektir. Bu işlem geri alınamaz.</p>
+            </div>
+            <div class="flex items-center justify-center gap-3 pt-2">
+                <button onclick="closeClearModal()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-dark-card border border-dark-border text-dark-text hover:text-white transition">Vazgeç</button>
+                <button onclick="executeClearAll()" class="px-5 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white transition shadow-lg shadow-rose-500/20">Evet, Hepsini Temizle</button>
+            </div>
         </div>
     </div>
 
-    <!-- META -->
-    <div id="meta" class="num" style="font-size:11px;color:var(--text-lo);margin-bottom:10px;min-height:16px"></div>
+    <!-- ═════════════════════════════════════════════════════════════════════
+         TOAST CONTAINER
+    ═════════════════════════════════════════════════════════════════════ -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
 
-    <!-- JOBS -->
-    <div id="jobs"></div>
-
-    <!-- PAGINATION -->
-    <div id="pages" style="display:flex;justify-content:center;gap:6px;margin-top:20px;padding-bottom:48px"></div>
-</div>
-
-<script>
-    /* ════════════════════════════════════════════════════════════════════
-       STATE
-    ════════════════════════════════════════════════════════════════════ */
-    let chart = null
-    const S = { jobs:[], total:0, stats:null }
-    const F = { action:'', status:'new', sort:'score', search:'', offset:0, limit:30 }
-
-    /* ════════════════════════════════════════════════════════════════════
-       API
-    ════════════════════════════════════════════════════════════════════ */
-    const api = {
-        get: path => fetch(path).then(r => { if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
-        patch: (path,body) => fetch(path,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() }),
-        delete: path => fetch(path,{method:'DELETE'}).then(r=>{ if(!r.ok) throw new Error(`HTTP ${r.status}`); return true })
-    }
-
-    /* ════════════════════════════════════════════════════════════════════
-       UTILS
-    ════════════════════════════════════════════════════════════════════ */
-    const esc = s => !s ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-
-    function ago(iso) {
-        if (!iso) return ''
-        const d = (Date.now() - new Date(iso)) / 1000
-        if (d < 60)    return 'Az önce'
-        if (d < 3600)  return `${~~(d/60)}dk önce`
-        if (d < 86400) return `${~~(d/3600)}sa önce`
-        return `${~~(d/86400)}g önce`
-    }
-
-    function sc(v) {
-        if (!v || v < 0) return { c:'#475569', dim:'transparent' }
-        if (v >= 8.5) return { c:'#10B981', dim:'rgba(16,185,129,.12)', lbl:'🔥 Güçlü' }
-        if (v >= 7.0) return { c:'#22D3EE', dim:'rgba(34,211,238,.10)', lbl:'✓ İyi' }
-        if (v >= 5.0) return { c:'#F59E0B', dim:'rgba(245,158,11,.10)',  lbl:'~ Orta' }
-        return              { c:'#F87171', dim:'rgba(248,113,113,.09)', lbl:'✗ Zayıf' }
-    }
-
-    function ring(score) {
-        if (!score) return '<div style="width:52px;height:52px;flex-shrink:0"></div>'
-        const {c} = sc(score), r=21, circ=2*Math.PI*r
-        const dash = Math.min((score/10)*circ, circ).toFixed(1)
-        const gap  = (circ - parseFloat(dash)).toFixed(1)
-        return `
-    <div style="position:relative;width:52px;height:52px;flex-shrink:0">
-      <svg width="52" height="52" viewBox="0 0 52 52" style="transform:rotate(-90deg)">
-        <circle cx="26" cy="26" r="${r}" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="4.5"/>
-        <circle cx="26" cy="26" r="${r}" fill="none" stroke="${c}" stroke-width="4.5"
-          stroke-dasharray="${dash} ${gap}" stroke-linecap="round"/>
-      </svg>
-      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
-        <span class="num" style="font-size:12px;font-weight:700;color:${c};letter-spacing:-.02em">${score.toFixed(1)}</span>
-      </div>
-    </div>`
-    }
-
-    function stBadge(status) {
-        const m = {
-            applied:   { lbl:'Başvuruldu', c:'#10B981' },
-            interview: { lbl:'Mülakat',    c:'#22D3EE' },
-            rejected:  { lbl:'Red',        c:'#F87171' },
-            offer:     { lbl:'Teklif 🎉',  c:'#A78BFA' },
-            skipped:   { lbl:'Atlandı',    c:'#2E4060' }
+    <!-- ═════════════════════════════════════════════════════════════════════
+         FRONTEND JAVASCRIPT LOGIC
+    ═════════════════════════════════════════════════════════════════════ -->
+    <script>
+        // ── State Management ────────────────────────────────────────────────
+        const STATE = {
+            rawJobs: [],        // All jobs fetched from API
+            filteredJobs: [],   // After applying client-side category/search filters
+            stats: null,
+            category: 'all',
+            search: '',
+            action: '',
+            status: '',
+            sort: 'score',
+            limit: 20,
+            page: 1,
+            selectedJob: null
         }
-        const v = m[status]
-        if (!v) return ''
-        return `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:${v.c}18;color:${v.c};border:1px solid ${v.c}30">${v.lbl}</span>`
-    }
 
-    /* ════════════════════════════════════════════════════════════════════
-       RENDER — STATS ROW
-    ════════════════════════════════════════════════════════════════════ */
-    function renderStats(s) {
-        const items = [
-            { lbl:'Toplam',    val: s.total_jobs,           col:'var(--cyan)'   },
-            { lbl:'Apply',     val: s.apply_count,           col:'var(--apply)'  },
-            { lbl:'Watch',     val: s.watch_count,           col:'var(--watch)'  },
-            { lbl:'Skip',      val: s.skip_count,            col:'#F87171'       },
-            { lbl:'Ort. Skor', val: (s.avg_score||0).toFixed(1), col:'var(--purple)' },
-            { lbl:'En Yüksek', val: (s.top_score||0).toFixed(1), col:'#FCD34D'       },
-        ]
-        document.getElementById('stats-row').innerHTML = items.map(i => `
-    <div class="stat-card" style="--accent:${i.col}">
-      <div class="num" style="font-size:22px;font-weight:700;color:${i.col};line-height:1.15">${i.val}</div>
-      <div style="font-size:10px;color:var(--text-lo);margin-top:5px;letter-spacing:.04em">${i.lbl}</div>
-    </div>`).join('')
-    }
+        // ── Source Configuration Mapping ──────────────────────────────────
+        const SOURCE_META = {
+            linkedin:        { label: 'LinkedIn',         badge: 'bg-blue-600/15 text-blue-400 border-blue-500/30' },
+            indeed:          { label: 'Indeed',           badge: 'bg-sky-600/15 text-sky-300 border-sky-500/30' },
+            lever:           { label: 'Lever ATS',        badge: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+            greenhouse:      { label: 'Greenhouse ATS',   badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+            smartrecruiters: { label: 'SmartRecruiters',  badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+            techcareer:      { label: 'techcareer.net',   badge: 'bg-pink-500/15 text-pink-300 border-pink-500/30' },
+            arbeitnow:       { label: 'Arbeitnow EU',     badge: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
+            eurocontrol:     { label: 'EUROCONTROL ✈️',   badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40' }
+        }
 
-    /* ════════════════════════════════════════════════════════════════════
-       RENDER — CHART
-    ════════════════════════════════════════════════════════════════════ */
-    function renderChart(s) {
-        const ctx = document.getElementById('score-chart').getContext('2d')
-        const b = s.score_buckets || []
-        const clrs = ['#F87171','#F87171','#F59E0B','#F59E0B','#22D3EE','#10B981','#10B981']
+        // ── API Helpers ───────────────────────────────────────────────────
+        const API = {
+            getJobs: () => fetch('/api/jobs?limit=500').then(r => r.json()),
+            getStats: () => fetch('/api/stats').then(r => r.json()),
+            updateStatus: (id, status) => fetch(`/api/jobs/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status })
+            }).then(r => r.json()),
+            deleteJob: (id) => fetch(`/api/jobs/${id}`, { method: 'DELETE' }),
+            clearAll: () => fetch('/api/jobs', { method: 'DELETE' })
+        }
 
-        if (chart) chart.destroy()
-        chart = new Chart(ctx, {
-            type:'bar',
-            data:{
-                labels: b.map(x=>x.range),
-                datasets:[{
-                    data: b.map(x=>x.count),
-                    backgroundColor: clrs.map(c=>c+'28'),
-                    borderColor: clrs,
-                    borderWidth:1.5,
-                    borderRadius:4
-                }]
-            },
-            options:{
-                responsive:true, maintainAspectRatio:false,
-                plugins:{ legend:{display:false}, tooltip:{
-                        backgroundColor:'#0A1020', borderColor:'#15243A', borderWidth:1,
-                        titleColor:'#94A3B8', bodyColor:'#E2E8F0',
-                        callbacks:{ label: ctx=>` ${ctx.parsed.y} ilan` }
-                    }},
-                scales:{
-                    x:{ grid:{color:'rgba(255,255,255,.025)'}, ticks:{color:'#2E4060',font:{size:10,family:'monospace'}} },
-                    y:{ grid:{color:'rgba(255,255,255,.025)'}, ticks:{color:'#2E4060',font:{size:10},stepSize:1}, beginAtZero:true }
-                }
+        // ── Initialization ────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            load(true)
+            // Auto refresh stats every 30 seconds
+            setInterval(() => load(false), 30000)
+        })
+
+        async function load(showLoading = false) {
+            try {
+                if (showLoading) renderLoadingState()
+                
+                const [jobsRes, statsRes] = await Promise.all([
+                    API.getJobs(),
+                    API.getStats()
+                ])
+
+                STATE.rawJobs = jobsRes.jobs || []
+                STATE.stats = statsRes
+                
+                updateStatsNavbar()
+                updateCategoryCounts()
+                applyFilters()
+            } catch (err) {
+                console.error('Veri yüklenemedi:', err)
+                toast('Veriler yüklenirken hata oluştu', 'error')
+            }
+        }
+
+        // ── Stats Navbar Update ───────────────────────────────────────────
+        function updateStatsNavbar() {
+            const s = STATE.stats || {}
+            document.getElementById('nav-total').textContent = s.total_jobs || 0
+            document.getElementById('nav-apply').textContent = s.apply_count || 0
+            document.getElementById('nav-watch').textContent = s.watch_count || 0
+            document.getElementById('nav-avg').textContent = (s.avg_score || 0).toFixed(1)
+        }
+
+        // ── Category Tab Counts ───────────────────────────────────────────
+        function updateCategoryCounts() {
+            const all = STATE.rawJobs
+            const count = {
+                all: all.length,
+                tr: all.filter(isTurkeyJob).length,
+                eu: all.filter(isEuropeJob).length,
+                ats: all.filter(isAtsJob).length,
+                data: all.filter(isDataJob).length,
+                top: all.filter(j => (j.match_score || 0) >= 7.5).length
+            }
+
+            document.getElementById('count-all').textContent = count.all
+            document.getElementById('count-tr').textContent = count.tr
+            document.getElementById('count-eu').textContent = count.eu
+            document.getElementById('count-ats').textContent = count.ats
+            document.getElementById('count-data').textContent = count.data
+            document.getElementById('count-top').textContent = count.top
+        }
+
+        // Category Classification Helpers
+        function isTurkeyJob(j) {
+            const loc = (j.location || '').toLowerCase()
+            const src = (j.source || '').toLowerCase()
+            const comp = (j.company || '').toLowerCase()
+            return src === 'techcareer' || 
+                   loc.includes('istanbul') || loc.includes('turkey') || loc.includes('türkiye') || loc.includes('ankara') || loc.includes('izmir') ||
+                   comp.includes('peak') || comp.includes('trendyol') || comp.includes('commencis') || comp.includes('iyzico')
+        }
+
+        function isEuropeJob(j) {
+            const loc = (j.location || '').toLowerCase()
+            const src = (j.source || '').toLowerCase()
+            return src === 'arbeitnow' || src === 'eurocontrol' ||
+                   loc.includes('brussel') || loc.includes('belgium') || loc.includes('netherlands') || loc.includes('amsterdam') ||
+                   loc.includes('germany') || loc.includes('berlin') || loc.includes('munich') || loc.includes('cluj') ||
+                   loc.includes('europe') || loc.includes('remote')
+        }
+
+        function isAtsJob(j) {
+            const src = (j.source || '').toLowerCase()
+            return src === 'lever' || src === 'greenhouse' || src === 'smartrecruiters'
+        }
+
+        function isDataJob(j) {
+            const title = (j.title || '').toLowerCase()
+            const role = (j.role_family || '').toLowerCase()
+            return title.includes('data') || title.includes('analyst') || title.includes('analytics') || title.includes('scientist') || role === 'secondary'
+        }
+
+        // ── Filter Application ────────────────────────────────────────────
+        function applyFilters() {
+            let list = [...STATE.rawJobs]
+
+            // 1. Category Filter
+            if (STATE.category === 'tr') {
+                list = list.filter(isTurkeyJob)
+            } else if (STATE.category === 'eu') {
+                list = list.filter(isEuropeJob)
+            } else if (STATE.category === 'ats') {
+                list = list.filter(isAtsJob)
+            } else if (STATE.category === 'data') {
+                list = list.filter(isDataJob)
+            } else if (STATE.category === 'top') {
+                list = list.filter(j => (j.match_score || 0) >= 7.5)
+            }
+
+            // 2. Search Filter
+            if (STATE.search.trim()) {
+                const q = STATE.search.toLowerCase()
+                list = list.filter(j => 
+                    (j.title || '').toLowerCase().includes(q) ||
+                    (j.company || '').toLowerCase().includes(q) ||
+                    (j.location || '').toLowerCase().includes(q) ||
+                    (j.skill_overlap || []).some(s => s.toLowerCase().includes(q))
+                )
+            }
+
+            // 3. Action Filter
+            if (STATE.action) {
+                list = list.filter(j => (j.ai_action || '').toLowerCase() === STATE.action.toLowerCase())
+            }
+
+            // 4. Status Filter
+            if (STATE.status) {
+                list = list.filter(j => (j.status || '').toLowerCase() === STATE.status.toLowerCase())
+            }
+
+            // 5. Sorting
+            if (STATE.sort === 'score') {
+                list.sort((a, b) => (b.match_score || 0) - (a.match_score || 0))
+            } else if (STATE.sort === 'date') {
+                list.sort((a, b) => new Date(b.scraped_at) - new Date(a.scraped_at))
+            }
+
+            STATE.filteredJobs = list
+            STATE.page = 1
+            renderJobs()
+        }
+
+        // ── Render Jobs Feed ──────────────────────────────────────────────
+        function renderJobs() {
+            const container = document.getElementById('jobs-container')
+            const countEl = document.getElementById('results-count')
+            const total = STATE.filteredJobs.length
+
+            countEl.innerHTML = `<span class="font-semibold text-dark-textHeading">${total}</span> ilan gösteriliyor`
+
+            if (total === 0) {
+                container.className = "col-span-2 text-center py-16 bg-dark-surface/30 rounded-2xl border border-dark-border"
+                container.innerHTML = `
+                    <div class="text-4xl mb-3">📭</div>
+                    <div class="text-sm font-semibold text-dark-textHeading mb-1">Eşleşen ilan bulunamadı</div>
+                    <p class="text-xs text-dark-textMuted max-w-sm mx-auto mb-4">Seçili kategoride veya arama filtresinde herhangi bir ilan yer almıyor.</p>
+                    <button onclick="resetFilters()" class="px-3 py-1.5 rounded-lg text-xs bg-dark-card border border-dark-border text-cyan-400 hover:border-cyan-400 transition">Filtreleri Sıfırla</button>
+                `
+                document.getElementById('pagination').innerHTML = ''
+                return
+            }
+
+            container.className = "grid grid-cols-1 lg:grid-cols-2 gap-4"
+
+            // Pagination slice
+            const start = (STATE.page - 1) * STATE.limit
+            const paginated = STATE.filteredJobs.slice(start, start + STATE.limit)
+
+            container.innerHTML = paginated.map(j => renderJobCard(j)).join('')
+            renderPagination(total)
+        }
+
+        // ── Single Job Card HTML ──────────────────────────────────────────
+        function renderJobCard(j) {
+            const meta = SOURCE_META[j.source] || { label: j.source, badge: 'bg-slate-700/30 text-slate-300 border-slate-600' }
+            const score = j.match_score || 0
+            const scoreColor = getScoreStyle(score)
+            
+            // Location Badge & Flag
+            const locInfo = formatLocationBadge(j.location)
+
+            // Overlap skills (up to 4)
+            const overlapTags = (j.skill_overlap || []).slice(0, 4)
+            const missingTags = (j.missing_skills || []).slice(0, 2)
+            const redFlags = (j.red_flags || []).slice(0, 1)
+
+            // Status Badge
+            const statusBadge = getStatusBadge(j.status)
+
+            return `
+            <div id="card-${j.id}" class="job-card bg-dark-surface border border-dark-border rounded-xl p-4 flex flex-col justify-between gap-3 relative">
+                
+                <!-- Card Top: Source, Location, Status, Score -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${meta.label}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-textMuted border border-dark-border">${locInfo}</span>
+                            ${statusBadge}
+                        </div>
+                        
+                        <!-- Circular Score Badge -->
+                        <div class="flex items-center gap-1 px-2.5 py-1 rounded-lg border font-mono font-bold text-xs ${scoreColor}">
+                            <span>⚡</span>
+                            <span>${score.toFixed(1)}</span>
+                        </div>
+                    </div>
+
+                    <!-- Company & Title (Clickable) -->
+                    <div class="cursor-pointer group" onclick="openDetailModal('${j.id}')">
+                        <div class="text-xs font-semibold text-cyan-400 mb-0.5 flex items-center gap-1">
+                            <span>${escapeHtml(j.company)}</span>
+                        </div>
+                        <h3 class="text-sm font-bold text-dark-textHeading group-hover:text-cyan-300 transition line-clamp-2">
+                            ${escapeHtml(j.title)}
+                        </h3>
+                    </div>
+
+                    <!-- AI Reasoning Quote Preview -->
+                    ${j.ai_reasoning ? `
+                    <div class="p-2.5 rounded-lg bg-dark-card/60 border border-dark-border/80 text-[11px] text-dark-textMuted italic flex items-start gap-2">
+                        <span class="text-cyan-400 font-bold text-xs">“</span>
+                        <p class="line-clamp-2">${escapeHtml(j.ai_reasoning)}</p>
+                    </div>` : ''}
+
+                    <!-- Skill Chips -->
+                    <div class="flex flex-wrap gap-1 pt-1">
+                        ${overlapTags.map(s => `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ ${escapeHtml(s)}</span>`).join('')}
+                        ${missingTags.map(s => `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">⚡ ${escapeHtml(s)}</span>`).join('')}
+                        ${redFlags.map(s => `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">⚠ ${escapeHtml(s)}</span>`).join('')}
+                    </div>
+                </div>
+
+                <!-- Card Bottom Toolbar: Actions -->
+                <div class="pt-3 border-t border-dark-border flex items-center justify-between gap-2 mt-1">
+                    
+                    <!-- Left: Status Dropdown & Delete -->
+                    <div class="flex items-center gap-1.5">
+                        <select onchange="updateJobStatus('${j.id}', this.value)" class="text-[11px] px-2 py-1 rounded bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/50">
+                            <option value="new" ${j.status === 'new' ? 'selected' : ''}>Yeni</option>
+                            <option value="applied" ${j.status === 'applied' ? 'selected' : ''}>Başvurdum</option>
+                            <option value="interview" ${j.status === 'interview' ? 'selected' : ''}>Mülakat</option>
+                            <option value="offer" ${j.status === 'offer' ? 'selected' : ''}>Teklif 🎉</option>
+                            <option value="skipped" ${j.status === 'skipped' ? 'selected' : ''}>Geç</option>
+                        </select>
+
+                        <!-- Single Card Delete Button -->
+                        <button onclick="deleteSingleJob('${j.id}')" class="p-1.5 rounded text-dark-textMuted hover:text-rose-400 hover:bg-rose-500/10 transition" title="Bu İlanı Kalıcı Olarak Sil">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- Right: Detail & Apply Links -->
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="openDetailModal('${j.id}')" class="px-2.5 py-1 rounded text-xs font-medium text-dark-text hover:text-white bg-dark-card border border-dark-border hover:border-slate-500 transition">
+                            Detay
+                        </button>
+                        <a href="${escapeHtml(j.url)}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 rounded text-xs font-bold bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500 hover:text-black border border-cyan-500/30 transition flex items-center gap-1">
+                            <span>İlana Git</span>
+                            <span class="text-[10px]">↗</span>
+                        </a>
+                    </div>
+                </div>
+
+            </div>`
+        }
+
+        // ── Location Formatting ───────────────────────────────────────────
+        function formatLocationBadge(loc) {
+            if (!loc) return '🌐 Belirtilmemiş'
+            const l = loc.toLowerCase()
+            if (l.includes('istanbul') || l.includes('turkey') || l.includes('türkiye') || l.includes('ankara')) return `🇹🇷 ${loc}`
+            if (l.includes('brussel') || l.includes('belgium')) return `🇧🇪 ${loc}`
+            if (l.includes('amsterdam') || l.includes('netherlands')) return `🇳🇱 ${loc}`
+            if (l.includes('berlin') || l.includes('munich') || l.includes('germany')) return `🇩🇪 ${loc}`
+            if (l.includes('london') || l.includes('uk')) return `🇬🇧 ${loc}`
+            if (l.includes('cluj') || l.includes('romania')) return `🇷🇴 ${loc}`
+            if (l.includes('remote')) return `🌐 ${loc}`
+            return `📍 ${loc}`
+        }
+
+        // ── Score Styling ─────────────────────────────────────────────────
+        function getScoreStyle(score) {
+            if (score >= 8.5) return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+            if (score >= 7.0) return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+            if (score >= 5.0) return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+            return 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+        }
+
+        // ── Status Badges ─────────────────────────────────────────────────
+        function getStatusBadge(status) {
+            if (!status || status === 'new') return ''
+            const map = {
+                applied:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                interview: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+                offer:     'bg-purple-500/20 text-purple-300 border-purple-500/30',
+                rejected:  'bg-rose-500/20 text-rose-300 border-rose-500/30',
+                skipped:   'bg-slate-700/40 text-slate-400 border-slate-600'
+            }
+            const labels = {
+                applied: 'Başvuruldu', interview: 'Mülakat', offer: 'Teklif 🎉', rejected: 'Red', skipped: 'Atlandı'
+            }
+            return `<span class="px-2 py-0.5 rounded text-[10px] font-bold border ${map[status] || ''}">${labels[status] || status}</span>`
+        }
+
+        // ── Detail Modal Management ───────────────────────────────────────
+        function openDetailModal(id) {
+            const j = STATE.rawJobs.find(x => x.id === id)
+            if (!j) return
+            STATE.selectedJob = j
+
+            const meta = SOURCE_META[j.source] || { label: j.source, badge: 'bg-slate-700/30 text-slate-300 border-slate-600' }
+            const score = j.match_score || 0
+            const scoreColor = getScoreStyle(score)
+
+            // Badges
+            document.getElementById('modal-badges').innerHTML = `
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${meta.label}</span>
+                ${j.role_family ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-text border border-dark-border">${j.role_family}</span>` : ''}
+                ${getStatusBadge(j.status)}
+            `
+
+            document.getElementById('modal-title').textContent = j.title
+            document.getElementById('modal-company').textContent = j.company
+            document.getElementById('modal-location').textContent = formatLocationBadge(j.location)
+            document.getElementById('modal-posted').textContent = j.posted_at ? new Date(j.posted_at).toLocaleDateString('tr-TR') : 'Tarih belirtilmedi'
+
+            const scoreEl = document.getElementById('modal-score')
+            scoreEl.className = `text-center px-3 py-1.5 rounded-xl border font-mono font-bold text-base ${scoreColor}`
+            scoreEl.innerHTML = `<div>${score.toFixed(1)}</div><div class="text-[9px] uppercase tracking-wider font-sans font-normal">AI Skor</div>`
+
+            document.getElementById('modal-reasoning').textContent = j.ai_reasoning || 'AI gerekçesi henüz oluşturulmadı.'
+
+            // Skills
+            document.getElementById('modal-overlap').innerHTML = (j.skill_overlap || []).length
+                ? j.skill_overlap.map(s => `<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ ${escapeHtml(s)}</span>`).join('')
+                : '<span class="text-[11px] text-dark-textMuted italic">Eşleşen beceri yok</span>'
+
+            document.getElementById('modal-missing').innerHTML = (j.missing_skills || []).length
+                ? j.missing_skills.map(s => `<span class="px-2 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20">⚡ ${escapeHtml(s)}</span>`).join('')
+                : '<span class="text-[11px] text-dark-textMuted italic">Eksik tespit edilmedi</span>'
+
+            document.getElementById('modal-flags').innerHTML = (j.red_flags || []).length
+                ? j.red_flags.map(s => `<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20">⚠ ${escapeHtml(s)}</span>`).join('')
+                : '<span class="text-[11px] text-dark-textMuted italic">Kırmızı bayrak yok</span>'
+
+            // Description
+            document.getElementById('modal-desc').textContent = j.description || 'Detaylı ilan açıklaması bu kaynak tarafından sağlanmadı.'
+
+            // Links
+            document.getElementById('modal-apply-link').href = j.url || '#'
+            document.getElementById('modal-delete-btn').onclick = () => {
+                deleteSingleJob(j.id)
+                closeDetailModal()
+            }
+
+            document.getElementById('detail-modal').classList.remove('hidden')
+            document.body.style.overflow = 'hidden'
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detail-modal').classList.add('hidden')
+            document.body.style.overflow = 'auto'
+            STATE.selectedJob = null
+        }
+
+        // Close on ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeDetailModal()
+                closeClearModal()
             }
         })
-    }
 
-    /* ════════════════════════════════════════════════════════════════════
-       RENDER — TOP COMPANIES
-    ════════════════════════════════════════════════════════════════════ */
-    function renderCompanies(list) {
-        const el = document.getElementById('top-companies')
-        if (!list?.length) { el.innerHTML='<div style="color:var(--text-lo);font-size:12px">Henüz veri yok</div>'; return }
-        const max = list[0].job_count
-        el.innerHTML = list.slice(0,6).map(c=>`
-    <div style="margin-bottom:9px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-        <span style="font-size:12px;color:var(--text-hi);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:175px">${esc(c.company)}</span>
-        <span class="num" style="font-size:11px;color:var(--purple);flex-shrink:0;margin-left:6px">${c.avg_score.toFixed(1)}</span>
-      </div>
-      <div style="background:var(--border);border-radius:3px;height:3px;overflow:hidden">
-        <div style="height:100%;width:${~~((c.job_count/max)*100)}%;background:var(--purple);opacity:.7;border-radius:3px;transition:width .6s ease"></div>
-      </div>
-    </div>`).join('')
-    }
-
-    /* ════════════════════════════════════════════════════════════════════
-       RENDER — JOB CARD
-    ════════════════════════════════════════════════════════════════════ */
-    function card(j) {
-        const {c} = sc(j.match_score)
-        const over = (j.skill_overlap  || []).slice(0,7)
-        const miss = (j.missing_skills || []).slice(0,4)
-        const flag = (j.red_flags      || []).slice(0,2)
-        const srcMap = {
-            linkedin: { cls: 'linkedin', lbl: 'LinkedIn' },
-            indeed: { cls: 'indeed', lbl: 'Indeed' },
-            greenhouse: { cls: 'greenhouse', lbl: 'Greenhouse' },
-            lever: { cls: 'lever', lbl: 'Lever' },
-            smartrecruiters: { cls: 'smartrecruiters', lbl: 'SmartRecruiters' },
-            eurocontrol: { cls: 'eurocontrol', lbl: 'EUROCONTROL ✈️' },
-            techcareer: { cls: 'techcareer', lbl: 'techcareer.net' },
-            arbeitnow: { cls: 'arbeitnow', lbl: 'Arbeitnow (EU)' }
-        }
-        const sInfo = srcMap[j.source] || { cls: 'secondary', lbl: j.source || 'Direct' }
-
-        return `
-  <div class="card status-${j.status}" id="c-${j.id}" style="padding:15px;animation:fade-in .25s ease">
-    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:7px">
-          <span class="badge badge-${sInfo.cls}">${sInfo.lbl}</span>
-          ${j.role_family ? `<span class="badge badge-${j.role_family}">${j.role_family}</span>` : ''}
-          ${stBadge(j.status)}
-          <span class="num" style="font-size:10px;color:var(--text-lo);margin-left:auto">${ago(j.scraped_at)}</span>
-        </div>
-        <div style="font-weight:700;font-size:15px;color:var(--text-hi);letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${esc(j.company)}</div>
-        <div style="font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${esc(j.title)}</div>
-        ${j.location ? `<div style="font-size:11px;color:var(--text-lo)">📍 ${esc(j.location)}</div>` : ''}
-      </div>
-      ${ring(j.match_score)}
-    </div>
-
-    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:9px">
-      ${over.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px">${over.map(s=>`<span class="chip chip-green">${esc(s)}</span>`).join('')}${(j.skill_overlap||[]).length>7?`<span class="chip" style="background:var(--card-h);color:var(--text-lo)">+${j.skill_overlap.length-7}</span>`:''}</div>` : ''}
-      ${miss.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px">${miss.map(s=>`<span class="chip chip-amber">⚡ ${esc(s)}</span>`).join('')}</div>` : ''}
-      ${flag.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px">${flag.map(s=>`<span class="chip chip-red">⚠ ${esc(s)}</span>`).join('')}</div>` : ''}
-    </div>
-
-    ${j.ai_reasoning ? `<p style="font-size:11px;color:var(--text-lo);font-style:italic;margin-bottom:10px;line-height:1.55" class="lc2">${esc(j.ai_reasoning)}</p>` : ''}
-
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding-top:10px;border-top:1px solid var(--border)">
-      <div style="display:flex;gap:4px;flex-wrap:wrap">
-        <button class="btn btn-apply  ${j.status==='applied'   ?'on':''}" onclick="upd('${j.id}','applied')">✓ Başvurdum</button>
-        <button class="btn btn-int   ${j.status==='interview' ?'on':''}" onclick="upd('${j.id}','interview')">🎯 Mülakat</button>
-        <button class="btn btn-rej   ${j.status==='rejected'  ?'on':''}" onclick="upd('${j.id}','rejected')">✗ Red</button>
-        <button class="btn btn-skip  ${j.status==='skipped'   ?'on':''}" onclick="upd('${j.id}','skipped')">Geç</button>
-        <button class="btn" style="background:transparent;border:1px solid var(--border);color:var(--text-lo)" onclick="delJob('${j.id}')" title="İlanı Kalıcı Sil">🗑️</button>
-      </div>
-      <a href="${esc(j.url)}" target="_blank" rel="noopener noreferrer" class="btn-link">İlana Git →</a>
-    </div>
-  </div>`
-    }
-
-    /* ════════════════════════════════════════════════════════════════════
-       RENDER — JOBS LIST
-    ════════════════════════════════════════════════════════════════════ */
-    function renderJobs(loading) {
-        const el = document.getElementById('jobs')
-
-        if (loading) {
-            el.innerHTML = Array(5).fill(`
-      <div class="card" style="padding:15px;margin-bottom:8px">
-        <div style="display:flex;gap:12px">
-          <div style="flex:1">
-            <div class="skel" style="height:11px;width:55%;margin-bottom:8px"></div>
-            <div class="skel" style="height:18px;width:78%;margin-bottom:6px"></div>
-            <div class="skel" style="height:12px;width:45%"></div>
-          </div>
-          <div class="skel" style="width:52px;height:52px;border-radius:50%"></div>
-        </div>
-        <div style="display:flex;gap:4px;margin-top:10px">
-          ${Array(4).fill(`<div class="skel" style="height:19px;width:56px;border-radius:4px"></div>`).join('')}
-        </div>
-      </div>`).join('')
-            return
-        }
-
-        if (!S.jobs.length) {
-            el.innerHTML = `
-      <div style="text-align:center;padding:64px 20px;color:var(--text-lo)">
-        <div style="font-size:38px;margin-bottom:12px;opacity:.4">📭</div>
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">İlan bulunamadı</div>
-        <div style="font-size:12px">Filtreleri değiştir veya scraper'ı çalıştır</div>
-      </div>`
-            return
-        }
-
-        const from = F.offset + 1
-        const to   = Math.min(F.offset + F.limit, S.total)
-        document.getElementById('meta').textContent = `${S.total} sonuçtan ${from}–${to} gösteriliyor`
-        el.innerHTML = S.jobs.map(j => `<div style="margin-bottom:8px">${card(j)}</div>`).join('')
-    }
-
-    /* ════════════════════════════════════════════════════════════════════
-       RENDER — PAGINATION
-    ════════════════════════════════════════════════════════════════════ */
-    function renderPages() {
-        const pg = document.getElementById('pages')
-        const tp = Math.ceil(S.total / F.limit)
-        const cp = ~~(F.offset / F.limit)
-        if (tp <= 1) { pg.innerHTML=''; return }
-
-        const btnStyle = (active) =>
-            `padding:6px 12px;border-radius:6px;background:${active?'var(--cyan-dim)':'var(--card)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};color:${active?'var(--cyan)':'var(--text)'};cursor:pointer;font-family:var(--mono);font-size:12px`
-
-        let ps = [], seen = new Set()
-        for(let i=0;i<tp;i++){
-            if(i===0||i===tp-1||Math.abs(i-cp)<=1){ if(!seen.has(i)){seen.add(i);ps.push(i)} }
-            else if(ps[ps.length-1]!=='…') ps.push('…')
-        }
-
-        pg.innerHTML = [
-            cp>0 ? `<button onclick="goP(${cp-1})" style="${btnStyle(false)}">← Önceki</button>` : '',
-            ...ps.map(p => p==='…'
-                ? `<span style="padding:6px 3px;color:var(--text-lo)">…</span>`
-                : `<button onclick="goP(${p})" style="${btnStyle(p===cp)}">${p+1}</button>`),
-            cp<tp-1 ? `<button onclick="goP(${cp+1})" style="${btnStyle(false)}">Sonraki →</button>` : ''
-        ].join('')
-    }
-
-    /* ════════════════════════════════════════════════════════════════════
-       ACTIONS
-    ════════════════════════════════════════════════════════════════════ */
-    async function load() {
-        renderJobs(true)
-        try {
-            const params = new URLSearchParams()
-            if(F.action)  params.set('action', F.action)
-            if(F.status)  params.set('status', F.status)
-            if(F.search)  params.set('search', F.search)
-            params.set('sort',   F.sort)
-            params.set('offset', F.offset)
-            params.set('limit',  F.limit)
-
-            const [stats, jobs] = await Promise.all([
-                api.get('/api/stats'),
-                api.get('/api/jobs?' + params)
-            ])
-
-            S.stats = stats
-            S.jobs  = jobs.jobs || []
-            S.total = jobs.total || 0
-
-            renderStats(stats)
-            renderChart(stats)
-            renderCompanies(stats.top_companies)
-            renderJobs(false)
-            renderPages()
-
-            document.getElementById('last-upd').textContent =
-                new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
-
-        } catch(err) {
-            document.getElementById('jobs').innerHTML = `
-      <div style="text-align:center;padding:48px;color:var(--danger)">
-        <div style="font-size:28px;margin-bottom:10px">⚠️</div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:4px">API bağlantı hatası</div>
-        <div style="font-size:11px;color:var(--text-lo);font-family:var(--mono)">${esc(err.message)}</div>
-        <div style="font-size:11px;color:var(--text-lo);margin-top:6px">Orchestrator çalışıyor mu? <code style="color:var(--cyan)">go run ./cmd/orchestrator/...</code></div>
-      </div>`
-        }
-    }
-
-    async function upd(id, status) {
-        try {
-            await api.patch(`/api/jobs/${id}/status`, { status })
-            const j = S.jobs.find(x=>x.id===id)
-            if (j) {
-                j.status = status
-                // Smooth re-render of just this card
-                const el = document.getElementById(`c-${id}`)
-                if (el) {
-                    el.outerHTML = card(j)
+        // ── Single Job Deletion ───────────────────────────────────────────
+        async function deleteSingleJob(id) {
+            try {
+                // Optimistic UI removal
+                const card = document.getElementById(`card-${id}`)
+                if (card) {
+                    card.style.opacity = '0'
+                    card.style.transform = 'scale(0.95)'
+                    setTimeout(() => card.remove(), 200)
                 }
+
+                await API.deleteJob(id)
+                
+                // Update in-memory state
+                STATE.rawJobs = STATE.rawJobs.filter(x => x.id !== id)
+                STATE.filteredJobs = STATE.filteredJobs.filter(x => x.id !== id)
+                updateCategoryCounts()
+                updateStatsNavbar()
+                
+                toast('İlan başarıyla silindi', 'success')
+            } catch (err) {
+                console.error('Silme başarısız:', err)
+                toast('İlan silinemedi', 'error')
+                load(false)
             }
-        } catch(err) { console.error('status update:', err) }
-    }
+        }
 
-    async function delJob(id) {
-        if (!confirm('Bu ilanı kalıcı olarak silmek istediğine emin misin?')) return
-        try {
-            await api.delete(`/api/jobs/${id}`)
-            S.jobs = S.jobs.filter(x => x.id !== id)
-            S.total = Math.max(0, S.total - 1)
+        // ── Clear All Modal Management ────────────────────────────────────
+        function openClearModal() {
+            document.getElementById('confirm-modal').classList.remove('hidden')
+        }
+
+        function closeClearModal() {
+            document.getElementById('confirm-modal').classList.add('hidden')
+        }
+
+        async function executeClearAll() {
+            try {
+                closeClearModal()
+                await API.clearAll()
+                STATE.rawJobs = []
+                STATE.filteredJobs = []
+                updateCategoryCounts()
+                renderJobs()
+                updateStatsNavbar()
+                toast('Tüm ilanlar başarıyla temizlendi', 'success')
+            } catch (err) {
+                console.error('Tümü temizlenemedi:', err)
+                toast('Tümünü temizleme başarısız oldu', 'error')
+            }
+        }
+
+        // ── Update Job Status ─────────────────────────────────────────────
+        async function updateJobStatus(id, newStatus) {
+            try {
+                await API.updateStatus(id, newStatus)
+                const target = STATE.rawJobs.find(x => x.id === id)
+                if (target) target.status = newStatus
+                toast('Durum güncellendi', 'info')
+            } catch (err) {
+                console.error('Durum güncellenemedi:', err)
+                toast('Durum kaydedilemedi', 'error')
+            }
+        }
+
+        // ── Category Switching ────────────────────────────────────────────
+        function setCategory(cat) {
+            STATE.category = cat
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                if (btn.getAttribute('data-cat') === cat) {
+                    btn.className = "cat-btn active flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition bg-brand-500/15 text-cyan-300 border border-brand-500/30"
+                } else {
+                    btn.className = "cat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium whitespace-nowrap transition text-dark-text hover:text-dark-textHeading hover:bg-white/5 border border-transparent"
+                }
+            })
+            applyFilters()
+        }
+
+        // ── Search & Filter Controls ──────────────────────────────────────
+        let searchTimer = null
+        function handleSearch(val) {
+            clearTimeout(searchTimer)
+            searchTimer = setTimeout(() => {
+                STATE.search = val
+                applyFilters()
+            }, 250)
+        }
+
+        function setAction(val) {
+            STATE.action = val
+            applyFilters()
+        }
+
+        function setStatus(val) {
+            STATE.status = val
+            applyFilters()
+        }
+
+        function setSort(val) {
+            STATE.sort = val
+            applyFilters()
+        }
+
+        function resetFilters() {
+            STATE.category = 'all'
+            STATE.search = ''
+            STATE.action = ''
+            STATE.status = ''
+            document.getElementById('search-input').value = ''
+            document.getElementById('action-filter').value = ''
+            document.getElementById('status-filter').value = ''
+            setCategory('all')
+        }
+
+        // ── Pagination Render ─────────────────────────────────────────────
+        function renderPagination(total) {
+            const pgEl = document.getElementById('pagination')
+            const totalPages = Math.ceil(total / STATE.limit)
+            if (totalPages <= 1) {
+                pgEl.innerHTML = ''
+                return
+            }
+
+            let html = ''
+            for (let i = 1; i <= Math.min(totalPages, 7); i++) {
+                const isActive = i === STATE.page
+                html += `
+                    <button onclick="goToPage(${i})" class="w-8 h-8 rounded-lg text-xs font-semibold transition ${isActive ? 'bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/20' : 'bg-dark-card border border-dark-border text-dark-text hover:text-white'}">
+                        ${i}
+                    </button>
+                `
+            }
+            pgEl.innerHTML = html
+        }
+
+        function goToPage(p) {
+            STATE.page = p
             renderJobs()
-            loadStats()
-        } catch(err) {
-            alert('İlan silinemedi: ' + err.message)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
         }
-    }
 
-    async function clearAllJobs() {
-        if (!confirm('⚠️ DİKKAT: Veritabanındaki tüm ilanlar kalıcı olarak silinecek. Onaylıyor musun?')) return
-        try {
-            await api.delete('/api/jobs')
-            S.jobs = []
-            S.total = 0
-            renderJobs()
-            loadStats()
-        } catch(err) {
-            alert('İlanlar temizlenemedi: ' + err.message)
+        // ── Loading Skeletons ─────────────────────────────────────────────
+        function renderLoadingState() {
+            const container = document.getElementById('jobs-container')
+            container.className = "grid grid-cols-1 lg:grid-cols-2 gap-4"
+            container.innerHTML = Array(4).fill(`
+                <div class="bg-dark-surface border border-dark-border rounded-xl p-4 space-y-3 animate-pulse">
+                    <div class="flex justify-between items-center">
+                        <div class="h-4 bg-slate-800 rounded w-24"></div>
+                        <div class="h-6 bg-slate-800 rounded w-12"></div>
+                    </div>
+                    <div class="h-5 bg-slate-800 rounded w-3/4"></div>
+                    <div class="h-10 bg-slate-800/60 rounded"></div>
+                    <div class="flex gap-2">
+                        <div class="h-4 bg-slate-800 rounded w-16"></div>
+                        <div class="h-4 bg-slate-800 rounded w-16"></div>
+                    </div>
+                </div>
+            `).join('')
         }
-    }
 
-    function filterPreset(type) {
-        F.offset = 0
-        if (type === 'eurocontrol') {
-            F.search = 'EUROCONTROL'
-            F.action = ''
-            F.status = ''
-            document.getElementById('search-inp').value = 'EUROCONTROL'
-        } else if (type === 'techcareer') {
-            F.search = ''
-            F.action = ''
-            F.status = ''
-            document.getElementById('search-inp').value = ''
-        } else if (type === 'top') {
-            F.action = 'apply'
-            F.status = ''
-            F.search = ''
-            document.getElementById('search-inp').value = ''
+        // ── Toast Notifications ───────────────────────────────────────────
+        function toast(msg, type = 'info') {
+            const container = document.getElementById('toast-container')
+            const colors = {
+                success: 'bg-emerald-500/90 text-black font-bold',
+                error: 'bg-rose-500/90 text-white font-bold',
+                info: 'bg-cyan-500/90 text-black font-semibold'
+            }
+            const el = document.createElement('div')
+            el.className = `px-4 py-2.5 rounded-xl text-xs shadow-2xl transition transform translate-y-2 opacity-0 duration-200 flex items-center gap-2 ${colors[type] || colors.info}`
+            el.textContent = msg
+
+            container.appendChild(el)
+            requestAnimationFrame(() => {
+                el.classList.remove('translate-y-2', 'opacity-0')
+            })
+
+            setTimeout(() => {
+                el.classList.add('opacity-0', 'translate-y-2')
+                setTimeout(() => el.remove(), 200)
+            }, 3000)
         }
-        load()
-    }
 
-    /* ════════════════════════════════════════════════════════════════════
-       FILTER HANDLERS
-    ════════════════════════════════════════════════════════════════════ */
-    function setAction(v) {
-        F.action = v; F.offset = 0
-        document.querySelectorAll('[data-action]').forEach(el =>
-            el.classList.toggle('on', el.dataset.action === v))
-        load()
-    }
-
-    function setStat(v) {
-        F.status = v; F.offset = 0
-        document.querySelectorAll('[data-status]').forEach(el =>
-            el.classList.toggle('on', el.dataset.status === v))
-        load()
-    }
-
-    let searchT = null
-    function handleSearch(v) {
-        clearTimeout(searchT)
-        searchT = setTimeout(() => { F.search=v; F.offset=0; load() }, 320)
-    }
-
-    function handleSort(v)  { F.sort=v; F.offset=0; load() }
-    function goP(p) { F.offset=p*F.limit; window.scrollTo({top:0,behavior:'smooth'}); load() }
-
-    /* ════════════════════════════════════════════════════════════════════
-       INIT
-    ════════════════════════════════════════════════════════════════════ */
-    document.addEventListener('DOMContentLoaded', () => {
-        load()
-        setInterval(load, 60_000)
-    })
-</script>
+        // ── HTML Escaping ─────────────────────────────────────────────────
+        function escapeHtml(str) {
+            if (!str) return ''
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+        }
+    </script>
 </body>
 </html>

@@ -36,13 +36,16 @@ candidate:
       - "Site Reliability Engineer"
       - "SRE"
       - "System Engineer"
-    secondary:
       - "Data Engineer"
+      - "Data Analyst"
+      - "Data Scientist"
       - "Analytics Engineer"
       - "Data Platform Engineer"
-      - "Pipeline Engineer"
       - "Database Engineer"
-      - "Data Analyst"
+    secondary:
+      - "Pipeline Engineer"
+      - "Business Intelligence Developer"
+      - "Machine Learning Engineer"
 
   seniority:
     preferred:  ["junior", "entry-level", "new grad", "0-1 yıl", "0-2 years"]
@@ -200,7 +203,7 @@ sources:
         company_id: "DeliveryHero"
 
   eurocontrol:
-    enabled: true
+    enabled: false # Aday EUROCONTROL traineeship kabulü aldığı için devre dışı bırakıldı
 
   techcareer:
     enabled: true

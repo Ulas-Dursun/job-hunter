@@ -32,6 +32,27 @@ TECH_TITLE_KEYWORDS = [
 ]
 
 
+DISALLOWED_REGIONS = {
+    "united states", "usa", "u.s.", "san francisco", "new york", "chicago",
+    "seattle", "austin", "boston", "los angeles", "california", "texas",
+    "singapore", "australia", "sydney", "melbourne", "japan", "tokyo",
+    "india", "bengaluru", "mumbai", "brazil", "são paulo", "sao paulo",
+    "sao jose dos campos", "canada", "toronto", "kuala lumpur", "shanghai",
+    "mexico city", "latin america", "bogota", "santiago"
+}
+
+EU_TR_INDICATORS = [
+    "turkey", "türkiye", "istanbul", "ankara", "izmir",
+    "brussel", "belgium", "belgique", "belgië",
+    "amsterdam", "netherlands", "germany", "berlin", "munich", "frankfurt",
+    "london", "uk", "united kingdom", "france", "paris",
+    "switzerland", "zurich", "geneva", "austria", "vienna",
+    "romania", "cluj", "poland", "warsaw", "spain", "madrid", "barcelona",
+    "italy", "milan", "ireland", "dublin", "sweden", "stockholm",
+    "remote", "emea", "europe", "hybrid"
+]
+
+
 def clean_html(text: str) -> str:
     """HTML etiketlerini temizler ve düz metne dönüştürür."""
     if not text:
@@ -48,6 +69,18 @@ def is_tech_title(title: str) -> bool:
         return False
     title_lower = title.lower()
     return any(re.search(r"\b" + re.escape(kw) + r"\b", title_lower) for kw in TECH_TITLE_KEYWORDS)
+
+
+def is_allowed_location(loc: str) -> bool:
+    """Yalnızca Türkiye, Avrupa (Brüksel, Amsterdam, Berlin vb.) ve Remote lokasyonları kabul eder."""
+    if not loc:
+        return True
+    loc_lower = loc.lower()
+    if any(ind in loc_lower for ind in EU_TR_INDICATORS):
+        return True
+    if any(dis in loc_lower for dis in DISALLOWED_REGIONS):
+        return False
+    return True
 
 
 class ATSSource(BaseSource):
@@ -114,6 +147,8 @@ class ATSSource(BaseSource):
                     continue
                 if not is_tech_title(title):
                     continue
+                if not is_allowed_location(loc):
+                    continue
 
                 jobs.append(Job(
                     source="greenhouse",
@@ -154,6 +189,8 @@ class ATSSource(BaseSource):
                     continue
                 if not is_tech_title(title):
                     continue
+                if not is_allowed_location(loc):
+                    continue
 
                 jobs.append(Job(
                     source="lever",
@@ -190,6 +227,8 @@ class ATSSource(BaseSource):
                 if not title or not ext_id:
                     continue
                 if not is_tech_title(title):
+                    continue
+                if not is_allowed_location(loc):
                     continue
 
                 jobs.append(Job(

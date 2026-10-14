@@ -2,23 +2,24 @@ package api
 
 import "time"
 
-// JobDTO is the JSON representation of a job posting returned to the dashboard.
 type JobDTO struct {
-	ID            string    `json:"id"`
-	Source        string    `json:"source"`
-	Title         string    `json:"title"`
-	Company       string    `json:"company"`
-	Location      string    `json:"location"`
-	URL           string    `json:"url"`
-	MatchScore    *float64  `json:"match_score"`
-	SkillOverlap  []string  `json:"skill_overlap"`
-	MissingSkills []string  `json:"missing_skills"`
-	RedFlags      []string  `json:"red_flags"`
-	AIAction      *string   `json:"ai_action"`
-	AIReasoning   *string   `json:"ai_reasoning"`
-	RoleFamily    *string   `json:"role_family"`
-	Status        string    `json:"status"`
-	ScrapedAt     time.Time `json:"scraped_at"`
+	ID            string     `json:"id"`
+	Source        string     `json:"source"`
+	Title         string     `json:"title"`
+	Company       string     `json:"company"`
+	Location      string     `json:"location"`
+	URL           string     `json:"url"`
+	Description   string     `json:"description"`
+	PostedAt      *time.Time `json:"posted_at"`
+	MatchScore    *float64   `json:"match_score"`
+	SkillOverlap  []string   `json:"skill_overlap"`
+	MissingSkills []string   `json:"missing_skills"`
+	RedFlags      []string   `json:"red_flags"`
+	AIAction      *string    `json:"ai_action"`
+	AIReasoning   *string    `json:"ai_reasoning"`
+	RoleFamily    *string    `json:"role_family"`
+	Status        string     `json:"status"`
+	ScrapedAt     time.Time  `json:"scraped_at"`
 }
 
 // JobListResponse wraps a paginated job list with metadata.

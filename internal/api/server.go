@@ -25,7 +25,8 @@ func StartServer(port int, pool *pgxpool.Pool) {
 
 	// ── Static frontend ──────────────────────────────────────────────────────
 	// Everything under web/ is served as-is; index.html is the dashboard entry point.
-	mux.Handle("/", http.FileServer(http.Dir("web")))
+	// noCache ensures UI updates are immediately reflected without stale browser cache.
+	mux.Handle("/", noCache(http.FileServer(http.Dir("web"))))
 
 	addr := fmt.Sprintf(":%d", port)
 
@@ -35,6 +36,15 @@ func StartServer(port int, pool *pgxpool.Pool) {
 			slog.Error("dashboard server crashed", "error", err)
 		}
 	}()
+}
+
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // withCORS allows the frontend to call the API even if served from a

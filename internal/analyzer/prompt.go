@@ -82,8 +82,9 @@ CRITICAL RULES (MUST OBEY):
    - If the posting contains a senior title but the description is junior-sounding, use the stricter interpretation.
 
 4. ROLE FAMILY:
-   - "primary" for Backend / Software / Cloud / DevOps / Platform / SRE / Infrastructure
-   - "secondary" for Data Engineer / Analytics Engineer / Data Platform / Data Analyst
+   - "primary" for Backend / Software / Cloud / DevOps / Platform / SRE / Infrastructure AND Data roles (Data Engineer, Data Analyst, Data Scientist, Analytics Engineer).
+   - Candidate is strongly open and interested in DATA ROLES (Data Analyst, Data Scientist, Data Engineer). If entry-level/junior and aligns with Python, SQL, databases, or analytics, score high (7.5 - 9.0) and action "apply".
+   - "secondary" for BI Developer / Machine Learning Research / Pipeline Developer
 
 5. DECISION TIE-BREAKERS:
    - If the role is junior and the stack is adjacent, prefer "watch" over "skip".

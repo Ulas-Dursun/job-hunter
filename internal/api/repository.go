@@ -32,6 +32,7 @@ type JobFilter struct {
 
 const baseJobColumns = `
 	id, source, title, company, location, url,
+	COALESCE(description, ''), posted_at,
 	match_score::float8 AS match_score,
 	COALESCE(skill_overlap, '{}'),
 	COALESCE(missing_skills, '{}'),
@@ -71,6 +72,7 @@ func (r *Repository) ListJobs(ctx context.Context, f JobFilter) ([]JobDTO, int, 
 		var j JobDTO
 		if err := rows.Scan(
 			&j.ID, &j.Source, &j.Title, &j.Company, &j.Location, &j.URL,
+			&j.Description, &j.PostedAt,
 			&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
 			&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status, &j.ScrapedAt,
 		); err != nil {
@@ -117,6 +119,7 @@ func (r *Repository) GetJob(ctx context.Context, id string) (*JobDTO, error) {
 	var j JobDTO
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&j.ID, &j.Source, &j.Title, &j.Company, &j.Location, &j.URL,
+		&j.Description, &j.PostedAt,
 		&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
 		&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status, &j.ScrapedAt,
 	)
