@@ -106,6 +106,11 @@ func (h *Handlers) DeleteJob(w http.ResponseWriter, r *http.Request) {
 
 // ClearJobs handles DELETE /api/jobs
 func (h *Handlers) ClearJobs(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("confirm") != "true" && r.Header.Get("X-Confirm") != "true" {
+		writeError(w, http.StatusBadRequest, errBadRequest("confirmation required: pass ?confirm=true or X-Confirm: true to delete all jobs"))
+		return
+	}
+
 	if err := h.repo.ClearAllJobs(r.Context()); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

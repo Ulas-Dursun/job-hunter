@@ -421,7 +421,7 @@
                 body: JSON.stringify({ status })
             }).then(r => r.json()),
             deleteJob: (id) => fetch(`/api/jobs/${id}`, { method: 'DELETE' }),
-            clearAll: () => fetch('/api/jobs', { method: 'DELETE' })
+            clearAll: () => fetch('/api/jobs?confirm=true', { method: 'DELETE' })
         }
 
         // ── Initialization ────────────────────────────────────────────────

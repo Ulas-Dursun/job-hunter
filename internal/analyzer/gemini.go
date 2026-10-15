@@ -48,7 +48,8 @@ type GeminiAnalyzer struct {
 
 const (
 	groqAPIURL   = "https://api.groq.com/openai/v1/chat/completions"
-	geminiAPIURL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s"
+	// API anahtarı URL'de değil, x-goog-api-key header'ında gönderilir (log/hata sızıntısı riski yok).
+	geminiAPIURL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent"
 )
 
 func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConfig) *GeminiAnalyzer {
@@ -147,7 +148,7 @@ func (g *GeminiAnalyzer) Analyze(
 }
 
 func (g *GeminiAnalyzer) callGemini(ctx context.Context, prompt string) (*ScoreResult, error) {
-	reqURL := fmt.Sprintf(geminiAPIURL, g.model, g.apiKey)
+	reqURL := fmt.Sprintf(geminiAPIURL, g.model)
 
 	reqPayload := map[string]any{
 		"contents": []map[string]any{
@@ -174,6 +175,7 @@ func (g *GeminiAnalyzer) callGemini(ctx context.Context, prompt string) (*ScoreR
 		return nil, fmt.Errorf("creating gemini request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", g.apiKey)
 
 	resp, err := g.client.Do(req)
 	if err != nil {

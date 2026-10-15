@@ -187,7 +187,8 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 		PostedAt:    postedAt,
 		Score:       result,
 	}); err != nil {
-		slog.Error("db upsert failed", "title", title, "error", err)
+		slog.Error("db upsert failed, skipping ack for retry", "title", title, "error", err)
+		return
 	}
 
 	p.ack(ctx, p.cfg.StreamFiltered, msg.ID)

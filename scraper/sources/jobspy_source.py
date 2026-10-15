@@ -18,6 +18,9 @@ from scraper.sources.base import BaseSource
 
 logger = logging.getLogger(__name__)
 
+# Go tarafındaki prompt (truncateUTF8 = 4000 rune) ve Job.to_dict() (4000) ile uyumlu.
+MAX_DESCRIPTION_CHARS = 4000
+
 
 class JobSpySource(BaseSource):
 
@@ -158,7 +161,7 @@ class JobSpySource(BaseSource):
             title=title,
             company=company or "Bilinmiyor",
             location=location,
-            description=description[:2000],
+            description=description[:MAX_DESCRIPTION_CHARS],
             posted_at=posted_at,
         )
 

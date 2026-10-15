@@ -67,7 +67,7 @@ class Job:
         """
         Redis XADD için flat string dict üretir.
         Redis Streams tüm değerleri string olarak saklar.
-        Description 2000 karakterle sınırlandırılır — tam metin Go'da işlenecek.
+        Description 4000 karakterle sınırlandırılır (Go prompt kapasitesiyle uyumlu).
         """
         return {
             "source":       self.source,

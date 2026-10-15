@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -28,10 +29,10 @@ func StartServer(port int, pool *pgxpool.Pool) {
 	// noCache ensures UI updates are immediately reflected without stale browser cache.
 	mux.Handle("/", noCache(http.FileServer(http.Dir("web"))))
 
-	addr := fmt.Sprintf(":%d", port)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	go func() {
-		slog.Info("dashboard server listening", "addr", "http://localhost"+addr)
+		slog.Info("dashboard server listening", "addr", "http://"+addr)
 		if err := http.ListenAndServe(addr, withCORS(mux)); err != nil {
 			slog.Error("dashboard server crashed", "error", err)
 		}
@@ -47,13 +48,16 @@ func noCache(next http.Handler) http.Handler {
 	})
 }
 
-// withCORS allows the frontend to call the API even if served from a
-// different port during local development (e.g. live-reload tools).
+// withCORS restricts CORS requests strictly to localhost origins.
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+		if origin != "" && (origin == "http://localhost:8080" || origin == "http://127.0.0.1:8080" ||
+			strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
