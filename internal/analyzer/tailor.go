@@ -370,9 +370,13 @@ func (s *TailorService) callGroqRaw(ctx context.Context, ep providerEndpoint, pr
 
 	bodyBytes, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, groqAPIURL, bytes.NewReader(bodyBytes))
+	targetURL := ep.baseURL
+	if targetURL == "" {
+		targetURL = groqAPIURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return "", fmt.Errorf("creating groq request: %w", err)
+		return "", fmt.Errorf("creating groq/openai request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+ep.apiKey)

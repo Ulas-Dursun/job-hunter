@@ -31,15 +31,17 @@ type ScoreResult struct {
 type Provider string
 
 const (
-	ProviderGemini Provider = "gemini"
-	ProviderGroq   Provider = "groq"
+	ProviderGemini     Provider = "gemini"
+	ProviderGroq       Provider = "groq"
+	ProviderOpenAIComp Provider = "openai_compat"
 )
 
-// providerEndpoint represents a single API key + provider pair in the failover chain.
+// providerEndpoint represents a single API key + model + endpoint URL in the failover chain.
 type providerEndpoint struct {
 	provider Provider
 	apiKey   string
 	model    string
+	baseURL  string
 	label    string
 }
 
@@ -61,19 +63,18 @@ func collectEnvKeys(baseEnv string) []string {
 	return raw
 }
 
-// buildFailoverChain constructs an ordered slice of Gemini and Groq endpoints from environment variables.
+// buildFailoverChain constructs an ordered slice of Gemini, Groq (gpt-oss-120b + qwen3.8-27b),
+// and optional Mistral/Cerebras/OpenRouter endpoints from environment variables.
 func buildFailoverChain(cfgModel string) []providerEndpoint {
 	geminiKeys := collectEnvKeys("GEMINI_API_KEY")
 	groqKeys := collectEnvKeys("GROQ_API_KEY")
+	mistralKeys := collectEnvKeys("MISTRAL_API_KEY")
+	cerebrasKeys := collectEnvKeys("CEREBRAS_API_KEY")
+	openrouterKeys := collectEnvKeys("OPENROUTER_API_KEY")
 
 	geminiModel := "gemini-flash-lite-latest"
 	if cfgModel != "" && strings.HasPrefix(cfgModel, "gemini") {
 		geminiModel = cfgModel
-	}
-
-	groqModel := "llama-3.3-70b-versatile"
-	if cfgModel != "" && !strings.HasPrefix(cfgModel, "gemini") {
-		groqModel = cfgModel
 	}
 
 	var chain []providerEndpoint
@@ -82,17 +83,61 @@ func buildFailoverChain(cfgModel string) []providerEndpoint {
 			provider: ProviderGemini,
 			apiKey:   k,
 			model:    geminiModel,
+			baseURL:  geminiAPIURL,
 			label:    fmt.Sprintf("gemini#%d", idx+1),
 		})
 	}
+
+	// Groq üzerinde her iki aktif modelin (openai/gpt-oss-120b ve qwen/qwen3.8-27b) kotaları ayrıdır.
 	for idx, k := range groqKeys {
+		chain = append(chain,
+			providerEndpoint{
+				provider: ProviderGroq,
+				apiKey:   k,
+				model:    "openai/gpt-oss-120b",
+				baseURL:  groqAPIURL,
+				label:    fmt.Sprintf("groq#%d(gpt-oss-120b)", idx+1),
+			},
+			providerEndpoint{
+				provider: ProviderGroq,
+				apiKey:   k,
+				model:    "qwen/qwen3.8-27b",
+				baseURL:  groqAPIURL,
+				label:    fmt.Sprintf("groq#%d(qwen3.8-27b)", idx+1),
+			},
+		)
+	}
+
+	for idx, k := range mistralKeys {
 		chain = append(chain, providerEndpoint{
-			provider: ProviderGroq,
+			provider: ProviderOpenAIComp,
 			apiKey:   k,
-			model:    groqModel,
-			label:    fmt.Sprintf("groq#%d", idx+1),
+			model:    "mistral-small-latest",
+			baseURL:  "https://api.mistral.ai/v1/chat/completions",
+			label:    fmt.Sprintf("mistral#%d", idx+1),
 		})
 	}
+
+	for idx, k := range cerebrasKeys {
+		chain = append(chain, providerEndpoint{
+			provider: ProviderOpenAIComp,
+			apiKey:   k,
+			model:    "llama3.1-8b",
+			baseURL:  "https://api.cerebras.ai/v1/chat/completions",
+			label:    fmt.Sprintf("cerebras#%d", idx+1),
+		})
+	}
+
+	for idx, k := range openrouterKeys {
+		chain = append(chain, providerEndpoint{
+			provider: ProviderOpenAIComp,
+			apiKey:   k,
+			model:    "meta-llama/llama-3.3-70b-instruct:free",
+			baseURL:  "https://openrouter.ai/api/v1/chat/completions",
+			label:    fmt.Sprintf("openrouter#%d", idx+1),
+		})
+	}
+
 	return chain
 }
 
@@ -308,9 +353,13 @@ func (g *GeminiAnalyzer) callGroqWith(ctx context.Context, ep providerEndpoint, 
 
 	bodyBytes, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, groqAPIURL, bytes.NewReader(bodyBytes))
+	targetURL := ep.baseURL
+	if targetURL == "" {
+		targetURL = groqAPIURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("creating groq request: %w", err)
+		return nil, fmt.Errorf("creating groq/openai request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+ep.apiKey)
