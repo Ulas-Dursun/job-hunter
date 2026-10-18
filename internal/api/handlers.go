@@ -2,18 +2,22 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
+
+	"github.com/ulasdursun/job-hunter/internal/analyzer"
 )
 
 // Handlers holds the repository dependency and exposes HTTP handler methods.
 type Handlers struct {
-	repo *Repository
+	repo   *Repository
+	tailor *analyzer.TailorService
 }
 
-func NewHandlers(repo *Repository) *Handlers {
-	return &Handlers{repo: repo}
+func NewHandlers(repo *Repository, tailor *analyzer.TailorService) *Handlers {
+	return &Handlers{repo: repo, tailor: tailor}
 }
 
 // ListJobs handles GET /api/jobs?status=&action=&role_family=&min_score=&search=&sort=&limit=&offset=
@@ -119,6 +123,73 @@ func (h *Handlers) ClearJobs(w http.ResponseWriter, r *http.Request) {
 	slog.Info("all jobs cleared from db")
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// TailorJob handles POST /api/jobs/{id}/tailor
+func (h *Handlers) TailorJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, errBadRequest("missing job id"))
+		return
+	}
+
+	forceRefresh := r.URL.Query().Get("refresh") == "true"
+
+	// 1. Check cache first if not explicitly force-refreshed
+	if !forceRefresh {
+		cached, err := h.repo.GetTailoredAssets(r.Context(), id)
+		if err == nil && cached != nil {
+			slog.Info("returning cached tailored assets", "id", id)
+			writeJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
+
+	// 2. Fetch Job details from DB
+	job, err := h.repo.GetJob(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("job not found: %w", err))
+		return
+	}
+
+	// 3. Generate tailored assets via Gemini
+	if h.tailor == nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("tailor service is not configured"))
+		return
+	}
+
+	assets, err := h.tailor.GenerateTailoredAssets(
+		r.Context(),
+		job.Title,
+		job.Company,
+		job.Location,
+		job.Description,
+	)
+	if err != nil {
+		slog.Error("failed to generate tailored assets", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("generating tailored assets: %w", err))
+		return
+	}
+
+	// 4. Save to DB cache
+	if err := h.repo.SaveTailoredAssets(r.Context(), id, assets.CoverLetter, assets); err != nil {
+		slog.Warn("failed to cache tailored assets in db", "id", id, "error", err)
+	}
+
+	res := TailorResponseDTO{
+		JobID:                     id,
+		CoverLetter:               assets.CoverLetter,
+		TailoredSummary:           assets.TailoredSummary,
+		TailoredExperienceBullets: assets.TailoredExperienceBullets,
+		TailoredProjectBullets:   assets.TailoredProjectBullets,
+		SkillsHighlight:          assets.SkillsHighlight,
+		ATSKeywords:              assets.ATSKeywords,
+		Cached:                   false,
+	}
+
+	slog.Info("tailored assets generated successfully", "id", id, "company", job.Company)
+	writeJSON(w, http.StatusOK, res)
+}
+
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

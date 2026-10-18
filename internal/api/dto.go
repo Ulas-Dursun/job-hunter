@@ -19,6 +19,7 @@ type JobDTO struct {
 	AIReasoning   *string    `json:"ai_reasoning"`
 	RoleFamily    *string    `json:"role_family"`
 	Status        string     `json:"status"`
+	HasTailored   bool       `json:"has_tailored"`
 	ScrapedAt     time.Time  `json:"scraped_at"`
 }
 
@@ -56,6 +57,18 @@ type CompanyDTO struct {
 // StatusUpdateRequest is the body for PATCH /api/jobs/{id}/status.
 type StatusUpdateRequest struct {
 	Status string `json:"status"`
+}
+
+// TailorResponseDTO represents the response for generating ATS CV assets and Cover Letter.
+type TailorResponseDTO struct {
+	JobID                     string   `json:"job_id"`
+	CoverLetter               string   `json:"cover_letter"`
+	TailoredSummary           string   `json:"tailored_summary"`
+	TailoredExperienceBullets []string `json:"tailored_experience_bullets"`
+	TailoredProjectBullets    []string `json:"tailored_project_bullets"`
+	SkillsHighlight           []string `json:"skills_highlight"`
+	ATSKeywords               []string `json:"ats_keywords"`
+	Cached                    bool     `json:"cached"`
 }
 
 // ErrorResponse is the standard JSON error envelope.

@@ -7,13 +7,14 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ulasdursun/job-hunter/internal/analyzer"
 )
 
 // StartServer starts the dashboard HTTP server in a background goroutine.
 // Serves both the REST API and the static frontend from the "web" directory.
-func StartServer(port int, pool *pgxpool.Pool) {
+func StartServer(port int, pool *pgxpool.Pool, tailor *analyzer.TailorService) {
 	repo := NewRepository(pool)
-	h := NewHandlers(repo)
+	h := NewHandlers(repo, tailor)
 
 	mux := http.NewServeMux()
 
@@ -21,6 +22,7 @@ func StartServer(port int, pool *pgxpool.Pool) {
 	mux.HandleFunc("GET /api/jobs", h.ListJobs)
 	mux.HandleFunc("GET /api/stats", h.GetStats)
 	mux.HandleFunc("PATCH /api/jobs/{id}/status", h.UpdateJobStatus)
+	mux.HandleFunc("POST /api/jobs/{id}/tailor", h.TailorJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", h.DeleteJob)
 	mux.HandleFunc("DELETE /api/jobs", h.ClearJobs)
 
@@ -55,7 +57,7 @@ func withCORS(next http.Handler) http.Handler {
 		if origin != "" && (origin == "http://localhost:8080" || origin == "http://127.0.0.1:8080" ||
 			strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		}
 		if r.Method == http.MethodOptions {

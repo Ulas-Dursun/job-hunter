@@ -15,7 +15,7 @@ type PostgresPool struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgresPool, PostgreSQL'e bağlantı pool'u oluşturur.
+// NewPostgresPool, PostgreSQL'e bağlantı pool'u oluşturur ve şema güncellemelerini doğrular.
 // DSN format: "postgres://user:password@host:port/dbname?sslmode=disable"
 func NewPostgresPool(ctx context.Context, dsn string) (*PostgresPool, error) {
 	pool, err := pgxpool.New(ctx, dsn)
@@ -29,6 +29,12 @@ func NewPostgresPool(ctx context.Context, dsn string) (*PostgresPool, error) {
 		return nil, fmt.Errorf("postgres ping failed — is the container running?: %w", err)
 	}
 
+	// Idempotent şema kontrolü (Migration 002 kolonlarının her ortamda varlığını garanti eder)
+	if err := ensureSchema(ctx, pool); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("ensuring database schema: %w", err)
+	}
+
 	stats := pool.Stat()
 	slog.Info("postgres connected",
 		"max_conns", stats.MaxConns(),
@@ -36,6 +42,15 @@ func NewPostgresPool(ctx context.Context, dsn string) (*PostgresPool, error) {
 	)
 
 	return &PostgresPool{pool: pool}, nil
+}
+
+// ensureSchema, sonradan eklenen kolonların mevcut veritabanında eksik olmamasını sağlar.
+func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	_, err := pool.Exec(ctx, `
+		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cover_letter TEXT;
+		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS tailored_cv JSONB;
+	`)
+	return err
 }
 
 // Pool, raw pgxpool'u döndürür.

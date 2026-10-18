@@ -90,6 +90,33 @@
             transform: translateY(-2px);
             box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 211, 238, 0.2);
         }
+
+        /* Kanban Board Specific Styles */
+        .kanban-col {
+            min-width: 290px;
+            max-width: 330px;
+            flex: 1 1 290px;
+        }
+        .kanban-col-cards {
+            min-height: 480px;
+            max-height: calc(100vh - 270px);
+            overflow-y: auto;
+        }
+        .kanban-card {
+            cursor: grab;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+        }
+        .kanban-card:active {
+            cursor: grabbing;
+        }
+        .kanban-card.is-dragging {
+            opacity: 0.4;
+            transform: scale(0.96);
+        }
+        .kanban-drop-target {
+            border-color: rgba(34, 211, 238, 0.6) !important;
+            background-color: rgba(6, 182, 212, 0.06) !important;
+        }
     </style>
 </head>
 <body class="bg-dark-bg text-dark-text font-sans antialiased min-h-screen bg-grid selection:bg-brand-500 selection:text-black">
@@ -218,7 +245,7 @@
                 <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="Pozisyon, şirket, teknoloji (Go, Java, Docker, Python)..." class="w-full pl-9 pr-3 py-2 rounded-lg bg-dark-card border border-dark-border text-xs text-dark-textHeading placeholder-dark-textMuted focus:outline-none focus:border-cyan-400/60 focus:ring-1 focus:ring-cyan-400/30 transition">
             </div>
 
-            <!-- Right: Secondary Filters & Sort -->
+            <!-- Right: Secondary Filters, Sort & View Switcher -->
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 
                 <!-- Quick Toggle: Only Relevant (Score >= 5.0) -->
@@ -242,6 +269,7 @@
                     <option value="applied">Başvurdum</option>
                     <option value="interview">Mülakat</option>
                     <option value="offer">Teklif 🎉</option>
+                    <option value="rejected">Reddedildi</option>
                     <option value="skipped">Geçildi</option>
                 </select>
 
@@ -250,6 +278,18 @@
                     <option value="score">↓ En Yüksek Skor</option>
                     <option value="date">↓ En Yeni İlanlar</option>
                 </select>
+
+                <!-- View Switcher (Feed / Kanban) -->
+                <div class="flex items-center bg-dark-card border border-dark-border rounded-lg p-0.5 ml-1">
+                    <button id="btn-view-feed" onclick="setViewMode('feed')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition bg-cyan-500/20 text-cyan-300 border border-cyan-500/30" title="Standart kart/liste akışı">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                        <span>Liste</span>
+                    </button>
+                    <button id="btn-view-kanban" onclick="setViewMode('kanban')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-dark-text hover:text-white transition" title="Aşamalara göre sütunlu İş Takip Panosu">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                        <span>Kanban Panosu</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -259,12 +299,19 @@
             <div id="filter-indicator" class="flex items-center gap-2"></div>
         </div>
 
-        <!-- 4. JOBS FEED GRID -->
+        <!-- 4a. JOBS FEED GRID (Liste Görünümü) -->
         <div id="jobs-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <!-- Dynamic Cards Rendered by JS -->
         </div>
 
-        <!-- 5. PAGINATION -->
+        <!-- 4b. KANBAN BOARD CONTAINER (İş Takip Panosu) -->
+        <div id="kanban-container" class="hidden overflow-x-auto pb-4">
+            <div class="flex gap-4 min-w-[1300px] items-start" id="kanban-columns">
+                <!-- Dynamic Columns & Cards Rendered by JS -->
+            </div>
+        </div>
+
+        <!-- 5. PAGINATION (Liste modunda aktif) -->
         <div id="pagination" class="flex items-center justify-center gap-2 pt-4 pb-12"></div>
 
     </main>
@@ -331,6 +378,99 @@
                     </div>
                 </div>
 
+                <!-- ATS Tailored Assets Section (Cover Letter & Tailored CV Bullets) -->
+                <div id="modal-tailor-container" class="hidden rounded-xl border border-cyan-500/30 bg-dark-card/90 overflow-hidden shadow-2xl space-y-4 p-5 transition-all">
+                    
+                    <!-- Header with Tabs and Actions -->
+                    <div class="flex items-center justify-between gap-3 border-b border-dark-border/80 pb-3 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <span class="text-base">✨</span>
+                            <span class="font-bold text-sm text-dark-textHeading">İlana Özel ATS & Başvuru Kiti</span>
+                            <span id="tailor-cache-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">✓ Önbellekten</span>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <button onclick="generateTailoredAssets(true)" class="px-2.5 py-1 rounded text-[11px] font-medium bg-dark-surface border border-dark-border text-dark-text hover:text-cyan-300 hover:border-cyan-500/40 transition" title="Yeniden yapay zeka ile üret">
+                                🔄 Yeniden Üret
+                            </button>
+                            <button id="tailor-copy-active-btn" onclick="copyActiveTailorTab()" class="px-3 py-1 rounded text-[11px] font-bold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500 hover:text-black border border-cyan-500/30 transition flex items-center gap-1">
+                                <span>📋</span>
+                                <span id="tailor-copy-label">Kopyala</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tabs Nav -->
+                    <div class="flex items-center gap-2 border-b border-dark-border/60 pb-1 text-xs overflow-x-auto">
+                        <button id="tab-btn-letter" onclick="switchTailorTab('letter')" class="px-3 py-1.5 rounded-lg font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 transition whitespace-nowrap">
+                            📄 Ön Yazı (Cover Letter)
+                        </button>
+                        <button id="tab-btn-cv" onclick="switchTailorTab('cv')" class="px-3 py-1.5 rounded-lg font-medium text-dark-textMuted hover:text-dark-text transition whitespace-nowrap">
+                            🎯 Optimize CV Maddeleri
+                        </button>
+                        <button id="tab-btn-keywords" onclick="switchTailorTab('keywords')" class="px-3 py-1.5 rounded-lg font-medium text-dark-textMuted hover:text-dark-text transition whitespace-nowrap">
+                            🔑 ATS Kelimeleri & Beceriler
+                        </button>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div id="tailor-loading" class="hidden py-8 flex flex-col items-center justify-center space-y-3 text-center">
+                        <div class="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                        <div class="space-y-1">
+                            <p class="font-bold text-xs text-dark-textHeading">Gemini ATS Optimizasyonu Yapıyor...</p>
+                            <p class="text-[11px] text-dark-textMuted max-w-md">İlanın 4000 karakterlik açıklaması ve Master CV profiliniz taranıyor; nokta atışı Cover Letter ve CV başarı maddeleri hazırlanıyor.</p>
+                        </div>
+                    </div>
+
+                    <!-- Content: Tab 1 (Cover Letter) -->
+                    <div id="tailor-content-letter" class="space-y-2">
+                        <div class="flex items-center justify-between text-[11px] text-dark-textMuted">
+                            <span>Pozisyona ve şirkete özel kurgulanmış profesyonel İngilizce ön yazı:</span>
+                        </div>
+                        <div id="tailor-letter-text" class="whitespace-pre-line p-4 rounded-xl bg-black/40 border border-dark-border font-sans text-xs text-slate-200 leading-relaxed max-h-72 overflow-y-auto select-all"></div>
+                    </div>
+
+                    <!-- Content: Tab 2 (CV Bullets & Summary) -->
+                    <div id="tailor-content-cv" class="hidden space-y-3">
+                        <div>
+                            <div class="font-semibold text-cyan-400 text-[11px] mb-1 flex items-center gap-1">
+                                <span>📌</span> İlana Özel Profesyonel Özet (Targeted Summary)
+                            </div>
+                            <div id="tailor-cv-summary" class="p-3 rounded-lg bg-black/30 border border-dark-border text-xs text-slate-200 select-all leading-relaxed"></div>
+                        </div>
+
+                        <div>
+                            <div class="font-semibold text-emerald-400 text-[11px] mb-1 flex items-center gap-1">
+                                <span>⚡</span> Sanlab İş Deneyimi Maddeleri (İlana Göre Vurgulandı)
+                            </div>
+                            <ul id="tailor-cv-experience" class="list-disc list-inside space-y-1.5 p-3 rounded-lg bg-black/30 border border-dark-border text-xs text-slate-200 select-all leading-normal"></ul>
+                        </div>
+
+                        <div>
+                            <div class="font-semibold text-purple-400 text-[11px] mb-1 flex items-center gap-1">
+                                <span>🚀</span> Proje Başarı Maddeleri (Distributed Systems / API / IoT)
+                            </div>
+                            <ul id="tailor-cv-projects" class="list-disc list-inside space-y-1.5 p-3 rounded-lg bg-black/30 border border-dark-border text-xs text-slate-200 select-all leading-normal"></ul>
+                        </div>
+                    </div>
+
+                    <!-- Content: Tab 3 (ATS Keywords) -->
+                    <div id="tailor-content-keywords" class="hidden space-y-3">
+                        <div>
+                            <div class="font-semibold text-amber-400 text-[11px] mb-1.5 flex items-center gap-1">
+                                <span>🔑</span> İlanda Geçen & CV'ye Yedirilen ATS Anahtar Kelimeleri
+                            </div>
+                            <div id="tailor-keywords-list" class="flex flex-wrap gap-1.5"></div>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-cyan-400 text-[11px] mb-1.5 flex items-center gap-1">
+                                <span>💡</span> Bu İlan İçin Öne Çıkarılacak Yetkinlikler (Skills Highlight)
+                            </div>
+                            <div id="tailor-skills-list" class="flex flex-wrap gap-1.5"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Full Job Description -->
                 <div>
                     <h3 class="font-bold text-sm text-dark-textHeading mb-2">İlan Açıklaması</h3>
@@ -339,11 +479,29 @@
             </div>
 
             <!-- Modal Footer -->
-            <div class="p-4 border-t border-dark-border bg-dark-card/50 flex items-center justify-between gap-3">
-                <button id="modal-delete-btn" class="px-3 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition">
-                    🗑️ Bu İlanı Sil
-                </button>
+            <div class="p-4 border-t border-dark-border bg-dark-card/50 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                    <button id="modal-delete-btn" class="px-3 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition">
+                        🗑️ Bu İlanı Sil
+                    </button>
+                    <!-- Status Selector inside Modal -->
+                    <div class="flex items-center gap-1.5 text-xs">
+                        <span class="text-dark-textMuted text-[11px]">Durum:</span>
+                        <select id="modal-status-select" onchange="onModalStatusChange(this.value)" class="text-xs px-2.5 py-1.5 rounded-lg bg-dark-surface border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400">
+                            <option value="new">Yeni</option>
+                            <option value="applied">Başvurdum</option>
+                            <option value="interview">Mülakat</option>
+                            <option value="offer">Teklif 🎉</option>
+                            <option value="rejected">Reddedildi</option>
+                            <option value="skipped">Geçildi</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="flex items-center gap-2">
+                    <button id="modal-tailor-btn" onclick="generateTailoredAssets()" class="px-4 py-2 rounded-lg text-xs font-bold bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-black transition shadow-lg shadow-cyan-500/20 flex items-center gap-1.5">
+                        <span>✨</span>
+                        <span id="modal-tailor-btn-text">ATS CV & Ön Yazı Üret</span>
+                    </button>
                     <button onclick="closeDetailModal()" class="px-4 py-2 rounded-lg text-xs font-medium bg-dark-card border border-dark-border text-dark-text hover:text-white transition">Kapat</button>
                     <a id="modal-apply-link" href="#" target="_blank" rel="noopener noreferrer" class="px-5 py-2 rounded-lg text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-black transition shadow-lg shadow-cyan-500/20 flex items-center gap-1.5">
                         <span>İlana Git & Başvur</span>
@@ -388,6 +546,7 @@
             rawJobs: [],        // All jobs fetched from API
             filteredJobs: [],   // After applying client-side category/search filters
             stats: null,
+            viewMode: 'feed',   // 'feed' | 'kanban'
             category: 'all',
             onlyRelevant: true, // Default: hide noise (< 5.0 or skip)
             search: '',
@@ -397,6 +556,25 @@
             limit: 20,
             page: 1,
             selectedJob: null
+        }
+
+        // ── Kanban Columns Configuration ──────────────────────────────────
+        const KANBAN_COLUMNS = [
+            { id: 'new',       label: 'Yeni & Radar',      icon: '📥', color: 'border-cyan-500/30 text-cyan-300 bg-cyan-500/10' },
+            { id: 'applied',   label: 'Başvuruldu',        icon: '📨', color: 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' },
+            { id: 'interview', label: 'Mülakat',           icon: '🎤', color: 'border-purple-500/30 text-purple-300 bg-purple-500/10' },
+            { id: 'offer',     label: 'Teklif',            icon: '🎉', color: 'border-amber-500/30 text-amber-300 bg-amber-500/10' },
+            { id: 'rejected',  label: 'Reddedildi',        icon: '❌', color: 'border-rose-500/30 text-rose-300 bg-rose-500/10' },
+            { id: 'skipped',   label: 'Atlandı / Arşiv',   icon: '⏭',  color: 'border-slate-600/40 text-slate-400 bg-slate-800/40' }
+        ]
+
+        const STATUS_LABELS = {
+            new:       'Yeni & Radar',
+            applied:   'Başvuruldu',
+            interview: 'Mülakat',
+            offer:     'Teklif 🎉',
+            rejected:  'Reddedildi',
+            skipped:   'Atlandı'
         }
 
         // ── Source Configuration Mapping ──────────────────────────────────
@@ -421,7 +599,14 @@
                 body: JSON.stringify({ status })
             }).then(r => r.json()),
             deleteJob: (id) => fetch(`/api/jobs/${id}`, { method: 'DELETE' }),
-            clearAll: () => fetch('/api/jobs?confirm=true', { method: 'DELETE' })
+            clearAll: () => fetch('/api/jobs?confirm=true', { method: 'DELETE' }),
+            tailorJob: (id, force = false) => fetch(`/api/jobs/${id}/tailor${force ? '?refresh=true' : ''}`, {
+                method: 'POST'
+            }).then(async r => {
+                const data = await r.json()
+                if (!r.ok) throw new Error(data.error || 'İşlem başarısız')
+                return data
+            })
         }
 
         // ── Initialization ────────────────────────────────────────────────
@@ -445,7 +630,7 @@
                 
                 updateStatsNavbar()
                 updateCategoryCounts()
-                applyFilters()
+                applyFilters(showLoading)
             } catch (err) {
                 console.error('Veri yüklenemedi:', err)
                 toast('Veriler yüklenirken hata oluştu', 'error')
@@ -547,7 +732,7 @@
         }
 
         // ── Filter Application ────────────────────────────────────────────
-        function applyFilters() {
+        function applyFilters(resetPage = true) {
             let list = [...STATE.rawJobs]
 
             // 0. Only Relevant Filter (Hide noise: < 5.0 or action == skip)
@@ -601,8 +786,41 @@
             }
 
             STATE.filteredJobs = list
-            STATE.page = 1
-            renderJobs()
+            const maxPage = Math.max(1, Math.ceil(list.length / STATE.limit))
+            if (resetPage || STATE.page > maxPage) {
+                STATE.page = 1
+            }
+            if (STATE.viewMode === 'kanban') {
+                renderKanban()
+            } else {
+                renderJobs()
+            }
+        }
+
+        // ── View Mode Switching ───────────────────────────────────────────
+        function setViewMode(mode) {
+            STATE.viewMode = mode
+            const btnFeed = document.getElementById('btn-view-feed')
+            const btnKanban = document.getElementById('btn-view-kanban')
+            const feedCont = document.getElementById('jobs-container')
+            const kanbanCont = document.getElementById('kanban-container')
+            const pagination = document.getElementById('pagination')
+
+            if (mode === 'kanban') {
+                btnKanban.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                btnFeed.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-dark-text hover:text-white transition"
+                feedCont.classList.add('hidden')
+                kanbanCont.classList.remove('hidden')
+                pagination.classList.add('hidden')
+                renderKanban()
+            } else {
+                btnFeed.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                btnKanban.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-dark-text hover:text-white transition"
+                kanbanCont.classList.add('hidden')
+                feedCont.classList.remove('hidden')
+                pagination.classList.remove('hidden')
+                renderJobs()
+            }
         }
 
         // ── Render Jobs Feed ──────────────────────────────────────────────
@@ -699,15 +917,31 @@
                 <!-- Card Bottom Toolbar: Actions -->
                 <div class="pt-3 border-t border-dark-border flex items-center justify-between gap-2 mt-1">
                     
-                    <!-- Left: Status Dropdown & Delete -->
-                    <div class="flex items-center gap-1.5">
+                    <!-- Left: Status Dropdown, Quick Action & Delete -->
+                    <div class="flex items-center gap-1.5 flex-wrap">
                         <select onchange="updateJobStatus('${j.id}', this.value)" class="text-[11px] px-2 py-1 rounded bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/50">
                             <option value="new" ${j.status === 'new' ? 'selected' : ''}>Yeni</option>
                             <option value="applied" ${j.status === 'applied' ? 'selected' : ''}>Başvurdum</option>
                             <option value="interview" ${j.status === 'interview' ? 'selected' : ''}>Mülakat</option>
                             <option value="offer" ${j.status === 'offer' ? 'selected' : ''}>Teklif 🎉</option>
-                            <option value="skipped" ${j.status === 'skipped' ? 'selected' : ''}>Geç</option>
+                            <option value="rejected" ${j.status === 'rejected' ? 'selected' : ''}>Reddedildi</option>
+                            <option value="skipped" ${j.status === 'skipped' ? 'selected' : ''}>Geçildi</option>
                         </select>
+
+                        <!-- One-Click Quick Status Advance Button -->
+                        ${j.status === 'new' || !j.status ? `
+                            <button onclick="updateJobStatus('${j.id}', 'applied')" class="px-2 py-1 rounded text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1" title="Tek tıkla Başvuruldu yap">
+                                <span>📨</span> Başvurdum
+                            </button>
+                        ` : j.status === 'applied' ? `
+                            <button onclick="updateJobStatus('${j.id}', 'interview')" class="px-2 py-1 rounded text-[10px] font-semibold bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition flex items-center gap-1" title="Tek tıkla Mülakata taşı">
+                                <span>🎤</span> Mülakat
+                            </button>
+                        ` : j.status === 'interview' ? `
+                            <button onclick="updateJobStatus('${j.id}', 'offer')" class="px-2 py-1 rounded text-[10px] font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1" title="Tek tıkla Teklif durumuna al">
+                                <span>🎉</span> Teklif
+                            </button>
+                        ` : ''}
 
                         <!-- Single Card Delete Button -->
                         <button onclick="deleteSingleJob('${j.id}')" class="p-1.5 rounded text-dark-textMuted hover:text-rose-400 hover:bg-rose-500/10 transition" title="Bu İlanı Kalıcı Olarak Sil">
@@ -790,6 +1024,9 @@
             document.getElementById('modal-location').textContent = formatLocationBadge(j.location)
             document.getElementById('modal-posted').textContent = j.posted_at ? new Date(j.posted_at).toLocaleDateString('tr-TR') : 'Tarih belirtilmedi'
 
+            const modalSel = document.getElementById('modal-status-select')
+            if (modalSel) modalSel.value = j.status || 'new'
+
             const scoreEl = document.getElementById('modal-score')
             scoreEl.className = `text-center px-3 py-1.5 rounded-xl border font-mono font-bold text-base ${scoreColor}`
             scoreEl.innerHTML = `<div>${score.toFixed(1)}</div><div class="text-[9px] uppercase tracking-wider font-sans font-normal">AI Skor</div>`
@@ -819,14 +1056,196 @@
                 closeDetailModal()
             }
 
+            // Reset and configure Tailor Section
+            currentTailorData = null
+            activeTailorTab = 'letter'
+            const tailorContainer = document.getElementById('modal-tailor-container')
+            if (tailorContainer) tailorContainer.classList.add('hidden')
+            
+            const tailorBtn = document.getElementById('modal-tailor-btn')
+            const tailorBtnText = document.getElementById('modal-tailor-btn-text')
+            if (tailorBtn && tailorBtnText) {
+                tailorBtn.disabled = false
+                tailorBtnText.textContent = j.has_tailored ? 'Başvuru Kitini Göster (Hazır)' : 'ATS CV & Ön Yazı Üret'
+                if (score >= 7.0 || j.has_tailored) {
+                    tailorBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-black transition shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-400/80 ring-offset-2 ring-offset-dark-surface flex items-center gap-1.5'
+                } else {
+                    tailorBtn.className = 'px-4 py-2 rounded-lg text-xs font-bold bg-dark-card border border-dark-border text-dark-text hover:text-white hover:border-cyan-400/50 transition flex items-center gap-1.5'
+                }
+            }
+
             document.getElementById('detail-modal').classList.remove('hidden')
             document.body.style.overflow = 'hidden'
+
+            // Eğer daha önce üretilmişse otomatik önbellekten yükle
+            if (j.has_tailored) {
+                generateTailoredAssets(false)
+            }
         }
 
         function closeDetailModal() {
             document.getElementById('detail-modal').classList.add('hidden')
             document.body.style.overflow = 'auto'
             STATE.selectedJob = null
+            currentTailorData = null
+        }
+
+        // ── ATS Tailor & Cover Letter Generation Logic ─────────────────────
+        let activeTailorTab = 'letter'
+        let currentTailorData = null
+
+        async function generateTailoredAssets(force = false) {
+            if (!STATE.selectedJob) return
+            const jobId = STATE.selectedJob.id
+            const container = document.getElementById('modal-tailor-container')
+            const loading = document.getElementById('tailor-loading')
+            const contentLetter = document.getElementById('tailor-content-letter')
+            const contentCv = document.getElementById('tailor-content-cv')
+            const contentKw = document.getElementById('tailor-content-keywords')
+            const btn = document.getElementById('modal-tailor-btn')
+            const btnText = document.getElementById('modal-tailor-btn-text')
+            const cacheBadge = document.getElementById('tailor-cache-badge')
+
+            try {
+                container.classList.remove('hidden')
+                loading.classList.remove('hidden')
+                contentLetter.classList.add('hidden')
+                contentCv.classList.add('hidden')
+                contentKw.classList.add('hidden')
+                if (btn) btn.disabled = true
+                if (btnText) btnText.textContent = 'Üretiliyor...'
+
+                // Scroll container smoothly into view
+                container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+
+                const data = await API.tailorJob(jobId, force)
+                currentTailorData = data
+
+                // State sync: mark job as having tailored assets
+                STATE.selectedJob.has_tailored = true
+                const rawItem = STATE.rawJobs.find(x => x.id === jobId)
+                if (rawItem) rawItem.has_tailored = true
+                const filtItem = STATE.filteredJobs.find(x => x.id === jobId)
+                if (filtItem) filtItem.has_tailored = true
+
+                // Show/hide cache badge
+                if (data.cached) {
+                    cacheBadge.classList.remove('hidden')
+                } else {
+                    cacheBadge.classList.add('hidden')
+                }
+
+                // Render structured assets
+                renderTailoredData(data)
+                switchTailorTab(activeTailorTab || 'letter')
+
+                if (!data.cached || force) {
+                    toast('ATS CV & Ön Yazı başarıyla üretildi!', 'success')
+                }
+            } catch (err) {
+                console.error('Tailor error:', err)
+                toast(`Üretim başarısız: ${err.message}`, 'error')
+                container.classList.add('hidden')
+            } finally {
+                loading.classList.add('hidden')
+                if (btn) btn.disabled = false
+                if (btnText) btnText.textContent = (STATE.selectedJob && STATE.selectedJob.has_tailored) ? 'Başvuru Kitini Göster (Hazır)' : 'ATS CV & Ön Yazı Üret'
+            }
+        }
+
+        function renderTailoredData(data) {
+            // 1. Cover Letter
+            document.getElementById('tailor-letter-text').textContent = data.cover_letter || 'Ön yazı oluşturulamadı.'
+
+            // 2. Summary
+            document.getElementById('tailor-cv-summary').textContent = data.tailored_summary || 'Özet oluşturulamadı.'
+
+            // 3. Experience Bullets
+            const expEl = document.getElementById('tailor-cv-experience')
+            expEl.innerHTML = (data.tailored_experience_bullets || []).map(b => `
+                <li class="pl-1">${escapeHtml(b)}</li>
+            `).join('')
+
+            // 4. Project Bullets
+            const projEl = document.getElementById('tailor-cv-projects')
+            projEl.innerHTML = (data.tailored_project_bullets || []).map(b => `
+                <li class="pl-1">${escapeHtml(b)}</li>
+            `).join('')
+
+            // 5. ATS Keywords
+            const kwEl = document.getElementById('tailor-keywords-list')
+            kwEl.innerHTML = (data.ats_keywords || []).map(k => `
+                <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">✓ ${escapeHtml(k)}</span>
+            `).join('')
+
+            // 6. Skills Highlight
+            const skEl = document.getElementById('tailor-skills-list')
+            skEl.innerHTML = (data.skills_highlight || []).map(s => `
+                <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">⚡ ${escapeHtml(s)}</span>
+            `).join('')
+        }
+
+        function switchTailorTab(tab) {
+            activeTailorTab = tab
+            const tabs = ['letter', 'cv', 'keywords']
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`)
+                const content = document.getElementById(`tailor-content-${t}`)
+                if (btn && content) {
+                    if (t === tab) {
+                        btn.className = 'px-3 py-1.5 rounded-lg font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 transition whitespace-nowrap'
+                        content.classList.remove('hidden')
+                    } else {
+                        btn.className = 'px-3 py-1.5 rounded-lg font-medium text-dark-textMuted hover:text-dark-text transition whitespace-nowrap'
+                        content.classList.add('hidden')
+                    }
+                }
+            })
+
+            const copyLabel = document.getElementById('tailor-copy-label')
+            if (copyLabel) {
+                if (tab === 'letter') copyLabel.textContent = 'Ön Yazıyı Kopyala'
+                else if (tab === 'cv') copyLabel.textContent = 'CV Maddelerini Kopyala'
+                else copyLabel.textContent = 'Kelimeleri Kopyala'
+            }
+        }
+
+        async function copyActiveTailorTab() {
+            if (!currentTailorData) return
+            let textToCopy = ''
+
+            if (activeTailorTab === 'letter') {
+                textToCopy = currentTailorData.cover_letter || ''
+            } else if (activeTailorTab === 'cv') {
+                textToCopy = `TARGETED PROFESSIONAL SUMMARY:\n${currentTailorData.tailored_summary || ''}\n\n` +
+                             `EXPERIENCE BULLETS (Sanlab):\n${(currentTailorData.tailored_experience_bullets || []).map(b => '• ' + b).join('\n')}\n\n` +
+                             `KEY PROJECT BULLETS:\n${(currentTailorData.tailored_project_bullets || []).map(b => '• ' + b).join('\n')}`
+            } else {
+                textToCopy = `ATS KEYWORDS:\n${(currentTailorData.ats_keywords || []).join(', ')}\n\n` +
+                             `RECOMMENDED SKILLS HIGHLIGHT:\n${(currentTailorData.skills_highlight || []).join(', ')}`
+            }
+
+            try {
+                await navigator.clipboard.writeText(textToCopy)
+                const copyBtn = document.getElementById('tailor-copy-active-btn')
+                const originalHtml = copyBtn.innerHTML
+                copyBtn.innerHTML = `<span>✓</span><span>Kopyalandı!</span>`
+                copyBtn.classList.replace('bg-cyan-500/20', 'bg-emerald-500/20')
+                copyBtn.classList.replace('text-cyan-300', 'text-emerald-300')
+                copyBtn.classList.replace('border-cyan-500/30', 'border-emerald-500/40')
+
+                toast('Metin panoya kopyalandı! Word veya başvuru formunuza yapıştırabilirsiniz.', 'success')
+
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalHtml
+                    copyBtn.classList.replace('bg-emerald-500/20', 'bg-cyan-500/20')
+                    copyBtn.classList.replace('text-emerald-300', 'text-cyan-300')
+                    copyBtn.classList.replace('border-emerald-500/40', 'border-cyan-500/30')
+                }, 2000)
+            } catch (err) {
+                console.error('Clipboard error:', err)
+                toast('Panoya kopyalanamadı, lütfen metni seçip kopyalayın', 'error')
+            }
         }
 
         // Close on ESC
@@ -841,7 +1260,7 @@
         async function deleteSingleJob(id) {
             try {
                 // Optimistic UI removal
-                const card = document.getElementById(`card-${id}`)
+                const card = document.getElementById(`card-${id}`) || document.getElementById(`kanban-card-${id}`)
                 if (card) {
                     card.style.opacity = '0'
                     card.style.transform = 'scale(0.95)'
@@ -855,6 +1274,9 @@
                 STATE.filteredJobs = STATE.filteredJobs.filter(x => x.id !== id)
                 updateCategoryCounts()
                 updateStatsNavbar()
+                if (STATE.viewMode === 'kanban') {
+                    renderKanban()
+                }
                 
                 toast('İlan başarıyla silindi', 'success')
             } catch (err) {
@@ -889,16 +1311,239 @@
             }
         }
 
-        // ── Update Job Status ─────────────────────────────────────────────
+        // ── Render Kanban Board ──────────────────────────────────────────
+        function renderKanban() {
+            const kanbanColsEl = document.getElementById('kanban-columns')
+            const countEl = document.getElementById('results-count')
+            const total = STATE.filteredJobs.length
+            countEl.innerHTML = `<span class="font-semibold text-dark-textHeading">${total}</span> ilan listeleniyor (İş Takip Panosu)`
+
+            const columnsHtml = KANBAN_COLUMNS.map(col => {
+                const colJobs = STATE.filteredJobs.filter(j => (j.status || 'new') === col.id)
+                return `
+                <div class="kanban-col bg-dark-surface/90 border border-dark-border rounded-2xl flex flex-col overflow-hidden shadow-xl"
+                     ondragover="onKanbanDragOver(event)"
+                     ondragleave="onKanbanDragLeave(event)"
+                     ondrop="onKanbanDrop(event, '${col.id}')"
+                     data-column-id="${col.id}">
+                    
+                    <!-- Column Header -->
+                    <div class="p-3 border-b border-dark-border flex items-center justify-between gap-2 bg-dark-card/60">
+                        <div class="flex items-center gap-2">
+                            <span class="text-base">${col.icon}</span>
+                            <h3 class="font-bold text-xs text-dark-textHeading tracking-tight">${col.label}</h3>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold border ${col.color}">
+                            ${colJobs.length}
+                        </span>
+                    </div>
+
+                    <!-- Column Card List -->
+                    <div class="kanban-col-cards p-2.5 space-y-2.5 flex-1">
+                        ${colJobs.length === 0 ? `
+                            <div class="h-32 flex flex-col items-center justify-center text-center p-3 border border-dashed border-dark-border/80 rounded-xl text-dark-textMuted text-xs">
+                                <span class="text-lg mb-1 opacity-40">${col.icon}</span>
+                                <span>Bu aşamada ilan yok</span>
+                            </div>
+                        ` : colJobs.map(j => renderKanbanCard(j)).join('')}
+                    </div>
+                </div>
+                `
+            }).join('')
+
+            kanbanColsEl.innerHTML = columnsHtml
+        }
+
+        // ── Kanban Single Card HTML ───────────────────────────────────────
+        function renderKanbanCard(j) {
+            const meta = SOURCE_META[j.source] || { label: j.source, badge: 'bg-slate-700/30 text-slate-300 border-slate-600' }
+            const score = j.match_score || 0
+            const scoreColor = getScoreStyle(score)
+            const locInfo = formatLocationBadge(j.location)
+            const overlapTags = (j.skill_overlap || []).slice(0, 3)
+
+            return `
+            <div id="kanban-card-${j.id}"
+                 class="kanban-card bg-dark-card border border-dark-border hover:border-cyan-500/50 rounded-xl p-3 space-y-2 relative shadow-md group"
+                 draggable="true"
+                 ondragstart="onKanbanDragStart(event, '${j.id}')"
+                 ondragend="onKanbanDragEnd(event)">
+                
+                <!-- Card Top: Source, Location & Score -->
+                <div class="flex items-center justify-between gap-1.5">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${meta.badge}">${meta.label}</span>
+                    <div class="flex items-center gap-1 px-2 py-0.5 rounded border font-mono font-bold text-[11px] ${scoreColor}">
+                        <span>⚡</span>
+                        <span>${score.toFixed(1)}</span>
+                    </div>
+                </div>
+
+                <!-- Company & Title (Clickable) -->
+                <div class="cursor-pointer" onclick="openDetailModal('${j.id}')">
+                    <div class="text-[11px] font-semibold text-cyan-400 truncate mb-0.5">${escapeHtml(j.company)}</div>
+                    <h4 class="text-xs font-bold text-dark-textHeading group-hover:text-cyan-300 transition line-clamp-2 leading-tight">${escapeHtml(j.title)}</h4>
+                </div>
+
+                <div class="text-[10px] text-dark-textMuted truncate">${locInfo}</div>
+
+                <!-- Skill Overlaps -->
+                ${overlapTags.length > 0 ? `
+                <div class="flex flex-wrap gap-1 pt-0.5">
+                    ${overlapTags.map(s => `<span class="px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ ${escapeHtml(s)}</span>`).join('')}
+                </div>` : ''}
+
+                <!-- Quick Action Bar -->
+                <div class="pt-2 border-t border-dark-border/80 flex items-center justify-between gap-1 mt-1">
+                    <!-- Status Dropdown Picker -->
+                    <select onchange="updateJobStatus('${j.id}', this.value)" onclick="event.stopPropagation()" class="text-[10px] px-1.5 py-1 rounded bg-dark-surface border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400 max-w-[120px]">
+                        <option value="new" ${j.status === 'new' ? 'selected' : ''}>📥 Yeni</option>
+                        <option value="applied" ${j.status === 'applied' ? 'selected' : ''}>📨 Başvuruldu</option>
+                        <option value="interview" ${j.status === 'interview' ? 'selected' : ''}>🎤 Mülakat</option>
+                        <option value="offer" ${j.status === 'offer' ? 'selected' : ''}>🎉 Teklif</option>
+                        <option value="rejected" ${j.status === 'rejected' ? 'selected' : ''}>❌ Red</option>
+                        <option value="skipped" ${j.status === 'skipped' ? 'selected' : ''}>⏭ Atla</option>
+                    </select>
+
+                    <div class="flex items-center gap-1">
+                        <!-- Quick Next Step Button -->
+                        ${j.status === 'new' || !j.status ? `
+                            <button onclick="event.stopPropagation(); updateJobStatus('${j.id}', 'applied')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition" title="Başvuruldu olarak işaretle">
+                                📨 Başvur
+                            </button>
+                        ` : j.status === 'applied' ? `
+                            <button onclick="event.stopPropagation(); updateJobStatus('${j.id}', 'interview')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition" title="Mülakata taşı">
+                                🎤 Mülakat
+                            </button>
+                        ` : j.status === 'interview' ? `
+                            <button onclick="event.stopPropagation(); updateJobStatus('${j.id}', 'offer')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition" title="Teklif durumuna al">
+                                🎉 Teklif
+                            </button>
+                        ` : ''}
+
+                        <button onclick="openDetailModal('${j.id}')" class="px-1.5 py-1 rounded text-[10px] bg-dark-surface border border-dark-border text-dark-text hover:text-white transition" title="Detaylar">
+                            👁️
+                        </button>
+                        <a href="${escapeHtml(j.url)}" target="_blank" rel="noopener noreferrer" class="p-1 rounded bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500 hover:text-black transition" title="İlana Git">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+            `
+        }
+
+        // ── Drag & Drop Event Handlers ────────────────────────────────────
+        let draggedJobId = null
+
+        function onKanbanDragStart(e, id) {
+            draggedJobId = id
+            e.dataTransfer.setData('text/plain', id)
+            e.dataTransfer.effectAllowed = 'move'
+            const card = document.getElementById(`kanban-card-${id}`)
+            if (card) {
+                setTimeout(() => card.classList.add('is-dragging'), 0)
+            }
+        }
+
+        function onKanbanDragEnd(e) {
+            const card = document.querySelector('.kanban-card.is-dragging')
+            if (card) card.classList.remove('is-dragging')
+            document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('kanban-drop-target'))
+            draggedJobId = null
+        }
+
+        function onKanbanDragOver(e) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            const col = e.currentTarget
+            if (!col.classList.contains('kanban-drop-target')) {
+                col.classList.add('kanban-drop-target')
+            }
+        }
+
+        function onKanbanDragLeave(e) {
+            const col = e.currentTarget
+            col.classList.remove('kanban-drop-target')
+        }
+
+        function onKanbanDrop(e, targetStatus) {
+            e.preventDefault()
+            const col = e.currentTarget
+            col.classList.remove('kanban-drop-target')
+            const jobId = draggedJobId || e.dataTransfer.getData('text/plain')
+            if (!jobId) return
+
+            const job = STATE.rawJobs.find(x => x.id === jobId)
+            if (job && job.status !== targetStatus) {
+                updateJobStatus(jobId, targetStatus)
+            }
+        }
+
+        // ── Update Job Status (Optimistic + Multi-View Sync) ──────────────
         async function updateJobStatus(id, newStatus) {
             try {
+                // 1. Optimistic State Update
+                const targetRaw = STATE.rawJobs.find(x => x.id === id)
+                if (targetRaw) targetRaw.status = newStatus
+
+                const targetFiltered = STATE.filteredJobs.find(x => x.id === id)
+                if (targetFiltered) targetFiltered.status = newStatus
+
+                // 2. Refresh active view
+                if (STATE.viewMode === 'kanban') {
+                    renderKanban()
+                } else {
+                    // Update Feed View card
+                    const card = document.getElementById(`card-${id}`)
+                    if (card && targetRaw) {
+                        const select = card.querySelector('select')
+                        if (select) select.value = newStatus
+                        const badgeContainer = card.querySelector('.flex.items-center.gap-1.5.flex-wrap')
+                        if (badgeContainer) {
+                            const meta = SOURCE_META[targetRaw.source] || { label: targetRaw.source, badge: 'bg-slate-700/30 text-slate-300 border-slate-600' }
+                            const locInfo = formatLocationBadge(targetRaw.location)
+                            badgeContainer.innerHTML = `
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${meta.label}</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-textMuted border border-dark-border">${locInfo}</span>
+                                ${getStatusBadge(newStatus)}
+                            `
+                        }
+                    }
+                }
+
+                // 3. Modal sync if open
+                if (STATE.selectedJob && STATE.selectedJob.id === id) {
+                    STATE.selectedJob.status = newStatus
+                    const modalSel = document.getElementById('modal-status-select')
+                    if (modalSel) modalSel.value = newStatus
+                    const modalBadges = document.getElementById('modal-badges')
+                    if (modalBadges && targetRaw) {
+                        const meta = SOURCE_META[targetRaw.source] || { label: targetRaw.source, badge: 'bg-slate-700/30 text-slate-300 border-slate-600' }
+                        modalBadges.innerHTML = `
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${meta.label}</span>
+                            ${targetRaw.role_family ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-text border border-dark-border">${targetRaw.role_family}</span>` : ''}
+                            ${getStatusBadge(newStatus)}
+                        `
+                    }
+                }
+
+                updateStatsNavbar()
+
+                // 4. Send PATCH to backend
                 await API.updateStatus(id, newStatus)
-                const target = STATE.rawJobs.find(x => x.id === id)
-                if (target) target.status = newStatus
-                toast('Durum güncellendi', 'info')
+                const label = STATUS_LABELS[newStatus] || newStatus
+                toast(`Durum güncellendi: ${label}`, 'success')
             } catch (err) {
                 console.error('Durum güncellenemedi:', err)
-                toast('Durum kaydedilemedi', 'error')
+                toast('Durum kaydedilemedi, geri alınıyor', 'error')
+                load(false)
+            }
+        }
+
+        function onModalStatusChange(val) {
+            if (STATE.selectedJob) {
+                updateJobStatus(STATE.selectedJob.id, val)
             }
         }
 

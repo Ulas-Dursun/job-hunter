@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,7 +38,9 @@ const baseJobColumns = `
 	COALESCE(skill_overlap, '{}'),
 	COALESCE(missing_skills, '{}'),
 	COALESCE(red_flags, '{}'),
-	ai_action, ai_reasoning, role_family, status, scraped_at`
+	ai_action, ai_reasoning, role_family, status,
+	(cover_letter IS NOT NULL AND cover_letter <> '' AND tailored_cv IS NOT NULL) AS has_tailored,
+	scraped_at`
 
 // ListJobs returns jobs matching the given filter, sorted and paginated.
 func (r *Repository) ListJobs(ctx context.Context, f JobFilter) ([]JobDTO, int, error) {
@@ -74,7 +77,8 @@ func (r *Repository) ListJobs(ctx context.Context, f JobFilter) ([]JobDTO, int, 
 			&j.ID, &j.Source, &j.Title, &j.Company, &j.Location, &j.URL,
 			&j.Description, &j.PostedAt,
 			&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
-			&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status, &j.ScrapedAt,
+			&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status,
+			&j.HasTailored, &j.ScrapedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning job row: %w", err)
 		}
@@ -121,7 +125,8 @@ func (r *Repository) GetJob(ctx context.Context, id string) (*JobDTO, error) {
 		&j.ID, &j.Source, &j.Title, &j.Company, &j.Location, &j.URL,
 		&j.Description, &j.PostedAt,
 		&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
-		&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status, &j.ScrapedAt,
+		&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status,
+		&j.HasTailored, &j.ScrapedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("getting job %s: %w", id, err)
@@ -269,3 +274,43 @@ func (r *Repository) ClearAllJobs(ctx context.Context) error {
 	return err
 }
 
+// GetTailoredAssets retrieves previously generated cover letter and tailored CV assets from DB if cached.
+func (r *Repository) GetTailoredAssets(ctx context.Context, id string) (*TailorResponseDTO, error) {
+	query := `SELECT id, cover_letter, tailored_cv FROM jobs WHERE id = $1::uuid`
+	var jobID string
+	var coverLetter *string
+	var rawCV []byte
+
+	err := r.pool.QueryRow(ctx, query, id).Scan(&jobID, &coverLetter, &rawCV)
+	if err != nil {
+		return nil, fmt.Errorf("fetching tailored assets: %w", err)
+	}
+
+	if coverLetter == nil || len(*coverLetter) == 0 || len(rawCV) == 0 {
+		return nil, nil // Not cached yet
+	}
+
+	var res TailorResponseDTO
+	if err := json.Unmarshal(rawCV, &res); err != nil {
+		return nil, nil // Corrupted or invalid JSON, re-generate
+	}
+	res.JobID = jobID
+	res.CoverLetter = *coverLetter
+	res.Cached = true
+	return &res, nil
+}
+
+// SaveTailoredAssets stores the generated cover letter and CV assets in the jobs table.
+func (r *Repository) SaveTailoredAssets(ctx context.Context, id string, coverLetter string, assets any) error {
+	rawJSON, err := json.Marshal(assets)
+	if err != nil {
+		return fmt.Errorf("marshaling tailored assets: %w", err)
+	}
+
+	query := `UPDATE jobs SET cover_letter = $1, tailored_cv = $2::jsonb WHERE id = $3::uuid`
+	_, err = r.pool.Exec(ctx, query, coverLetter, rawJSON, id)
+	if err != nil {
+		return fmt.Errorf("saving tailored assets: %w", err)
+	}
+	return nil
+}

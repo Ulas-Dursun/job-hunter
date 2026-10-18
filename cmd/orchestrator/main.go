@@ -9,15 +9,14 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
-	"github.com/ulasdursun/job-hunter/internal/api"
-	"github.com/ulasdursun/job-hunter/internal/intelligence"
-	"github.com/ulasdursun/job-hunter/internal/notifier"
-
 	"github.com/ulasdursun/job-hunter/internal/analyzer"
+	"github.com/ulasdursun/job-hunter/internal/api"
 	"github.com/ulasdursun/job-hunter/internal/config"
 	"github.com/ulasdursun/job-hunter/internal/consumer"
 	"github.com/ulasdursun/job-hunter/internal/filter"
+	"github.com/ulasdursun/job-hunter/internal/intelligence"
 	"github.com/ulasdursun/job-hunter/internal/metrics"
+	"github.com/ulasdursun/job-hunter/internal/notifier"
 	"github.com/ulasdursun/job-hunter/internal/store"
 	"github.com/ulasdursun/job-hunter/internal/worker"
 )
@@ -85,13 +84,16 @@ func main() {
 	// ── 7. Prometheus Metrics ─────────────────────────────────────────────────
 	appMetrics := metrics.New()
 	metrics.StartServer(cfg.Server.MetricsPort)
-	// ── 7b. Dashboard API Server ─────────────────────────────────────────────
-	api.StartServer(cfg.Server.DashboardPort, pg.Pool())
+
+	// ── 7b. Dashboard API Server & ATS Tailor Service ─────────────────────────
+	tailorService := analyzer.NewTailorService(&cfg.Gemini)
+	api.StartServer(cfg.Server.DashboardPort, pg.Pool(), tailorService)
 	dashboardURL := fmt.Sprintf("http://localhost:%d", cfg.Server.DashboardPort)
 	slog.Info("════════════════════════════════════════")
 	slog.Info("  📊 DASHBOARD READY")
 	slog.Info("  " + dashboardURL)
 	slog.Info("════════════════════════════════════════")
+
 	// ── 8. Cheap Filter ───────────────────────────────────────────────────────
 	cheapFilter := filter.NewCheapFilter(&cfg.Candidate)
 
@@ -105,8 +107,7 @@ func main() {
 	// ── 11. Job Store ─────────────────────────────────────────────────────────
 	jobStore := store.NewJobStore(pg.Pool())
 
-	// ── 12. Worker Pool (jobs:filtered → Gemini → PostgreSQL) ─────────────────
-	// ── 10. Telegram Notifier ─────────────────────────────────────────────────
+	// ── 12. Telegram Notifier ─────────────────────────────────────────────────
 	telegramNotifier := notifier.NewTelegram()
 	if telegramNotifier.IsConfigured() {
 		slog.Info("telegram notifications enabled")
@@ -114,7 +115,7 @@ func main() {
 		slog.Warn("telegram not configured — set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env")
 	}
 
-	// ── 11. Worker Pool ───────────────────────────────────────────────────────
+	// ── 13. Worker Pool (jobs:filtered → Gemini → PostgreSQL) ─────────────────
 	workerPool := worker.New(
 		cfg.Worker.PoolSize,
 		rc.Client(),
@@ -124,11 +125,11 @@ func main() {
 		&cfg.Redis,
 		&cfg.Scoring,
 		telegramNotifier,
-		cfg.Notifications.TelegramEnabled, // YENİ
+		cfg.Notifications.TelegramEnabled,
 	)
 	go workerPool.Run(ctx)
 
-	// ── 13. Market Intelligence Scheduler ────────────────────────────────────
+	// ── 14. Market Intelligence Scheduler ────────────────────────────────────
 	marketScheduler := intelligence.NewScheduler(pg.Pool(), &cfg.Candidate, telegramNotifier)
 	go marketScheduler.Run(ctx)
 	slog.Info("market intelligence scheduler started")
@@ -136,7 +137,7 @@ func main() {
 	slog.Info("all systems ready",
 		"postgres", config.MaskedPostgresDSN(),
 		"redis", config.RedisAddr(),
-		"metrics", "http://localhost:9091/metrics",
+		"metrics", fmt.Sprintf("http://localhost:%d/metrics", cfg.Server.MetricsPort),
 		"workers", cfg.Worker.PoolSize,
 	)
 

@@ -119,20 +119,28 @@ CRITICAL RULES (MUST OBEY):
 7. UNRELATED FIELD CHECK:
    If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical) that merely contains the word "engineer" in the title, set match_score below 3.0 and action "skip".
 
-8. VISA, CITIZENSHIP & LOCATION ELIGIBILITY:
-   - The candidate is a Turkish citizen (non-EU national). He will be based in Brussels (Software Engineering Trainee at EUROCONTROL) and Istanbul.
-   - TARGET REGIONS: Turkey, Belgium (Brussels), Netherlands (Amsterdam), Germany (Berlin/Munich), Switzerland, UK, or Remote (EU/Global).
-   - STRICT VISA/CITIZENSHIP FILTER:
-     * If the posting explicitly mandates "EU citizenship required / must hold EU passport", "Only open to EU/EEA nationals", "No visa sponsorship provided", or "Must already hold unrestricted local work permit with no sponsorship":
-     * Candidate cannot legally accept the job. You MUST set match_score below 4.0, set action to "skip", and flag "No visa sponsorship / EU citizenship required" in red_flags.
-     * Exception: International organizations where Turkey is a member state (e.g. EUROCONTROL), companies explicitly stating "Visa sponsorship available" or marked "[Visa Sponsored]", or roles open to remote contract from Turkey.
-   - STRICT US / OVERSEAS ON-SITE FILTER:
-     * Postings located in the US, Canada, Australia, etc., that require physical on-site presence or local US work authorization (Green Card / US Citizen / H1-B holder) are impossible for a fresh graduate abroad.
-     * You MUST set match_score below 3.0, set action to "skip", and flag "Ineligible location: US/Overseas on-site without remote option" in red_flags.
-     * Remote roles from US/international companies open to global/EU remote contractors are acceptable.
-   - LANGUAGE CHECK:
-     * If the job explicitly mandates fluent French ("Français obligatoire / courant") or Dutch ("Nederlands vereist") as primary working language and does NOT accept English, deduct 2.5 from match_score and flag "Requires French/Dutch" in red_flags.
-     * If English is accepted or the company operates in English, treat the candidate as fully language-eligible (Fluent English C1/C2).
+8. VISA, CITIZENSHIP & EUROPEAN LOCATION ELIGIBILITY:
+   - The candidate is a Turkish citizen (non-EU national) actively based in Brussels, Belgium (Software Engineering Trainee at EUROCONTROL, Nov 2026 – Apr 2027) with active European residency/presence, and open to Turkey & EU relocation.
+   - TARGET REGIONS: Turkey, Belgium (Brussels), Netherlands (Amsterdam), Germany (Berlin/Munich), Switzerland (Zurich/Geneva), UK (London), or EU/Global Remote.
+
+   - HARD DISQUALIFIERS (STRICT SKIP < 3.5):
+     1. EXPLICIT NO-SPONSORSHIP: If the posting explicitly mandates "EU citizenship required", "Only open to EU/EEA nationals", "No visa sponsorship provided / cannot sponsor", or "Must already hold valid unrestricted local work permit":
+        * Set match_score to 2.0 - 3.0, set action to "skip", and flag "Explicit: No visa sponsorship / EU citizenship required" in red_flags.
+     2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: If the posting explicitly mandates fluent French, German, or Dutch ("Français courant", "Deutsch C1/verhandlungssicher", "Nederlands vereist") as required daily working language and does NOT accept English-only speakers:
+        * Set match_score to 2.0 - 3.5, set action to "skip", and flag "Language barrier: Non-English mandatory" in red_flags.
+     3. US / OVERSEAS ON-SITE: Postings located on-site in US, Canada, Australia requiring local Green Card / US Citizenship without international remote:
+        * Set match_score to 1.5 - 2.5, set action to "skip", and flag "US/Overseas on-site ineligible" in red_flags.
+
+   - SMART EUROPEAN GRADUATE & TECH OPPORTUNITY RULE (CRITICAL - DO NOT SKIP):
+     * If an on-site or hybrid role in Germany (Berlin/Munich), Netherlands (Amsterdam), Belgium (Brussels), Switzerland, or UK:
+       a) Is titled or framed for "Graduate", "Junior", "Associate", "Entry Level", or "Trainee" (or 0-2 years exp), OR
+       b) Is at a known tech company, global scale-up, or international enterprise (e.g. Unit8, Delivery Hero, Zalando, Adyen, Amazon, Booking, ASML, Datadog, Siemens, N26, etc.), AND
+       c) The primary working language is English, AND it does NOT explicitly forbid sponsorship:
+     * -> DO NOT DISQUALIFY OR SKIP solely because it is on-site in Europe or doesn't explicitly mention relocation!
+     * -> The candidate is already based in Europe (Brussels) during this period.
+     * -> Set action to "watch" (or "apply" if tech fit is 80%%+ and company is known to sponsor).
+     * -> If stack matches candidate's core pillars, score generously in the 6.8 - 7.5 range.
+     * -> In red_flags, simply note: "Requires visa sponsorship for TR candidate, but eligible graduate-track role."
 
 9. STEALTH SENIORITY & SCOPE DETECTION:
    - If a job does not explicitly state a numerical years requirement, but lists expectations such as:
@@ -170,7 +178,7 @@ func buildProfile(cfg *config.CandidateConfig) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Name: %s\n", cfg.Name))
 	sb.WriteString(fmt.Sprintf("Status: %s, Graduation: %d\n", cfg.Status, cfg.GraduationYear))
-	sb.WriteString(fmt.Sprintf("Location: %s (Open to Turkey & Brussels/Belgium/Europe)\n", cfg.Location))
+	sb.WriteString(fmt.Sprintf("Location: %s (Actively based in Brussels, Belgium for 6 months at EUROCONTROL; open to Turkey & EU/Schengen relocation)\n", cfg.Location))
 	sb.WriteString(fmt.Sprintf("Languages: %s\n", strings.Join(cfg.Skills.Languages, ", ")))
 	sb.WriteString(fmt.Sprintf("Frameworks: %s\n", strings.Join(cfg.Skills.Frameworks, ", ")))
 	sb.WriteString(fmt.Sprintf("Databases: %s\n", strings.Join(cfg.Skills.Databases, ", ")))
