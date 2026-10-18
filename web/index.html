@@ -390,7 +390,7 @@
                         </div>
                         
                         <div class="flex items-center gap-2">
-                            <button onclick="generateTailoredAssets(true)" class="px-2.5 py-1 rounded text-[11px] font-medium bg-dark-surface border border-dark-border text-dark-text hover:text-cyan-300 hover:border-cyan-500/40 transition" title="Yeniden yapay zeka ile üret">
+                            <button onclick="refreshActiveKit()" class="px-2.5 py-1 rounded text-[11px] font-medium bg-dark-surface border border-dark-border text-dark-text hover:text-cyan-300 hover:border-cyan-500/40 transition" title="Yeniden yapay zeka ile üret">
                                 🔄 Yeniden Üret
                             </button>
                             <button id="tailor-copy-active-btn" onclick="copyActiveTailorTab()" class="px-3 py-1 rounded text-[11px] font-bold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500 hover:text-black border border-cyan-500/30 transition flex items-center gap-1">
@@ -411,21 +411,24 @@
                         <button id="tab-btn-keywords" onclick="switchTailorTab('keywords')" class="px-3 py-1.5 rounded-lg font-medium text-dark-textMuted hover:text-dark-text transition whitespace-nowrap">
                             🔑 ATS Kelimeleri & Beceriler
                         </button>
+                        <button id="tab-btn-interview" onclick="openInterviewPrepTab()" class="px-3 py-1.5 rounded-lg font-medium text-dark-textMuted hover:text-purple-300 transition whitespace-nowrap flex items-center gap-1">
+                            <span>🎤 Mülakat Hazırlık (5 Teknik + 3 STAR)</span>
+                        </button>
                     </div>
 
                     <!-- Loading State -->
                     <div id="tailor-loading" class="hidden py-8 flex flex-col items-center justify-center space-y-3 text-center">
                         <div class="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
                         <div class="space-y-1">
-                            <p class="font-bold text-xs text-dark-textHeading">Gemini ATS Optimizasyonu Yapıyor...</p>
-                            <p class="text-[11px] text-dark-textMuted max-w-md">İlanın 4000 karakterlik açıklaması ve Master CV profiliniz taranıyor; nokta atışı Cover Letter ve CV başarı maddeleri hazırlanıyor.</p>
+                            <p id="tailor-loading-title" class="font-bold text-xs text-dark-textHeading">Gemini ATS Optimizasyonu Yapıyor...</p>
+                            <p id="tailor-loading-desc" class="text-[11px] text-dark-textMuted max-w-md">İlanın 4000 karakterlik açıklaması ve Master CV profiliniz taranıyor; nokta atışı Cover Letter ve CV başarı maddeleri hazırlanıyor.</p>
                         </div>
                     </div>
 
                     <!-- Content: Tab 1 (Cover Letter) -->
                     <div id="tailor-content-letter" class="space-y-2">
                         <div class="flex items-center justify-between text-[11px] text-dark-textMuted">
-                            <span>Pozisyona ve şirkete özel kurgulanmış profesyonel İngilizce ön yazı:</span>
+                            <span>Pozisyona ve şirkete özel kurgulanmış, doğal mühendis dilinde İngilizce ön yazı:</span>
                         </div>
                         <div id="tailor-letter-text" class="whitespace-pre-line p-4 rounded-xl bg-black/40 border border-dark-border font-sans text-xs text-slate-200 leading-relaxed max-h-72 overflow-y-auto select-all"></div>
                     </div>
@@ -469,6 +472,37 @@
                             <div id="tailor-skills-list" class="flex flex-wrap gap-1.5"></div>
                         </div>
                     </div>
+
+                    <!-- Content: Tab 4 (Interview Prep Kit) -->
+                    <div id="tailor-content-interview" class="hidden space-y-4 max-h-96 overflow-y-auto pr-1">
+                        <div>
+                            <div class="font-semibold text-purple-400 text-[11px] mb-1 flex items-center gap-1">
+                                <span>🎯</span> Mülakat & Teknik Odak Özeti (Role Focus)
+                            </div>
+                            <div id="interview-role-focus" class="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30 text-xs text-slate-200 leading-relaxed"></div>
+                        </div>
+
+                        <div>
+                            <div class="font-semibold text-cyan-400 text-[11px] mb-2 flex items-center gap-1">
+                                <span>💻</span> Beklenen 5 Teknik Mülakat Sorusu & Cevap Stratejisi
+                            </div>
+                            <div id="interview-technical-list" class="space-y-2.5"></div>
+                        </div>
+
+                        <div>
+                            <div class="font-semibold text-emerald-400 text-[11px] mb-2 flex items-center gap-1">
+                                <span>⭐</span> 3 Davranışsal (STAR) Mülakat Sorusu & Hikaye Rehberi
+                            </div>
+                            <div id="interview-behavioral-list" class="space-y-2.5"></div>
+                        </div>
+
+                        <div>
+                            <div class="font-semibold text-amber-400 text-[11px] mb-1.5 flex items-center gap-1">
+                                <span>❓</span> Mülakat Sonunda Senin Onlara Soracağın Stratejik Sorular
+                            </div>
+                            <ul id="interview-reverse-list" class="list-disc list-inside space-y-1.5 p-3 rounded-lg bg-black/30 border border-dark-border text-xs text-slate-200 leading-normal"></ul>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Full Job Description -->
@@ -497,7 +531,11 @@
                         </select>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button id="modal-interview-btn" onclick="openInterviewPrepTab()" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition flex items-center gap-1.5">
+                        <span>🎤</span>
+                        <span id="modal-interview-btn-text">Mülakat Kiti</span>
+                    </button>
                     <button id="modal-tailor-btn" onclick="generateTailoredAssets()" class="px-4 py-2 rounded-lg text-xs font-bold bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-black transition shadow-lg shadow-cyan-500/20 flex items-center gap-1.5">
                         <span>✨</span>
                         <span id="modal-tailor-btn-text">ATS CV & Ön Yazı Üret</span>
@@ -605,6 +643,13 @@
             }).then(async r => {
                 const data = await r.json()
                 if (!r.ok) throw new Error(data.error || 'İşlem başarısız')
+                return data
+            }),
+            interviewPrep: (id, force = false) => fetch(`/api/jobs/${id}/interview-prep${force ? '?refresh=true' : ''}`, {
+                method: 'POST'
+            }).then(async r => {
+                const data = await r.json()
+                if (!r.ok) throw new Error(data.error || 'Mülakat kiti üretilemedi')
                 return data
             })
         }
@@ -1056,8 +1101,9 @@
                 closeDetailModal()
             }
 
-            // Reset and configure Tailor Section
+            // Reset and configure Tailor & Interview Section
             currentTailorData = null
+            currentInterviewData = null
             activeTailorTab = 'letter'
             const tailorContainer = document.getElementById('modal-tailor-container')
             if (tailorContainer) tailorContainer.classList.add('hidden')
@@ -1074,12 +1120,22 @@
                 }
             }
 
+            const interviewBtn = document.getElementById('modal-interview-btn')
+            const interviewBtnText = document.getElementById('modal-interview-btn-text')
+            if (interviewBtn && interviewBtnText) {
+                interviewBtn.disabled = false
+                interviewBtnText.textContent = j.has_interview_prep ? 'Mülakat Kiti (Hazır)' : 'Mülakat Kiti'
+            }
+
             document.getElementById('detail-modal').classList.remove('hidden')
             document.body.style.overflow = 'hidden'
 
             // Eğer daha önce üretilmişse otomatik önbellekten yükle
             if (j.has_tailored) {
                 generateTailoredAssets(false)
+            }
+            if (j.has_interview_prep) {
+                generateInterviewPrep(false, !j.has_tailored || j.status === 'interview')
             }
         }
 
@@ -1088,20 +1144,45 @@
             document.body.style.overflow = 'auto'
             STATE.selectedJob = null
             currentTailorData = null
+            currentInterviewData = null
         }
 
-        // ── ATS Tailor & Cover Letter Generation Logic ─────────────────────
+        // ── ATS Tailor, Cover Letter & Interview Prep Logic ───────────────
         let activeTailorTab = 'letter'
         let currentTailorData = null
+        let currentInterviewData = null
+
+        function refreshActiveKit() {
+            if (activeTailorTab === 'interview') {
+                generateInterviewPrep(true, true)
+            } else {
+                generateTailoredAssets(true)
+            }
+        }
+
+        function openInterviewPrepTab() {
+            if (!STATE.selectedJob) return
+            const container = document.getElementById('modal-tailor-container')
+            if (container) container.classList.remove('hidden')
+            if (currentInterviewData) {
+                switchTailorTab('interview')
+                container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+            } else {
+                generateInterviewPrep(false, true)
+            }
+        }
 
         async function generateTailoredAssets(force = false) {
             if (!STATE.selectedJob) return
             const jobId = STATE.selectedJob.id
             const container = document.getElementById('modal-tailor-container')
             const loading = document.getElementById('tailor-loading')
+            const loadingTitle = document.getElementById('tailor-loading-title')
+            const loadingDesc = document.getElementById('tailor-loading-desc')
             const contentLetter = document.getElementById('tailor-content-letter')
             const contentCv = document.getElementById('tailor-content-cv')
             const contentKw = document.getElementById('tailor-content-keywords')
+            const contentInt = document.getElementById('tailor-content-interview')
             const btn = document.getElementById('modal-tailor-btn')
             const btnText = document.getElementById('modal-tailor-btn-text')
             const cacheBadge = document.getElementById('tailor-cache-badge')
@@ -1109,13 +1190,15 @@
             try {
                 container.classList.remove('hidden')
                 loading.classList.remove('hidden')
+                if (loadingTitle) loadingTitle.textContent = 'Gemini ATS Optimizasyonu Yapıyor...'
+                if (loadingDesc) loadingDesc.textContent = 'İlanın 4000 karakterlik açıklaması ve Master CV profiliniz taranıyor; nokta atışı Cover Letter ve CV başarı maddeleri hazırlanıyor.'
                 contentLetter.classList.add('hidden')
                 contentCv.classList.add('hidden')
                 contentKw.classList.add('hidden')
+                if (contentInt) contentInt.classList.add('hidden')
                 if (btn) btn.disabled = true
                 if (btnText) btnText.textContent = 'Üretiliyor...'
 
-                // Scroll container smoothly into view
                 container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 
                 const data = await API.tailorJob(jobId, force)
@@ -1128,16 +1211,18 @@
                 const filtItem = STATE.filteredJobs.find(x => x.id === jobId)
                 if (filtItem) filtItem.has_tailored = true
 
-                // Show/hide cache badge
                 if (data.cached) {
                     cacheBadge.classList.remove('hidden')
                 } else {
                     cacheBadge.classList.add('hidden')
                 }
 
-                // Render structured assets
                 renderTailoredData(data)
-                switchTailorTab(activeTailorTab || 'letter')
+                if (activeTailorTab === 'interview' && !force) {
+                    switchTailorTab('letter')
+                } else {
+                    switchTailorTab(activeTailorTab === 'interview' ? 'letter' : (activeTailorTab || 'letter'))
+                }
 
                 if (!data.cached || force) {
                     toast('ATS CV & Ön Yazı başarıyla üretildi!', 'success')
@@ -1145,11 +1230,74 @@
             } catch (err) {
                 console.error('Tailor error:', err)
                 toast(`Üretim başarısız: ${err.message}`, 'error')
-                container.classList.add('hidden')
+                if (!currentInterviewData) container.classList.add('hidden')
             } finally {
                 loading.classList.add('hidden')
                 if (btn) btn.disabled = false
                 if (btnText) btnText.textContent = (STATE.selectedJob && STATE.selectedJob.has_tailored) ? 'Başvuru Kitini Göster (Hazır)' : 'ATS CV & Ön Yazı Üret'
+            }
+        }
+
+        async function generateInterviewPrep(force = false, switchAfter = true) {
+            if (!STATE.selectedJob) return
+            const jobId = STATE.selectedJob.id
+            const container = document.getElementById('modal-tailor-container')
+            const loading = document.getElementById('tailor-loading')
+            const loadingTitle = document.getElementById('tailor-loading-title')
+            const loadingDesc = document.getElementById('tailor-loading-desc')
+            const contentLetter = document.getElementById('tailor-content-letter')
+            const contentCv = document.getElementById('tailor-content-cv')
+            const contentKw = document.getElementById('tailor-content-keywords')
+            const contentInt = document.getElementById('tailor-content-interview')
+            const intBtn = document.getElementById('modal-interview-btn')
+            const intBtnText = document.getElementById('modal-interview-btn-text')
+            const cacheBadge = document.getElementById('tailor-cache-badge')
+
+            try {
+                container.classList.remove('hidden')
+                if (switchAfter) {
+                    loading.classList.remove('hidden')
+                    if (loadingTitle) loadingTitle.textContent = 'Gemini Mülakat Hazırlık Kitini Hazırlıyor...'
+                    if (loadingDesc) loadingDesc.textContent = 'Şirketin teknoloji yığını ve projelerinize özel 5 Teknik + 3 STAR Mülakat Sorusu ve Cevap Rehberi kurgulanıyor.'
+                    contentLetter.classList.add('hidden')
+                    contentCv.classList.add('hidden')
+                    contentKw.classList.add('hidden')
+                    if (contentInt) contentInt.classList.add('hidden')
+                    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                }
+                if (intBtn) intBtn.disabled = true
+                if (intBtnText) intBtnText.textContent = 'Hazırlanıyor...'
+
+                const data = await API.interviewPrep(jobId, force)
+                currentInterviewData = data
+
+                STATE.selectedJob.has_interview_prep = true
+                const rawItem = STATE.rawJobs.find(x => x.id === jobId)
+                if (rawItem) rawItem.has_interview_prep = true
+                const filtItem = STATE.filteredJobs.find(x => x.id === jobId)
+                if (filtItem) filtItem.has_interview_prep = true
+
+                if (data.cached) {
+                    cacheBadge.classList.remove('hidden')
+                } else {
+                    cacheBadge.classList.add('hidden')
+                }
+
+                renderInterviewPrepData(data)
+                if (switchAfter) {
+                    switchTailorTab('interview')
+                }
+
+                if (!data.cached || force) {
+                    toast('🎤 Mülakat Hazırlık Kiti başarıyla üretildi!', 'success')
+                }
+            } catch (err) {
+                console.error('Interview prep error:', err)
+                toast(`Mülakat kiti üretilemedi: ${err.message}`, 'error')
+            } finally {
+                loading.classList.add('hidden')
+                if (intBtn) intBtn.disabled = false
+                if (intBtnText) intBtnText.textContent = (STATE.selectedJob && STATE.selectedJob.has_interview_prep) ? 'Mülakat Kiti (Hazır)' : 'Mülakat Kiti'
             }
         }
 
@@ -1185,18 +1333,58 @@
             `).join('')
         }
 
+        function renderInterviewPrepData(data) {
+            document.getElementById('interview-role-focus').textContent = data.role_focus_summary || 'Rol odak özeti bulunamadı.'
+
+            const techEl = document.getElementById('interview-technical-list')
+            techEl.innerHTML = (data.technical_questions || []).map((q, idx) => `
+                <div class="p-3.5 rounded-xl bg-black/40 border border-dark-border space-y-2">
+                    <div class="font-bold text-xs text-cyan-300 flex items-start gap-2">
+                        <span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono text-[10px]">T${idx + 1}</span>
+                        <span>${escapeHtml(q.question)}</span>
+                    </div>
+                    <div class="text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+                        <span class="font-semibold">🎯 Neden Soruyorlar:</span> ${escapeHtml(q.why_they_ask)}
+                    </div>
+                    <div class="text-xs text-slate-200 leading-relaxed pl-1">
+                        <span class="font-semibold text-emerald-400">💡 Cevap Stratejin:</span> ${escapeHtml(q.answer_strategy)}
+                    </div>
+                </div>
+            `).join('')
+
+            const behEl = document.getElementById('interview-behavioral-list')
+            behEl.innerHTML = (data.behavioral_questions || []).map((b, idx) => `
+                <div class="p-3.5 rounded-xl bg-black/40 border border-dark-border space-y-2">
+                    <div class="font-bold text-xs text-emerald-300 flex items-start gap-2">
+                        <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px]">STAR ${idx + 1}</span>
+                        <span>${escapeHtml(b.question)}</span>
+                    </div>
+                    <div class="text-xs text-slate-200 leading-relaxed pl-1">
+                        <span class="font-semibold text-purple-300">🧭 Hikaye Kurgusu (STAR):</span> ${escapeHtml(b.star_story_guide)}
+                    </div>
+                </div>
+            `).join('')
+
+            const revEl = document.getElementById('interview-reverse-list')
+            revEl.innerHTML = (data.questions_to_ask || []).map(r => `
+                <li class="pl-1">${escapeHtml(r)}</li>
+            `).join('')
+        }
+
         function switchTailorTab(tab) {
             activeTailorTab = tab
-            const tabs = ['letter', 'cv', 'keywords']
+            const tabs = ['letter', 'cv', 'keywords', 'interview']
             tabs.forEach(t => {
                 const btn = document.getElementById(`tab-btn-${t}`)
                 const content = document.getElementById(`tailor-content-${t}`)
                 if (btn && content) {
                     if (t === tab) {
-                        btn.className = 'px-3 py-1.5 rounded-lg font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 transition whitespace-nowrap'
+                        btn.className = t === 'interview'
+                            ? 'px-3 py-1.5 rounded-lg font-semibold bg-purple-500/25 text-purple-300 border border-purple-500/50 transition whitespace-nowrap flex items-center gap-1'
+                            : 'px-3 py-1.5 rounded-lg font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 transition whitespace-nowrap'
                         content.classList.remove('hidden')
                     } else {
-                        btn.className = 'px-3 py-1.5 rounded-lg font-medium text-dark-textMuted hover:text-dark-text transition whitespace-nowrap'
+                        btn.className = 'px-3 py-1.5 rounded-lg font-medium text-dark-textMuted hover:text-dark-text transition whitespace-nowrap flex items-center gap-1'
                         content.classList.add('hidden')
                     }
                 }
@@ -1206,23 +1394,40 @@
             if (copyLabel) {
                 if (tab === 'letter') copyLabel.textContent = 'Ön Yazıyı Kopyala'
                 else if (tab === 'cv') copyLabel.textContent = 'CV Maddelerini Kopyala'
+                else if (tab === 'interview') copyLabel.textContent = 'Mülakat Kitini Kopyala'
                 else copyLabel.textContent = 'Kelimeleri Kopyala'
             }
         }
 
         async function copyActiveTailorTab() {
-            if (!currentTailorData) return
             let textToCopy = ''
 
-            if (activeTailorTab === 'letter') {
-                textToCopy = currentTailorData.cover_letter || ''
-            } else if (activeTailorTab === 'cv') {
-                textToCopy = `TARGETED PROFESSIONAL SUMMARY:\n${currentTailorData.tailored_summary || ''}\n\n` +
-                             `EXPERIENCE BULLETS (Sanlab):\n${(currentTailorData.tailored_experience_bullets || []).map(b => '• ' + b).join('\n')}\n\n` +
-                             `KEY PROJECT BULLETS:\n${(currentTailorData.tailored_project_bullets || []).map(b => '• ' + b).join('\n')}`
+            if (activeTailorTab === 'interview') {
+                if (!currentInterviewData) return
+                const techText = (currentInterviewData.technical_questions || []).map((q, i) =>
+                    `[T${i + 1}] ${q.question}\n• Neden Soruyorlar: ${q.why_they_ask}\n• Cevap Stratejisi: ${q.answer_strategy}`
+                ).join('\n\n')
+                const starText = (currentInterviewData.behavioral_questions || []).map((b, i) =>
+                    `[STAR ${i + 1}] ${b.question}\n• STAR Rehberi: ${b.star_story_guide}`
+                ).join('\n\n')
+                const revText = (currentInterviewData.questions_to_ask || []).map(r => `• ${r}`).join('\n')
+
+                textToCopy = `MÜLAKAT & ROL ODAK ÖZETİ:\n${currentInterviewData.role_focus_summary || ''}\n\n` +
+                             `5 TEKNİK MÜLAKAT SORUSU & CEVAP REHBERİ:\n${techText}\n\n` +
+                             `3 DAVRANIŞSAL (STAR) SORU REHBERİ:\n${starText}\n\n` +
+                             `MÜLAKATÇIYA SORULACAK SORULAR:\n${revText}`
             } else {
-                textToCopy = `ATS KEYWORDS:\n${(currentTailorData.ats_keywords || []).join(', ')}\n\n` +
-                             `RECOMMENDED SKILLS HIGHLIGHT:\n${(currentTailorData.skills_highlight || []).join(', ')}`
+                if (!currentTailorData) return
+                if (activeTailorTab === 'letter') {
+                    textToCopy = currentTailorData.cover_letter || ''
+                } else if (activeTailorTab === 'cv') {
+                    textToCopy = `TARGETED PROFESSIONAL SUMMARY:\n${currentTailorData.tailored_summary || ''}\n\n` +
+                                 `EXPERIENCE BULLETS (Sanlab):\n${(currentTailorData.tailored_experience_bullets || []).map(b => '• ' + b).join('\n')}\n\n` +
+                                 `KEY PROJECT BULLETS:\n${(currentTailorData.tailored_project_bullets || []).map(b => '• ' + b).join('\n')}`
+                } else {
+                    textToCopy = `ATS KEYWORDS:\n${(currentTailorData.ats_keywords || []).join(', ')}\n\n` +
+                                 `RECOMMENDED SKILLS HIGHLIGHT:\n${(currentTailorData.skills_highlight || []).join(', ')}`
+                }
             }
 
             try {
@@ -1234,7 +1439,7 @@
                 copyBtn.classList.replace('text-cyan-300', 'text-emerald-300')
                 copyBtn.classList.replace('border-cyan-500/30', 'border-emerald-500/40')
 
-                toast('Metin panoya kopyalandı! Word veya başvuru formunuza yapıştırabilirsiniz.', 'success')
+                toast('Metin panoya kopyalandı!', 'success')
 
                 setTimeout(() => {
                     copyBtn.innerHTML = originalHtml
@@ -1534,6 +1739,22 @@
                 await API.updateStatus(id, newStatus)
                 const label = STATUS_LABELS[newStatus] || newStatus
                 toast(`Durum güncellendi: ${label}`, 'success')
+
+                // 5. Auto-trigger AI Interview Prep Kit when moved to 'interview'
+                if (newStatus === 'interview') {
+                    if (STATE.selectedJob && STATE.selectedJob.id === id) {
+                        openInterviewPrepTab()
+                    } else if (targetRaw && !targetRaw.has_interview_prep) {
+                        toast('🎤 Mülakat Hazırlık Kiti (5 Teknik + 3 STAR) arka planda hazırlanıyor...', 'info')
+                        API.interviewPrep(id, false)
+                            .then(() => {
+                                if (targetRaw) targetRaw.has_interview_prep = true
+                                if (targetFiltered) targetFiltered.has_interview_prep = true
+                                toast('🎤 Mülakat Hazırlık Kiti hazır! İlan detayından inceleyebilirsiniz.', 'success')
+                            })
+                            .catch(e => console.error('Auto interview prep error:', e))
+                    }
+                }
             } catch (err) {
                 console.error('Durum güncellenemedi:', err)
                 toast('Durum kaydedilemedi, geri alınıyor', 'error')

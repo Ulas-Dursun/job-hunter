@@ -7,7 +7,7 @@ import (
 
 func TestParseTailoredResult(t *testing.T) {
 	rawJSON := `{
-		"cover_letter": "Dear Hiring Team at Unit8, I am excited to apply...",
+		"cover_letter": "Dear Hiring Team at Unit8, I am reaching out...",
 		"tailored_summary": "Software Engineer specialized in Go, Python, and distributed systems...",
 		"tailored_experience_bullets": [
 			"Developed high-throughput services integrating Go and Rust across 12 endpoints."
@@ -43,6 +43,41 @@ func TestParseTailoredResult_NormalizesNilSlices(t *testing.T) {
 	}
 	if res.TailoredExperienceBullets == nil || res.TailoredProjectBullets == nil || res.SkillsHighlight == nil || res.ATSKeywords == nil {
 		t.Errorf("expected nil slices to be normalized to empty slices")
+	}
+}
+
+func TestParseInterviewResult(t *testing.T) {
+	rawJSON := `{
+		"technical_questions": [
+			{
+				"question": "How did you handle backpressure in your 5-goroutine worker pool?",
+				"why_they_ask": "Eşzamanlılık ve kuyruk yönetimi bilgisini ölçmek için.",
+				"answer_strategy": "Redis kuyruğu ve exponential backoff mekanizmasını anlat."
+			}
+		],
+		"behavioral_questions": [
+			{
+				"question": "Tell me about a time you collaborated in an Agile team.",
+				"star_story_guide": "Sanlab 7 kişilik Scrum ekibindeki Go/Rust entegrasyonunu anlat."
+			}
+		],
+		"questions_to_ask": [
+			"What are the main latency bottlenecks in your real-time pipeline?"
+		]
+	}`
+
+	res, err := parseInterviewResult(rawJSON)
+	if err != nil {
+		t.Fatalf("unexpected error parsing interview prep json: %v", err)
+	}
+	if len(res.TechnicalQuestions) != 1 {
+		t.Errorf("expected 1 technical question, got %d", len(res.TechnicalQuestions))
+	}
+	if len(res.BehavioralQuestions) != 1 {
+		t.Errorf("expected 1 behavioral question, got %d", len(res.BehavioralQuestions))
+	}
+	if len(res.QuestionsToAsk) != 1 {
+		t.Errorf("expected 1 question to ask, got %d", len(res.QuestionsToAsk))
 	}
 }
 

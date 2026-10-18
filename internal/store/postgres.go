@@ -49,6 +49,7 @@ func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cover_letter TEXT;
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS tailored_cv JSONB;
+		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS interview_prep JSONB;
 	`)
 	return err
 }

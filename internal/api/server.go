@@ -23,6 +23,7 @@ func StartServer(port int, pool *pgxpool.Pool, tailor *analyzer.TailorService) {
 	mux.HandleFunc("GET /api/stats", h.GetStats)
 	mux.HandleFunc("PATCH /api/jobs/{id}/status", h.UpdateJobStatus)
 	mux.HandleFunc("POST /api/jobs/{id}/tailor", h.TailorJob)
+	mux.HandleFunc("POST /api/jobs/{id}/interview-prep", h.InterviewPrepJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", h.DeleteJob)
 	mux.HandleFunc("DELETE /api/jobs", h.ClearJobs)
 

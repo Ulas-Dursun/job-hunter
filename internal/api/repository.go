@@ -40,6 +40,7 @@ const baseJobColumns = `
 	COALESCE(red_flags, '{}'),
 	ai_action, ai_reasoning, role_family, status,
 	(cover_letter IS NOT NULL AND cover_letter <> '' AND tailored_cv IS NOT NULL) AS has_tailored,
+	(interview_prep IS NOT NULL) AS has_interview_prep,
 	scraped_at`
 
 // ListJobs returns jobs matching the given filter, sorted and paginated.
@@ -78,7 +79,7 @@ func (r *Repository) ListJobs(ctx context.Context, f JobFilter) ([]JobDTO, int, 
 			&j.Description, &j.PostedAt,
 			&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
 			&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status,
-			&j.HasTailored, &j.ScrapedAt,
+			&j.HasTailored, &j.HasInterviewPrep, &j.ScrapedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning job row: %w", err)
 		}
@@ -126,7 +127,7 @@ func (r *Repository) GetJob(ctx context.Context, id string) (*JobDTO, error) {
 		&j.Description, &j.PostedAt,
 		&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
 		&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status,
-		&j.HasTailored, &j.ScrapedAt,
+		&j.HasTailored, &j.HasInterviewPrep, &j.ScrapedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("getting job %s: %w", id, err)
@@ -311,6 +312,45 @@ func (r *Repository) SaveTailoredAssets(ctx context.Context, id string, coverLet
 	_, err = r.pool.Exec(ctx, query, coverLetter, rawJSON, id)
 	if err != nil {
 		return fmt.Errorf("saving tailored assets: %w", err)
+	}
+	return nil
+}
+
+// GetInterviewPrep retrieves previously generated interview prep kit from DB if cached.
+func (r *Repository) GetInterviewPrep(ctx context.Context, id string) (*InterviewPrepResponseDTO, error) {
+	query := `SELECT id, interview_prep FROM jobs WHERE id = $1::uuid`
+	var jobID string
+	var rawPrep []byte
+
+	err := r.pool.QueryRow(ctx, query, id).Scan(&jobID, &rawPrep)
+	if err != nil {
+		return nil, fmt.Errorf("fetching interview prep: %w", err)
+	}
+
+	if len(rawPrep) == 0 {
+		return nil, nil // Not cached yet
+	}
+
+	var res InterviewPrepResponseDTO
+	if err := json.Unmarshal(rawPrep, &res); err != nil {
+		return nil, nil
+	}
+	res.JobID = jobID
+	res.Cached = true
+	return &res, nil
+}
+
+// SaveInterviewPrep stores the generated interview prep kit in the jobs table.
+func (r *Repository) SaveInterviewPrep(ctx context.Context, id string, assets any) error {
+	rawJSON, err := json.Marshal(assets)
+	if err != nil {
+		return fmt.Errorf("marshaling interview prep: %w", err)
+	}
+
+	query := `UPDATE jobs SET interview_prep = $1::jsonb WHERE id = $2::uuid`
+	_, err = r.pool.Exec(ctx, query, rawJSON, id)
+	if err != nil {
+		return fmt.Errorf("saving interview prep: %w", err)
 	}
 	return nil
 }

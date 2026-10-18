@@ -180,16 +180,78 @@ func (h *Handlers) TailorJob(w http.ResponseWriter, r *http.Request) {
 		CoverLetter:               assets.CoverLetter,
 		TailoredSummary:           assets.TailoredSummary,
 		TailoredExperienceBullets: assets.TailoredExperienceBullets,
-		TailoredProjectBullets:   assets.TailoredProjectBullets,
-		SkillsHighlight:          assets.SkillsHighlight,
-		ATSKeywords:              assets.ATSKeywords,
-		Cached:                   false,
+		TailoredProjectBullets:    assets.TailoredProjectBullets,
+		SkillsHighlight:           assets.SkillsHighlight,
+		ATSKeywords:               assets.ATSKeywords,
+		Cached:                    false,
 	}
 
 	slog.Info("tailored assets generated successfully", "id", id, "company", job.Company)
 	writeJSON(w, http.StatusOK, res)
 }
 
+// InterviewPrepJob handles POST /api/jobs/{id}/interview-prep
+func (h *Handlers) InterviewPrepJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, errBadRequest("missing job id"))
+		return
+	}
+
+	forceRefresh := r.URL.Query().Get("refresh") == "true"
+
+	// 1. Check cache first if not explicitly force-refreshed
+	if !forceRefresh {
+		cached, err := h.repo.GetInterviewPrep(r.Context(), id)
+		if err == nil && cached != nil {
+			slog.Info("returning cached interview prep", "id", id)
+			writeJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
+
+	// 2. Fetch Job details from DB
+	job, err := h.repo.GetJob(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("job not found: %w", err))
+		return
+	}
+
+	// 3. Generate interview prep kit via Gemini
+	if h.tailor == nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("tailor service is not configured"))
+		return
+	}
+
+	prep, err := h.tailor.GenerateInterviewPrep(
+		r.Context(),
+		job.Title,
+		job.Company,
+		job.Location,
+		job.Description,
+	)
+	if err != nil {
+		slog.Error("failed to generate interview prep", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("generating interview prep: %w", err))
+		return
+	}
+
+	// 4. Save to DB cache
+	if err := h.repo.SaveInterviewPrep(r.Context(), id, prep); err != nil {
+		slog.Warn("failed to cache interview prep in db", "id", id, "error", err)
+	}
+
+	res := InterviewPrepResponseDTO{
+		JobID:               id,
+		TechnicalQuestions:  prep.TechnicalQuestions,
+		BehavioralQuestions: prep.BehavioralQuestions,
+		QuestionsToAsk:      prep.QuestionsToAsk,
+		Cached:              false,
+	}
+
+	slog.Info("interview prep generated successfully", "id", id, "company", job.Company)
+	writeJSON(w, http.StatusOK, res)
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

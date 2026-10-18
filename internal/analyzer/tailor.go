@@ -25,6 +25,26 @@ type TailoredAssets struct {
 	ATSKeywords               []string `json:"ats_keywords"`
 }
 
+// TechnicalQA represents a targeted technical interview question and answer guide.
+type TechnicalQA struct {
+	Question       string `json:"question"`
+	WhyTheyAsk     string `json:"why_they_ask"`
+	AnswerStrategy string `json:"answer_strategy"`
+}
+
+// BehavioralSTAR represents a behavioral interview question with a tailored STAR response script.
+type BehavioralSTAR struct {
+	Question       string `json:"question"`
+	STARStoryGuide string `json:"star_story_guide"`
+}
+
+// InterviewPrepAssets represents the structured AI Interview Prep kit for a specific job.
+type InterviewPrepAssets struct {
+	TechnicalQuestions  []TechnicalQA    `json:"technical_questions"`
+	BehavioralQuestions []BehavioralSTAR `json:"behavioral_questions"`
+	QuestionsToAsk      []string         `json:"questions_to_ask"`
+}
+
 // MasterCandidateProfile represents the factual, unalterable master CV of Ulaş Dursun.
 const MasterCandidateProfile = `
 CANDIDATE FULL NAME: Ulaş Dursun
@@ -69,7 +89,7 @@ TECHNICAL SKILLS:
 - Spoken Languages: English (Fluent), Turkish (Native), German (Beginner)
 `
 
-// TailorService coordinates ATS CV customization and Cover Letter generation via Gemini / Groq.
+// TailorService coordinates ATS CV customization, Cover Letter generation, and Interview Prep via Gemini / Groq.
 type TailorService struct {
 	provider Provider
 	apiKey   string
@@ -111,26 +131,45 @@ func NewTailorService(cfg *config.GeminiConfig) *TailorService {
 }
 
 // GenerateTailoredAssets produces an ATS-optimized cover letter, tailored summary, and bullet points.
-// Automatically retries on 429 (Rate Limit) or 503 (Server Busy).
 func (s *TailorService) GenerateTailoredAssets(
 	ctx context.Context,
 	title, company, location, description string,
 ) (*TailoredAssets, error) {
+	prompt := s.buildPrompt(title, company, location, description)
+	rawText, err := s.executeWithRetry(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+	return parseTailoredResult(rawText)
+}
+
+// GenerateInterviewPrep produces 5 technical questions, 3 STAR behavioral guides, and 2 reverse interview questions.
+func (s *TailorService) GenerateInterviewPrep(
+	ctx context.Context,
+	title, company, location, description string,
+) (*InterviewPrepAssets, error) {
+	prompt := s.buildInterviewPrompt(title, company, location, description)
+	rawText, err := s.executeWithRetry(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+	return parseInterviewResult(rawText)
+}
+
+func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (string, error) {
 	if s.apiKey == "" {
-		return nil, fmt.Errorf("missing AI API key (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
+		return "", fmt.Errorf("missing AI API key (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
 	}
 
-	prompt := s.buildPrompt(title, company, location, description)
 	maxRetries := 3
-
 	for i := 0; i < maxRetries; i++ {
-		var res *TailoredAssets
+		var rawText string
 		var err error
 
 		if s.provider == ProviderGemini {
-			res, err = s.callGemini(ctx, prompt)
+			rawText, err = s.callGeminiRaw(ctx, prompt)
 		} else {
-			res, err = s.callGroq(ctx, prompt)
+			rawText, err = s.callGroqRaw(ctx, prompt)
 		}
 
 		if err != nil {
@@ -145,16 +184,16 @@ func (s *TailorService) GenerateTailoredAssets(
 				case <-time.After(backoff):
 					continue
 				case <-ctx.Done():
-					return nil, ctx.Err()
+					return "", ctx.Err()
 				}
 			}
-			return nil, err
+			return "", err
 		}
 
-		return res, nil
+		return rawText, nil
 	}
 
-	return nil, fmt.Errorf("%s busy or rate-limited after %d retries", s.provider, maxRetries)
+	return "", fmt.Errorf("%s busy or rate-limited after %d retries", s.provider, maxRetries)
 }
 
 func (s *TailorService) buildPrompt(title, company, location, description string) string {
@@ -163,27 +202,28 @@ func (s *TailorService) buildPrompt(title, company, location, description string
 		desc = "(No detailed description provided in listing — tailor based on job title, company, and core engineering requirements.)"
 	}
 
-	return fmt.Sprintf(`You are an elite Senior Tech Recruiter and ATS Optimization Specialist at a top global technology company.
-Your goal is to generate an exceptional, highly-targeted, 100%% ATS-compliant Cover Letter and tailor the candidate's CV bullet points specifically for the job below.
+	return fmt.Sprintf(`You are a Principal Software Engineer and European Tech Hiring Lead coaching Ulaş Dursun.
+Your goal is to write a sharp, natural, human-sounding Cover Letter and genuinely tailored CV bullet points for the job below.
 
-CRITICAL INSTRUCTIONS & ZERO-HALLUCINATION POLICY:
-1. NEVER invent companies, degrees, years of experience, or technologies that are NOT in the Candidate's Master Profile.
-2. The candidate is Ulaş Dursun, a high-potential Software Engineer / New Graduate (2026) specializing in Go, Java, Python, Rust, PostgreSQL, MongoDB, Redis, Docker, and Distributed Systems.
-3. Align the candidate's REAL achievements with the job posting's keywords using Google's XYZ formula: "Accomplished [X] as measured by [Y], by doing [Z]".
-4. COVER LETTER REQUIREMENTS:
-   - Written in natural, high-impact, professional English.
-   - Tone: Confident, technical, articulate, not robotic or overly cliché.
-   - Target length: 3 to 4 concise paragraphs (~250-330 words).
-   - Paragraph 1: Enthusiastic hook referencing %s and the %s role, highlighting core backend/cloud/systems alignment.
-   - Paragraph 2: Deep technical proof citing the Sanlab internship (Go/Rust/MongoDB/JWT/TCP-UDP) and/or Distributed Job Processing (Go, 5-goroutine Redis worker pool, Prometheus) or Order Management (Java 21, Spring Boot, PostgreSQL pessimistic locking, Testcontainers).
-   - Paragraph 3: Relevant engineering mindset, cloud/DevOps proficiency (AWS Certified AI Practitioner, Docker, CI/CD GitHub Actions), and enthusiasm for the team's engineering challenges.
-   - Paragraph 4: Professional sign-off and call to action.
-5. TAILORED CV ASSETS:
-   - tailored_summary: 3 impactful sentences tailored for this specific role and company.
-   - tailored_experience_bullets: 3 bullet points adapted from Sanlab internship experience highlighting relevant skills.
-   - tailored_project_bullets: 3-4 bullet points from projects (Distributed Job Processing / Order & Inventory Management / Capstone IoT) matching the posting stack.
-   - skills_highlight: Ordered list of candidate skills most relevant to this specific role.
-   - ats_keywords: Top 6-10 keywords extracted from the job posting that are addressed.
+CRITICAL ZERO-HALLUCINATION POLICY:
+1. NEVER invent companies, degrees, years of experience, or technologies not in the Candidate's Master Profile.
+2. Keep all factual numbers intact (12 endpoints, 7-person team, 5-goroutine worker pool, 500 concurrent submissions, 98%% under 100ms, ~75%% coverage, >99%% delivery, ~500ms latency).
+
+COVER LETTER — HUMAN & ENGINEER-TO-ENGINEER VOICE RULES (STRICT):
+1. BANNED AI CLICHÉS (NEVER USE THESE PHRASES):
+   - "I am thrilled to apply" / "I am excited to apply" / "I am writing to express my strong interest"
+   - "Throughout my academic and practical journey"
+   - "deep passion for" / "passionate about" / "thrive in environments"
+   - "Furthermore, in my personal projects" / "testament to" / "delve" / "synergy"
+2. LENGTH & STRUCTURE (CONCISE & PUNCHY — 180 to 220 words total, 3 short paragraphs):
+   - Paragraph 1 (Direct Hook, 2-3 sentences): Open directly with what %s is building/solving and why the %s role caught your eye as a backend/systems engineer. Sound like a real engineer speaking to another engineer.
+   - Paragraph 2 (Connected Technical Proof, 3-4 sentences): DO NOT copy-paste CV bullet points verbatim into a laundry list! Pick ONLY the 2 most relevant technical experiences from Ulaş's profile (e.g., if real-time/low-latency: pair Sanlab's raw Rust TCP/UDP sockets & Go APIs with the Go/Redis <100ms worker pool or ESP32 ~500ms real-time telemetry; if enterprise/backend: pair Java 21 Spring Boot pessimistic locking & Testcontainers with Go/Rust microservices). Explain *why* building those systems prepared you for %s's specific technical challenges.
+   - Paragraph 3 (Pragmatic Close, 2 sentences): Briefly note your readiness to ship clean, containerized code (Docker, CI/CD, Prometheus, AWS Certified AI Practitioner) and end with a straightforward, confident sign-off.
+
+TAILORED CV BULLETS — TRUE DOMAIN ADAPTATION RULES:
+1. Do NOT just copy the original CV bullets word-for-word!
+2. Rewrite and angle the bullets so they naturally incorporate the target job's terminology and engineering focus while staying 100%% truthful to Ulaş's work.
+3. For tailored_project_bullets (4 bullets): Select from ALL 3 projects (Distributed Job Processing in Go/Redis, Order & Inventory API in Java 21/Spring Boot, AND Capstone Real-Time IoT System) based on what fits this job best. If the job involves real-time data, telemetry, streaming, or full-stack, MUST include a bullet from the Capstone IoT project (>99%% delivery, ~500ms latency).
 
 CANDIDATE MASTER PROFILE:
 %s
@@ -200,14 +240,65 @@ Respond with a strict, valid JSON object without markdown formatting, backticks,
 {
   "cover_letter": "string",
   "tailored_summary": "string",
-  "tailored_experience_bullets": ["string", "string"],
-  "tailored_project_bullets": ["string", "string"],
+  "tailored_experience_bullets": ["string", "string", "string"],
+  "tailored_project_bullets": ["string", "string", "string", "string"],
   "skills_highlight": ["string", "string"],
   "ats_keywords": ["string", "string"]
-}`, company, title, MasterCandidateProfile, title, company, location, desc)
+}`, company, title, company, MasterCandidateProfile, title, company, location, desc)
 }
 
-func (s *TailorService) callGemini(ctx context.Context, prompt string) (*TailoredAssets, error) {
+func (s *TailorService) buildInterviewPrompt(title, company, location, description string) string {
+	desc := truncateUTF8(strings.TrimSpace(description), 4000)
+	if desc == "" {
+		desc = "(No detailed description provided — generate based on job title, company, and candidate profile.)"
+	}
+
+	return fmt.Sprintf(`You are a Staff Engineer and Hiring Manager at %s interviewing Ulaş Dursun for the %s position (%s).
+Create a practical, high-signal Interview Preparation Kit specifically connecting %s's tech stack/domain with Ulaş's actual CV projects.
+
+REQUIREMENTS:
+1. technical_questions (EXACTLY 5 items):
+   - Combine the job posting's technical requirements with Ulaş's specific projects (Sanlab Go/Rust JWT & TCP/UDP sockets, Go 5-goroutine Redis worker pool with exponential backoff & Prometheus, Java 21 Spring Boot PostgreSQL pessimistic locking & Testcontainers, ESP32/React real-time telemetry).
+   - "question": The exact technical / system-design question the interviewer will ask (in English, with Turkish explanation in parentheses if helpful).
+   - "why_they_ask": 1 concise sentence in Turkish explaining what the interviewer is testing.
+   - "answer_strategy": Concrete, senior-level talking points (in Turkish, keeping technical terms in English) showing how Ulaş should answer using his real metrics and architectural trade-offs.
+2. behavioral_questions (EXACTLY 3 items):
+   - "question": The behavioral question in English.
+   - "star_story_guide": A ready-to-use STAR (Situation, Task, Action, Result) response guide in Turkish based on Ulaş's real experience (Sanlab 7-person Scrum team, debugging concurrency/latency in projects, or high-responsibility Work & Travel customer/safety management).
+3. questions_to_ask (EXACTLY 2 items):
+   - 2 sharp, impressive engineering questions (in English, with a brief Turkish note on why it's effective) that Ulaş should ask the interviewers at the end of the call.
+
+CANDIDATE MASTER PROFILE:
+%s
+
+TARGET JOB POSTING:
+Title: %s
+Company: %s
+Location: %s
+Description:
+%s
+
+OUTPUT FORMAT:
+Respond with a strict, valid JSON object without markdown formatting, backticks, or preamble:
+{
+  "technical_questions": [
+    {
+      "question": "string",
+      "why_they_ask": "string",
+      "answer_strategy": "string"
+    }
+  ],
+  "behavioral_questions": [
+    {
+      "question": "string",
+      "star_story_guide": "string"
+    }
+  ],
+  "questions_to_ask": ["string", "string"]
+}`, company, title, location, company, MasterCandidateProfile, title, company, location, desc)
+}
+
+func (s *TailorService) callGeminiRaw(ctx context.Context, prompt string) (string, error) {
 	reqURL := fmt.Sprintf(geminiAPIURL, s.model)
 
 	reqPayload := map[string]any{
@@ -219,33 +310,33 @@ func (s *TailorService) callGemini(ctx context.Context, prompt string) (*Tailore
 			},
 		},
 		"generationConfig": map[string]any{
-			"temperature":      0.2,
-			"maxOutputTokens":  3000,
+			"temperature":      0.25,
+			"maxOutputTokens":  3500,
 			"responseMimeType": "application/json",
 		},
 	}
 
 	bodyBytes, err := json.Marshal(reqPayload)
 	if err != nil {
-		return nil, fmt.Errorf("marshaling gemini payload: %w", err)
+		return "", fmt.Errorf("marshaling gemini payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("creating gemini request: %w", err)
+		return "", fmt.Errorf("creating gemini request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", s.apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("gemini http call: %w", err)
+		return "", fmt.Errorf("gemini http call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini status %d: %s", resp.StatusCode, string(b))
+		return "", fmt.Errorf("gemini status %d: %s", resp.StatusCode, string(b))
 	}
 
 	var geminiResp struct {
@@ -259,18 +350,17 @@ func (s *TailorService) callGemini(ctx context.Context, prompt string) (*Tailore
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, fmt.Errorf("decoding gemini response: %w", err)
+		return "", fmt.Errorf("decoding gemini response: %w", err)
 	}
 
 	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("empty gemini response candidates")
+		return "", fmt.Errorf("empty gemini response candidates")
 	}
 
-	rawText := geminiResp.Candidates[0].Content.Parts[0].Text
-	return parseTailoredResult(rawText)
+	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
 }
 
-func (s *TailorService) callGroq(ctx context.Context, prompt string) (*TailoredAssets, error) {
+func (s *TailorService) callGroqRaw(ctx context.Context, prompt string) (string, error) {
 	reqBody := map[string]any{
 		"model": s.model,
 		"messages": []map[string]any{
@@ -279,8 +369,8 @@ func (s *TailorService) callGroq(ctx context.Context, prompt string) (*TailoredA
 				"content": prompt,
 			},
 		},
-		"max_tokens":  3000,
-		"temperature": 0.2,
+		"max_tokens":  3500,
+		"temperature": 0.25,
 		"response_format": map[string]any{
 			"type": "json_object",
 		},
@@ -290,20 +380,20 @@ func (s *TailorService) callGroq(ctx context.Context, prompt string) (*TailoredA
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, groqAPIURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("creating groq request: %w", err)
+		return "", fmt.Errorf("creating groq request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("groq http call: %w", err)
+		return "", fmt.Errorf("groq http call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("groq status %d: %s", resp.StatusCode, string(b))
+		return "", fmt.Errorf("groq status %d: %s", resp.StatusCode, string(b))
 	}
 
 	var apiResp struct {
@@ -315,15 +405,14 @@ func (s *TailorService) callGroq(ctx context.Context, prompt string) (*TailoredA
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("decoding groq response: %w", err)
+		return "", fmt.Errorf("decoding groq response: %w", err)
 	}
 
 	if len(apiResp.Choices) == 0 {
-		return nil, fmt.Errorf("empty groq response")
+		return "", fmt.Errorf("empty groq response")
 	}
 
-	rawText := apiResp.Choices[0].Message.Content
-	return parseTailoredResult(rawText)
+	return apiResp.Choices[0].Message.Content, nil
 }
 
 func parseTailoredResult(text string) (*TailoredAssets, error) {
@@ -350,6 +439,32 @@ func parseTailoredResult(text string) (*TailoredAssets, error) {
 	}
 	if result.ATSKeywords == nil {
 		result.ATSKeywords = []string{}
+	}
+
+	return &result, nil
+}
+
+func parseInterviewResult(text string) (*InterviewPrepAssets, error) {
+	start := strings.Index(text, "{")
+	end := strings.LastIndex(text, "}")
+	if start == -1 || end == -1 || end < start {
+		return nil, fmt.Errorf("no valid JSON found in interview prep response")
+	}
+
+	var result InterviewPrepAssets
+	if err := json.Unmarshal([]byte(text[start:end+1]), &result); err != nil {
+		slog.Error("failed to unmarshal interview prep json", "raw", text[start:end+1])
+		return nil, fmt.Errorf("unmarshaling interview prep json: %w", err)
+	}
+
+	if result.TechnicalQuestions == nil {
+		result.TechnicalQuestions = []TechnicalQA{}
+	}
+	if result.BehavioralQuestions == nil {
+		result.BehavioralQuestions = []BehavioralSTAR{}
+	}
+	if result.QuestionsToAsk == nil {
+		result.QuestionsToAsk = []string{}
 	}
 
 	return &result, nil

@@ -1,26 +1,31 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/ulasdursun/job-hunter/internal/analyzer"
+)
 
 type JobDTO struct {
-	ID            string     `json:"id"`
-	Source        string     `json:"source"`
-	Title         string     `json:"title"`
-	Company       string     `json:"company"`
-	Location      string     `json:"location"`
-	URL           string     `json:"url"`
-	Description   string     `json:"description"`
-	PostedAt      *time.Time `json:"posted_at"`
-	MatchScore    *float64   `json:"match_score"`
-	SkillOverlap  []string   `json:"skill_overlap"`
-	MissingSkills []string   `json:"missing_skills"`
-	RedFlags      []string   `json:"red_flags"`
-	AIAction      *string    `json:"ai_action"`
-	AIReasoning   *string    `json:"ai_reasoning"`
-	RoleFamily    *string    `json:"role_family"`
-	Status        string     `json:"status"`
-	HasTailored   bool       `json:"has_tailored"`
-	ScrapedAt     time.Time  `json:"scraped_at"`
+	ID               string     `json:"id"`
+	Source           string     `json:"source"`
+	Title            string     `json:"title"`
+	Company          string     `json:"company"`
+	Location         string     `json:"location"`
+	URL              string     `json:"url"`
+	Description      string     `json:"description"`
+	PostedAt         *time.Time `json:"posted_at"`
+	MatchScore       *float64   `json:"match_score"`
+	SkillOverlap     []string   `json:"skill_overlap"`
+	MissingSkills    []string   `json:"missing_skills"`
+	RedFlags         []string   `json:"red_flags"`
+	AIAction         *string    `json:"ai_action"`
+	AIReasoning      *string    `json:"ai_reasoning"`
+	RoleFamily       *string    `json:"role_family"`
+	Status           string     `json:"status"`
+	HasTailored      bool       `json:"has_tailored"`
+	HasInterviewPrep bool       `json:"has_interview_prep"`
+	ScrapedAt        time.Time  `json:"scraped_at"`
 }
 
 // JobListResponse wraps a paginated job list with metadata.
@@ -69,6 +74,15 @@ type TailorResponseDTO struct {
 	SkillsHighlight           []string `json:"skills_highlight"`
 	ATSKeywords               []string `json:"ats_keywords"`
 	Cached                    bool     `json:"cached"`
+}
+
+// InterviewPrepResponseDTO represents the response for generating AI Interview Prep Kit.
+type InterviewPrepResponseDTO struct {
+	JobID               string                    `json:"job_id"`
+	TechnicalQuestions  []analyzer.TechnicalQA    `json:"technical_questions"`
+	BehavioralQuestions []analyzer.BehavioralSTAR `json:"behavioral_questions"`
+	QuestionsToAsk      []string                  `json:"questions_to_ask"`
+	Cached              bool                      `json:"cached"`
 }
 
 // ErrorResponse is the standard JSON error envelope.
