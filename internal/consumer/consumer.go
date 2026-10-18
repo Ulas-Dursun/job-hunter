@@ -126,6 +126,8 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 	// Tüm original field'ları koru — downstream consumer'lar bunlara ihtiyaç duyar
 	_, err := c.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: c.cfg.StreamFiltered,
+		MaxLen: 5000,
+		Approx: true,
 		Values: msg.Values,
 	}).Result()
 

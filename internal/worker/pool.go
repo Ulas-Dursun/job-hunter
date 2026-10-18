@@ -220,6 +220,8 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 func (p *Pool) toFailed(ctx context.Context, msg redis.XMessage) {
 	_, _ = p.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: p.cfg.StreamFailed,
+		MaxLen: 1000,
+		Approx: true,
 		Values: msg.Values,
 	}).Result()
 

@@ -37,7 +37,7 @@ class RedisProducer:
             logger.debug("duplicate skipped: %s — %s", job.company, job.title)
             return False
 
-        self._client.xadd(self._stream, job.to_redis_fields())
+        self._client.xadd(self._stream, job.to_redis_fields(), maxlen=5000, approximate=True)
         logger.info(
             "published  source=%-12s  company=%-20s  title=%s",
             job.source, job.company, job.title,
