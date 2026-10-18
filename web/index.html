@@ -1105,6 +1105,7 @@
             currentTailorData = null
             currentInterviewData = null
             activeTailorTab = 'letter'
+            resetTailorAndInterviewDOM()
             const tailorContainer = document.getElementById('modal-tailor-container')
             if (tailorContainer) tailorContainer.classList.add('hidden')
             
@@ -1130,13 +1131,36 @@
             document.getElementById('detail-modal').classList.remove('hidden')
             document.body.style.overflow = 'hidden'
 
-            // Eğer daha önce üretilmişse otomatik önbellekten yükle
+            // Önbellekte hazır olan kitleri yarış durumu (race condition) olmadan sırayla yükle
+            preloadModalKits(j)
+        }
+
+        async function preloadModalKits(j) {
+            if (!j) return
             if (j.has_tailored) {
-                generateTailoredAssets(false)
+                await generateTailoredAssets(false, 'letter')
             }
-            if (j.has_interview_prep) {
-                generateInterviewPrep(false, !j.has_tailored || j.status === 'interview')
+            if (STATE.selectedJob && STATE.selectedJob.id === j.id && j.has_interview_prep) {
+                const shouldFocusInterview = !j.has_tailored || j.status === 'interview'
+                await generateInterviewPrep(false, shouldFocusInterview)
             }
+        }
+
+        function resetTailorAndInterviewDOM() {
+            const idsToClearText = ['tailor-letter-text', 'tailor-cv-summary', 'interview-role-focus']
+            idsToClearText.forEach(id => {
+                const el = document.getElementById(id)
+                if (el) el.textContent = ''
+            })
+            const idsToClearHtml = [
+                'tailor-cv-experience', 'tailor-cv-projects',
+                'tailor-keywords-list', 'tailor-skills-list',
+                'interview-technical-list', 'interview-behavioral-list', 'interview-reverse-list'
+            ]
+            idsToClearHtml.forEach(id => {
+                const el = document.getElementById(id)
+                if (el) el.innerHTML = ''
+            })
         }
 
         function closeDetailModal() {
@@ -1151,12 +1175,13 @@
         let activeTailorTab = 'letter'
         let currentTailorData = null
         let currentInterviewData = null
+        let copyFeedbackTimer = null
 
         function refreshActiveKit() {
             if (activeTailorTab === 'interview') {
                 generateInterviewPrep(true, true)
             } else {
-                generateTailoredAssets(true)
+                generateTailoredAssets(true, activeTailorTab || 'letter')
             }
         }
 
@@ -1165,14 +1190,14 @@
             const container = document.getElementById('modal-tailor-container')
             if (container) container.classList.remove('hidden')
             if (currentInterviewData) {
-                switchTailorTab('interview')
+                renderTabView('interview')
                 container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
             } else {
                 generateInterviewPrep(false, true)
             }
         }
 
-        async function generateTailoredAssets(force = false) {
+        async function generateTailoredAssets(force = false, targetTab = 'letter') {
             if (!STATE.selectedJob) return
             const jobId = STATE.selectedJob.id
             const container = document.getElementById('modal-tailor-container')
@@ -1185,7 +1210,6 @@
             const contentInt = document.getElementById('tailor-content-interview')
             const btn = document.getElementById('modal-tailor-btn')
             const btnText = document.getElementById('modal-tailor-btn-text')
-            const cacheBadge = document.getElementById('tailor-cache-badge')
 
             try {
                 container.classList.remove('hidden')
@@ -1202,6 +1226,7 @@
                 container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 
                 const data = await API.tailorJob(jobId, force)
+                if (!STATE.selectedJob || STATE.selectedJob.id !== jobId) return
                 currentTailorData = data
 
                 // State sync: mark job as having tailored assets
@@ -1211,18 +1236,9 @@
                 const filtItem = STATE.filteredJobs.find(x => x.id === jobId)
                 if (filtItem) filtItem.has_tailored = true
 
-                if (data.cached) {
-                    cacheBadge.classList.remove('hidden')
-                } else {
-                    cacheBadge.classList.add('hidden')
-                }
-
                 renderTailoredData(data)
-                if (activeTailorTab === 'interview' && !force) {
-                    switchTailorTab('letter')
-                } else {
-                    switchTailorTab(activeTailorTab === 'interview' ? 'letter' : (activeTailorTab || 'letter'))
-                }
+                const tabToOpen = (targetTab && targetTab !== 'interview') ? targetTab : 'letter'
+                renderTabView(tabToOpen)
 
                 if (!data.cached || force) {
                     toast('ATS CV & Ön Yazı başarıyla üretildi!', 'success')
@@ -1231,6 +1247,7 @@
                 console.error('Tailor error:', err)
                 toast(`Üretim başarısız: ${err.message}`, 'error')
                 if (!currentInterviewData) container.classList.add('hidden')
+                else renderTabView('interview')
             } finally {
                 loading.classList.add('hidden')
                 if (btn) btn.disabled = false
@@ -1251,7 +1268,6 @@
             const contentInt = document.getElementById('tailor-content-interview')
             const intBtn = document.getElementById('modal-interview-btn')
             const intBtnText = document.getElementById('modal-interview-btn-text')
-            const cacheBadge = document.getElementById('tailor-cache-badge')
 
             try {
                 container.classList.remove('hidden')
@@ -1269,6 +1285,7 @@
                 if (intBtnText) intBtnText.textContent = 'Hazırlanıyor...'
 
                 const data = await API.interviewPrep(jobId, force)
+                if (!STATE.selectedJob || STATE.selectedJob.id !== jobId) return
                 currentInterviewData = data
 
                 STATE.selectedJob.has_interview_prep = true
@@ -1277,15 +1294,9 @@
                 const filtItem = STATE.filteredJobs.find(x => x.id === jobId)
                 if (filtItem) filtItem.has_interview_prep = true
 
-                if (data.cached) {
-                    cacheBadge.classList.remove('hidden')
-                } else {
-                    cacheBadge.classList.add('hidden')
-                }
-
                 renderInterviewPrepData(data)
                 if (switchAfter) {
-                    switchTailorTab('interview')
+                    renderTabView('interview')
                 }
 
                 if (!data.cached || force) {
@@ -1294,6 +1305,8 @@
             } catch (err) {
                 console.error('Interview prep error:', err)
                 toast(`Mülakat kiti üretilemedi: ${err.message}`, 'error')
+                if (!currentTailorData) container.classList.add('hidden')
+                else renderTabView('letter')
             } finally {
                 loading.classList.add('hidden')
                 if (intBtn) intBtn.disabled = false
@@ -1372,6 +1385,25 @@
         }
 
         function switchTailorTab(tab) {
+            if (tab === 'interview' && !currentInterviewData) {
+                generateInterviewPrep(false, true)
+                return
+            }
+            if (tab !== 'interview' && !currentTailorData) {
+                generateTailoredAssets(false, tab)
+                return
+            }
+            renderTabView(tab)
+        }
+
+        function getCopyLabelForTab(tab) {
+            if (tab === 'letter') return 'Ön Yazıyı Kopyala'
+            if (tab === 'cv') return 'CV Maddelerini Kopyala'
+            if (tab === 'interview') return 'Mülakat Kitini Kopyala'
+            return 'Kelimeleri Kopyala'
+        }
+
+        function renderTabView(tab) {
             activeTailorTab = tab
             const tabs = ['letter', 'cv', 'keywords', 'interview']
             tabs.forEach(t => {
@@ -1390,12 +1422,19 @@
                 }
             })
 
+            // Sync cache badge with active tab's data source
+            const cacheBadge = document.getElementById('tailor-cache-badge')
+            if (cacheBadge) {
+                const isCached = tab === 'interview'
+                    ? (currentInterviewData && currentInterviewData.cached)
+                    : (currentTailorData && currentTailorData.cached)
+                if (isCached) cacheBadge.classList.remove('hidden')
+                else cacheBadge.classList.add('hidden')
+            }
+
             const copyLabel = document.getElementById('tailor-copy-label')
             if (copyLabel) {
-                if (tab === 'letter') copyLabel.textContent = 'Ön Yazıyı Kopyala'
-                else if (tab === 'cv') copyLabel.textContent = 'CV Maddelerini Kopyala'
-                else if (tab === 'interview') copyLabel.textContent = 'Mülakat Kitini Kopyala'
-                else copyLabel.textContent = 'Kelimeleri Kopyala'
+                copyLabel.textContent = getCopyLabelForTab(tab)
             }
         }
 
@@ -1433,16 +1472,19 @@
             try {
                 await navigator.clipboard.writeText(textToCopy)
                 const copyBtn = document.getElementById('tailor-copy-active-btn')
-                const originalHtml = copyBtn.innerHTML
-                copyBtn.innerHTML = `<span>✓</span><span>Kopyalandı!</span>`
+                const copyLabel = document.getElementById('tailor-copy-label')
+                if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer)
+
+                if (copyLabel) copyLabel.textContent = 'Kopyalandı!'
                 copyBtn.classList.replace('bg-cyan-500/20', 'bg-emerald-500/20')
                 copyBtn.classList.replace('text-cyan-300', 'text-emerald-300')
                 copyBtn.classList.replace('border-cyan-500/30', 'border-emerald-500/40')
 
                 toast('Metin panoya kopyalandı!', 'success')
 
-                setTimeout(() => {
-                    copyBtn.innerHTML = originalHtml
+                copyFeedbackTimer = setTimeout(() => {
+                    const lbl = document.getElementById('tailor-copy-label')
+                    if (lbl) lbl.textContent = getCopyLabelForTab(activeTailorTab)
                     copyBtn.classList.replace('bg-emerald-500/20', 'bg-cyan-500/20')
                     copyBtn.classList.replace('text-emerald-300', 'text-cyan-300')
                     copyBtn.classList.replace('border-emerald-500/40', 'border-cyan-500/30')

@@ -243,6 +243,7 @@ func (h *Handlers) InterviewPrepJob(w http.ResponseWriter, r *http.Request) {
 
 	res := InterviewPrepResponseDTO{
 		JobID:               id,
+		RoleFocusSummary:    prep.RoleFocusSummary,
 		TechnicalQuestions:  prep.TechnicalQuestions,
 		BehavioralQuestions: prep.BehavioralQuestions,
 		QuestionsToAsk:      prep.QuestionsToAsk,

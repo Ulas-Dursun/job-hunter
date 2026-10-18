@@ -79,6 +79,7 @@ type TailorResponseDTO struct {
 // InterviewPrepResponseDTO represents the response for generating AI Interview Prep Kit.
 type InterviewPrepResponseDTO struct {
 	JobID               string                    `json:"job_id"`
+	RoleFocusSummary    string                    `json:"role_focus_summary"`
 	TechnicalQuestions  []analyzer.TechnicalQA    `json:"technical_questions"`
 	BehavioralQuestions []analyzer.BehavioralSTAR `json:"behavioral_questions"`
 	QuestionsToAsk      []string                  `json:"questions_to_ask"`

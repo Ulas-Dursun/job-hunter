@@ -48,6 +48,7 @@ func TestParseTailoredResult_NormalizesNilSlices(t *testing.T) {
 
 func TestParseInterviewResult(t *testing.T) {
 	rawJSON := `{
+		"role_focus_summary": "Bu rol yüksek eşzamanlılık ve gerçek zamanlı veri işleme üzerine odaklanıyor.",
 		"technical_questions": [
 			{
 				"question": "How did you handle backpressure in your 5-goroutine worker pool?",
@@ -69,6 +70,9 @@ func TestParseInterviewResult(t *testing.T) {
 	res, err := parseInterviewResult(rawJSON)
 	if err != nil {
 		t.Fatalf("unexpected error parsing interview prep json: %v", err)
+	}
+	if res.RoleFocusSummary == "" {
+		t.Errorf("expected non-empty role focus summary")
 	}
 	if len(res.TechnicalQuestions) != 1 {
 		t.Errorf("expected 1 technical question, got %d", len(res.TechnicalQuestions))

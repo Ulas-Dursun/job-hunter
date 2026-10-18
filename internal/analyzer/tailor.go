@@ -40,6 +40,7 @@ type BehavioralSTAR struct {
 
 // InterviewPrepAssets represents the structured AI Interview Prep kit for a specific job.
 type InterviewPrepAssets struct {
+	RoleFocusSummary    string           `json:"role_focus_summary"`
 	TechnicalQuestions  []TechnicalQA    `json:"technical_questions"`
 	BehavioralQuestions []BehavioralSTAR `json:"behavioral_questions"`
 	QuestionsToAsk      []string         `json:"questions_to_ask"`
@@ -257,15 +258,17 @@ func (s *TailorService) buildInterviewPrompt(title, company, location, descripti
 Create a practical, high-signal Interview Preparation Kit specifically connecting %s's tech stack/domain with Ulaş's actual CV projects.
 
 REQUIREMENTS:
-1. technical_questions (EXACTLY 5 items):
+1. role_focus_summary:
+   - 2-3 concise sentences in Turkish summarizing what %s cares about most technically for this role and which of Ulaş's projects (Go/Redis worker pool, Sanlab Go/Rust TCP/UDP, Java 21 Spring Boot pessimistic locking, or ESP32 real-time telemetry) should be his centerpiece in the interview.
+2. technical_questions (EXACTLY 5 items):
    - Combine the job posting's technical requirements with Ulaş's specific projects (Sanlab Go/Rust JWT & TCP/UDP sockets, Go 5-goroutine Redis worker pool with exponential backoff & Prometheus, Java 21 Spring Boot PostgreSQL pessimistic locking & Testcontainers, ESP32/React real-time telemetry).
    - "question": The exact technical / system-design question the interviewer will ask (in English, with Turkish explanation in parentheses if helpful).
    - "why_they_ask": 1 concise sentence in Turkish explaining what the interviewer is testing.
    - "answer_strategy": Concrete, senior-level talking points (in Turkish, keeping technical terms in English) showing how Ulaş should answer using his real metrics and architectural trade-offs.
-2. behavioral_questions (EXACTLY 3 items):
+3. behavioral_questions (EXACTLY 3 items):
    - "question": The behavioral question in English.
    - "star_story_guide": A ready-to-use STAR (Situation, Task, Action, Result) response guide in Turkish based on Ulaş's real experience (Sanlab 7-person Scrum team, debugging concurrency/latency in projects, or high-responsibility Work & Travel customer/safety management).
-3. questions_to_ask (EXACTLY 2 items):
+4. questions_to_ask (EXACTLY 2 items):
    - 2 sharp, impressive engineering questions (in English, with a brief Turkish note on why it's effective) that Ulaş should ask the interviewers at the end of the call.
 
 CANDIDATE MASTER PROFILE:
@@ -281,6 +284,7 @@ Description:
 OUTPUT FORMAT:
 Respond with a strict, valid JSON object without markdown formatting, backticks, or preamble:
 {
+  "role_focus_summary": "string",
   "technical_questions": [
     {
       "question": "string",
@@ -295,7 +299,7 @@ Respond with a strict, valid JSON object without markdown formatting, backticks,
     }
   ],
   "questions_to_ask": ["string", "string"]
-}`, company, title, location, company, MasterCandidateProfile, title, company, location, desc)
+}`, company, title, location, company, company, MasterCandidateProfile, title, company, location, desc)
 }
 
 func (s *TailorService) callGeminiRaw(ctx context.Context, prompt string) (string, error) {
