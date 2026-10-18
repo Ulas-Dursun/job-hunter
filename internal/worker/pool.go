@@ -205,7 +205,7 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 	}
 
 	if p.notifyEnabled && !alreadyNotified && result.MatchScore >= threshold {
-		if err := p.notifier.Notify(ctx, title, company, location, url, result); err != nil {
+		if err := p.notifier.Notify(ctx, title, company, location, url, source, result); err != nil {
 			slog.Warn("telegram notification failed", "error", err)
 			p.metrics.TelegramFailed.Inc()
 		} else {

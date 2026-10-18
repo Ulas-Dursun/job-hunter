@@ -205,9 +205,24 @@ candidate:
     - "Otomobilen"
     - "PayTR"
 
+    # ── Avrupa & Cloud-Native Teknoloji Devleri ─
+    - "Adyen"
+    - "Wise"
+    - "Grafana Labs"
+    - "Cloudflare"
+    - "Datadog"
+    - "Elastic"
+    - "Celonis"
+    - "N26"
+    - "HelloFresh"
+    - "Wolt"
+    - "Deliveroo"
+    - "Delivery Hero"
+    - "CERN"
+
 scoring:
-  telegram_threshold_primary:   8.5
-  telegram_threshold_secondary: 8.5
+  telegram_threshold_primary:   7.5
+  telegram_threshold_secondary: 7.5
   save_threshold:               0.0 # Tüm puanlanan ilanlar DB'ye kaydedilir
 
 sources:
@@ -227,6 +242,24 @@ sources:
         token: "dreamgames"
       - name: "Adyen"
         token: "adyen"
+      - name: "Grafana Labs"
+        token: "grafanalabs"
+      - name: "Cloudflare"
+        token: "cloudflare"
+      - name: "Datadog"
+        token: "datadog"
+      - name: "Elastic"
+        token: "elastic"
+      - name: "Celonis"
+        token: "celonis"
+      - name: "N26"
+        token: "n26"
+      - name: "HelloFresh"
+        token: "hellofresh"
+      - name: "Wolt"
+        token: "wolt"
+      - name: "Deliveroo"
+        token: "deliveroo"
     lever:
       - name: "Trendyol"
         slug: "trendyol"
@@ -241,6 +274,10 @@ sources:
         company_id: "frequentis"
       - name: "Delivery Hero"
         company_id: "DeliveryHero"
+      - name: "Wise"
+        company_id: "Wise"
+      - name: "CERN"
+        company_id: "CERN"
 
   eurocontrol:
     enabled: false # Aday EUROCONTROL traineeship kabulü aldığı için devre dışı bırakıldı

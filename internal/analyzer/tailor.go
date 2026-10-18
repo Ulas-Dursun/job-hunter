@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -90,44 +89,20 @@ TECHNICAL SKILLS:
 - Spoken Languages: English (Fluent), Turkish (Native), German (Beginner)
 `
 
-// TailorService coordinates ATS CV customization, Cover Letter generation, and Interview Prep via Gemini / Groq.
+// TailorService coordinates ATS CV customization, Cover Letter generation, and Interview Prep via Gemini / Groq failover chain.
 type TailorService struct {
-	provider Provider
-	apiKey   string
-	model    string
-	client   *http.Client
+	endpoints []providerEndpoint
+	client    *http.Client
 }
 
 func NewTailorService(cfg *config.GeminiConfig) *TailorService {
-	geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-	groqKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
-
-	provider := ProviderGroq
-	apiKey := groqKey
-	model := "gemini-flash-lite-latest"
-	if cfg != nil && cfg.Model != "" {
-		model = cfg.Model
+	var cfgModel string
+	if cfg != nil {
+		cfgModel = cfg.Model
 	}
-
-	if geminiKey != "" {
-		provider = ProviderGemini
-		apiKey = geminiKey
-		if model == "" || !strings.HasPrefix(model, "gemini") {
-			model = "gemini-flash-lite-latest"
-		}
-	} else if groqKey != "" {
-		provider = ProviderGroq
-		apiKey = groqKey
-		if model == "" || strings.HasPrefix(model, "gemini") {
-			model = "qwen/qwen3.8-27b"
-		}
-	}
-
 	return &TailorService{
-		provider: provider,
-		apiKey:   apiKey,
-		model:    model,
-		client:   &http.Client{Timeout: 45 * time.Second},
+		endpoints: buildFailoverChain(cfgModel),
+		client:    &http.Client{Timeout: 45 * time.Second},
 	}
 }
 
@@ -158,43 +133,56 @@ func (s *TailorService) GenerateInterviewPrep(
 }
 
 func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (string, error) {
-	if s.apiKey == "" {
+	if len(s.endpoints) == 0 {
 		return "", fmt.Errorf("missing AI API key (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
 	}
 
-	maxRetries := 3
-	for i := 0; i < maxRetries; i++ {
-		var rawText string
-		var err error
+	maxRounds := 3
+	for round := 0; round < maxRounds; round++ {
+		for idx, ep := range s.endpoints {
+			var rawText string
+			var err error
 
-		if s.provider == ProviderGemini {
-			rawText, err = s.callGeminiRaw(ctx, prompt)
-		} else {
-			rawText, err = s.callGroqRaw(ctx, prompt)
-		}
+			if ep.provider == ProviderGemini {
+				rawText, err = s.callGeminiRaw(ctx, ep, prompt)
+			} else {
+				rawText, err = s.callGroqRaw(ctx, ep, prompt)
+			}
 
-		if err != nil {
+			if err == nil {
+				if idx > 0 {
+					slog.Info("tailor service yedek sağlayıcı ile başarılı oldu", "endpoint", ep.label)
+				}
+				return rawText, nil
+			}
+
+			if idx+1 < len(s.endpoints) {
+				slog.Warn("tailor endpoint hatası, sıradaki yedek anahtara/sağlayıcıya geçiliyor...",
+					"failed_endpoint", ep.label,
+					"next_endpoint", s.endpoints[idx+1].label,
+					"error", err.Error(),
+				)
+				continue
+			}
+
 			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
-				backoff := time.Duration((i+1)*3) * time.Second
-				slog.Warn("tailor service rate limited or busy (429/503), retrying...",
-					"provider", s.provider,
-					"attempt", i+1,
+				backoff := time.Duration((round+1)*3) * time.Second
+				slog.Warn("tailor service tüm sağlayıcılar meşgul (429/503), bekleniyor...",
+					"round", round+1,
 					"wait", backoff.String(),
 				)
 				select {
 				case <-time.After(backoff):
-					continue
 				case <-ctx.Done():
 					return "", ctx.Err()
 				}
+			} else {
+				return "", err
 			}
-			return "", err
 		}
-
-		return rawText, nil
 	}
 
-	return "", fmt.Errorf("%s busy or rate-limited after %d retries", s.provider, maxRetries)
+	return "", fmt.Errorf("all AI endpoints busy or rate-limited after %d rounds", maxRounds)
 }
 
 func (s *TailorService) buildPrompt(title, company, location, description string) string {
@@ -302,8 +290,8 @@ Respond with a strict, valid JSON object without markdown formatting, backticks,
 }`, company, title, location, company, company, MasterCandidateProfile, title, company, location, desc)
 }
 
-func (s *TailorService) callGeminiRaw(ctx context.Context, prompt string) (string, error) {
-	reqURL := fmt.Sprintf(geminiAPIURL, s.model)
+func (s *TailorService) callGeminiRaw(ctx context.Context, ep providerEndpoint, prompt string) (string, error) {
+	reqURL := fmt.Sprintf(geminiAPIURL, ep.model)
 
 	reqPayload := map[string]any{
 		"contents": []map[string]any{
@@ -330,7 +318,7 @@ func (s *TailorService) callGeminiRaw(ctx context.Context, prompt string) (strin
 		return "", fmt.Errorf("creating gemini request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", s.apiKey)
+	req.Header.Set("x-goog-api-key", ep.apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -364,9 +352,9 @@ func (s *TailorService) callGeminiRaw(ctx context.Context, prompt string) (strin
 	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
 }
 
-func (s *TailorService) callGroqRaw(ctx context.Context, prompt string) (string, error) {
+func (s *TailorService) callGroqRaw(ctx context.Context, ep providerEndpoint, prompt string) (string, error) {
 	reqBody := map[string]any{
-		"model": s.model,
+		"model": ep.model,
 		"messages": []map[string]any{
 			{
 				"role":    "user",
@@ -387,7 +375,7 @@ func (s *TailorService) callGroqRaw(ctx context.Context, prompt string) (string,
 		return "", fmt.Errorf("creating groq request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Authorization", "Bearer "+ep.apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {

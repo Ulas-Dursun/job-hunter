@@ -35,21 +35,31 @@ TECH_TITLE_KEYWORDS = [
 DISALLOWED_REGIONS = {
     "united states", "usa", "u.s.", "san francisco", "new york", "chicago",
     "seattle", "austin", "boston", "los angeles", "california", "texas",
+    "denver", "atlanta", "washington", "virginia", "florida", "miami",
     "singapore", "australia", "sydney", "melbourne", "japan", "tokyo",
-    "india", "bengaluru", "mumbai", "brazil", "são paulo", "sao paulo",
-    "sao jose dos campos", "canada", "toronto", "kuala lumpur", "shanghai",
-    "mexico city", "latin america", "bogota", "santiago"
+    "india", "bengaluru", "bangalore", "mumbai", "hyderabad", "pune",
+    "brazil", "são paulo", "sao paulo", "sao jose dos campos",
+    "canada", "toronto", "vancouver", "montreal", "kuala lumpur", "shanghai",
+    "beijing", "seoul", "korea", "taipei", "taiwan", "manila", "jakarta",
+    "mexico", "latin america", "bogota", "santiago", "buenos aires", "apac", "americas", "namer"
 }
 
 EU_TR_INDICATORS = [
-    "turkey", "türkiye", "istanbul", "ankara", "izmir",
-    "brussel", "belgium", "belgique", "belgië",
-    "amsterdam", "netherlands", "germany", "berlin", "munich", "frankfurt",
-    "london", "uk", "united kingdom", "france", "paris",
-    "switzerland", "zurich", "geneva", "austria", "vienna",
-    "romania", "cluj", "poland", "warsaw", "spain", "madrid", "barcelona",
-    "italy", "milan", "ireland", "dublin", "sweden", "stockholm",
-    "remote", "emea", "europe", "hybrid"
+    "turkey", "türkiye", "istanbul", "ankara", "izmir", "bursa", "antalya", "kocaeli",
+    "brussel", "belgium", "belgique", "belgië", "antwerp", "ghent",
+    "amsterdam", "netherlands", "rotterdam", "utrecht", "eindhoven", "the hague", "alkmaar",
+    "germany", "deutschland", "berlin", "munich", "münchen", "frankfurt", "hamburg", "cologne", "köln", "stuttgart", "düsseldorf", "dusseldorf",
+    "london", "uk", "united kingdom", "england", "scotland", "manchester", "edinburgh", "cambridge", "bristol",
+    "france", "paris", "lyon", "toulouse",
+    "switzerland", "zurich", "zürich", "geneva", "genève", "lausanne", "basel", "bern",
+    "austria", "vienna", "wien", "graz",
+    "romania", "cluj", "bucharest", "poland", "warsaw", "krakow", "wroclaw", "gdansk",
+    "spain", "madrid", "barcelona", "malaga", "valencia", "portugal", "lisbon", "porto",
+    "italy", "milan", "rome", "ireland", "dublin",
+    "sweden", "stockholm", "gothenburg", "finland", "helsinki", "espoo",
+    "denmark", "copenhagen", "norway", "oslo", "estonia", "tallinn",
+    "hungary", "budapest", "czech", "prague", "bulgaria", "sofia", "greece", "athens",
+    "emea", "europe", "european union"
 ]
 
 
@@ -72,15 +82,23 @@ def is_tech_title(title: str) -> bool:
 
 
 def is_allowed_location(loc: str) -> bool:
-    """Yalnızca Türkiye, Avrupa (Brüksel, Amsterdam, Berlin vb.) ve Remote lokasyonları kabul eder."""
+    """Yalnızca Türkiye, Avrupa (Brüksel, Amsterdam, Berlin, Londra vb.) ve EMEA Remote lokasyonları kabul eder."""
     if not loc:
         return True
     loc_lower = loc.lower()
-    if any(ind in loc_lower for ind in EU_TR_INDICATORS):
+    # Eğer lokasyon hem Avrupa/Türkiye hem ABD içeriyorsa (multi-location ilanlar) Avrupa olduğu için izin ver,
+    # ancak yalnızca ABD/APAC ise kesinlikle reddet.
+    has_eu_tr = any(ind in loc_lower for ind in EU_TR_INDICATORS)
+    has_disallowed = any(dis in loc_lower for dis in DISALLOWED_REGIONS)
+
+    if has_eu_tr:
         return True
-    if any(dis in loc_lower for dis in DISALLOWED_REGIONS):
+    if has_disallowed:
         return False
-    return True
+    # Global şirketlerde sadece "Remote" yazıyorsa ve ülke kısıtı yoksa kabul et, aksi halde EU/TR şartı ara
+    if "remote" in loc_lower or "hybrid" in loc_lower:
+        return True
+    return False
 
 
 class ATSSource(BaseSource):

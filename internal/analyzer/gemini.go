@@ -35,15 +35,74 @@ const (
 	ProviderGroq   Provider = "groq"
 )
 
-// GeminiAnalyzer, Google Gemini veya Groq API üzerinden iş ilanı analizi yapar.
-type GeminiAnalyzer struct {
+// providerEndpoint represents a single API key + provider pair in the failover chain.
+type providerEndpoint struct {
 	provider Provider
 	apiKey   string
 	model    string
-	client   *http.Client
-	limiter  *rate.Limiter
-	builder  *PromptBuilder
-	maxTok   int
+	label    string
+}
+
+// collectEnvKeys reads primary and numbered/comma-separated env vars (e.g. GEMINI_API_KEY, GEMINI_API_KEY_2).
+func collectEnvKeys(baseEnv string) []string {
+	var raw []string
+	for _, envName := range []string{baseEnv, baseEnv + "_2", baseEnv + "_3"} {
+		val := strings.TrimSpace(os.Getenv(envName))
+		if val == "" {
+			continue
+		}
+		for _, part := range strings.Split(val, ",") {
+			k := strings.TrimSpace(part)
+			if k != "" {
+				raw = append(raw, k)
+			}
+		}
+	}
+	return raw
+}
+
+// buildFailoverChain constructs an ordered slice of Gemini and Groq endpoints from environment variables.
+func buildFailoverChain(cfgModel string) []providerEndpoint {
+	geminiKeys := collectEnvKeys("GEMINI_API_KEY")
+	groqKeys := collectEnvKeys("GROQ_API_KEY")
+
+	geminiModel := "gemini-flash-lite-latest"
+	if cfgModel != "" && strings.HasPrefix(cfgModel, "gemini") {
+		geminiModel = cfgModel
+	}
+
+	groqModel := "llama-3.3-70b-versatile"
+	if cfgModel != "" && !strings.HasPrefix(cfgModel, "gemini") {
+		groqModel = cfgModel
+	}
+
+	var chain []providerEndpoint
+	for idx, k := range geminiKeys {
+		chain = append(chain, providerEndpoint{
+			provider: ProviderGemini,
+			apiKey:   k,
+			model:    geminiModel,
+			label:    fmt.Sprintf("gemini#%d", idx+1),
+		})
+	}
+	for idx, k := range groqKeys {
+		chain = append(chain, providerEndpoint{
+			provider: ProviderGroq,
+			apiKey:   k,
+			model:    groqModel,
+			label:    fmt.Sprintf("groq#%d", idx+1),
+		})
+	}
+	return chain
+}
+
+// GeminiAnalyzer, Google Gemini ve Groq API havuzu üzerinden kesintisiz (failover destekli) iş ilanı analizi yapar.
+type GeminiAnalyzer struct {
+	endpoints []providerEndpoint
+	client    *http.Client
+	limiter   *rate.Limiter
+	builder   *PromptBuilder
+	maxTok    int
 }
 
 const (
@@ -53,102 +112,115 @@ const (
 )
 
 func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConfig) *GeminiAnalyzer {
-	geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-	groqKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
-
-	provider := ProviderGroq
-	apiKey := groqKey
-	model := cfg.Model
-	rpm := cfg.RateLimitRPM
-	if rpm <= 0 {
-		rpm = 4
+	var cfgModel string
+	rpm := 20
+	maxTok := 1000
+	if cfg != nil {
+		cfgModel = cfg.Model
+		if cfg.RateLimitRPM > 0 {
+			rpm = cfg.RateLimitRPM
+		}
+		if cfg.MaxTokens > 0 {
+			maxTok = cfg.MaxTokens
+		}
 	}
 
-	if geminiKey != "" {
-		provider = ProviderGemini
-		apiKey = geminiKey
-		model = "gemini-flash-lite-latest"
-		if cfg.Model != "" && strings.HasPrefix(cfg.Model, "gemini") {
-			model = cfg.Model
-		}
-		rpm = 20 // Gemini free tier: 15-30 RPM, 1.000.000 TPM, 1.500 RPD
-		slog.Info("ai analyzer: Google Gemini Flash aktif", "provider", "gemini", "model", model, "rpm", rpm)
-	} else if groqKey != "" {
-		provider = ProviderGroq
-		apiKey = groqKey
-		if model == "" || strings.HasPrefix(model, "gemini") {
-			model = "qwen/qwen3.8-27b"
-		}
-		slog.Info("ai analyzer: Groq aktif (GEMINI_API_KEY bulunamadı)", "provider", "groq", "model", model, "rpm", rpm)
-	} else {
+	endpoints := buildFailoverChain(cfgModel)
+	if len(endpoints) == 0 {
 		slog.Warn("ai analyzer: ne GEMINI_API_KEY ne de GROQ_API_KEY ortamda bulunamadı!")
+	} else {
+		var labels []string
+		for _, ep := range endpoints {
+			labels = append(labels, fmt.Sprintf("%s(%s)", ep.label, ep.model))
+		}
+		slog.Info("ai analyzer failover zinciri aktif",
+			"endpoints", strings.Join(labels, " -> "),
+			"rpm", rpm,
+		)
 	}
 
 	interval := time.Duration(60000/rpm) * time.Millisecond
 	limiter := rate.NewLimiter(rate.Every(interval), 1)
 
 	return &GeminiAnalyzer{
-		provider: provider,
-		apiKey:   apiKey,
-		model:    model,
-		client:   &http.Client{Timeout: 35 * time.Second},
-		limiter:  limiter,
-		builder:  NewPromptBuilder(candidate),
-		maxTok:   cfg.MaxTokens,
+		endpoints: endpoints,
+		client:    &http.Client{Timeout: 35 * time.Second},
+		limiter:   limiter,
+		builder:   NewPromptBuilder(candidate),
+		maxTok:    maxTok,
 	}
 }
 
-// Analyze, bir iş ilanını AI ile analiz eder. 429 (Rate Limit) veya 503 durumunda otomatik tekrar dener.
+// Analyze, bir iş ilanını AI ile analiz eder.
+// Birincil API anahtarı 429 (Rate Limit) veya 503 döndüğünde sıradaki anahtara veya Groq sağlayıcısına otomatik geçer (failover).
 func (g *GeminiAnalyzer) Analyze(
 	ctx context.Context,
 	title, company, location, description string,
 ) (*ScoreResult, error) {
-	maxRetries := 5
+	if len(g.endpoints) == 0 {
+		return nil, fmt.Errorf("no AI API keys configured (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
+	}
 
-	for i := 0; i < maxRetries; i++ {
+	prompt := g.builder.Build(title, company, location, description)
+	maxRounds := 3
+
+	for round := 0; round < maxRounds; round++ {
 		if err := g.limiter.Wait(ctx); err != nil {
 			return nil, fmt.Errorf("rate limiter: %w", err)
 		}
 
-		prompt := g.builder.Build(title, company, location, description)
-		var res *ScoreResult
-		var err error
+		for idx, ep := range g.endpoints {
+			var res *ScoreResult
+			var err error
 
-		if g.provider == ProviderGemini {
-			res, err = g.callGemini(ctx, prompt)
-		} else {
-			res, err = g.callGroq(ctx, prompt)
-		}
+			if ep.provider == ProviderGemini {
+				res, err = g.callGeminiWith(ctx, ep, prompt)
+			} else {
+				res, err = g.callGroqWith(ctx, ep, prompt)
+			}
 
-		if err != nil {
-			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
-				backoffDuration := time.Duration((i+1)*5) * time.Second
-				slog.Warn("ai rate limited or busy (429/503), backing off...",
-					"provider", g.provider,
-					"attempt", i+1,
-					"wait", backoffDuration.String(),
+			if err == nil {
+				if idx > 0 {
+					slog.Info("ai analyzer yedek sağlayıcı ile başarılı oldu", "endpoint", ep.label, "company", company)
+				}
+				return res, nil
+			}
+
+			// Eğer bir sonraki yedek endpoint varsa beklemeden hemen ona geç!
+			if idx+1 < len(g.endpoints) {
+				slog.Warn("ai endpoint hatası, sıradaki yedek anahtara/sağlayıcıya geçiliyor...",
+					"failed_endpoint", ep.label,
+					"next_endpoint", g.endpoints[idx+1].label,
 					"company", company,
 					"error", err.Error(),
 				)
+				continue
+			}
 
+			// Son endpoint de 429/503 verdiyse kısa bir backoff sonrası turu tekrarla
+			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
+				backoffDuration := time.Duration((round+1)*5) * time.Second
+				slog.Warn("tüm ai sağlayıcıları meşgul (429/503), bekleniyor...",
+					"round", round+1,
+					"wait", backoffDuration.String(),
+					"company", company,
+				)
 				select {
 				case <-time.After(backoffDuration):
-					continue
 				case <-ctx.Done():
 					return nil, ctx.Err()
 				}
+			} else {
+				return nil, err
 			}
-			return nil, err
 		}
-
-		return res, nil
 	}
 
-	return nil, fmt.Errorf("%s rate limited heavily, gave up after %d retries", g.provider, maxRetries)
+	return nil, fmt.Errorf("all AI endpoints rate-limited or failed after %d rounds", maxRounds)
 }
 
-func (g *GeminiAnalyzer) callGemini(ctx context.Context, prompt string) (*ScoreResult, error) {
-	reqURL := fmt.Sprintf(geminiAPIURL, g.model)
+func (g *GeminiAnalyzer) callGeminiWith(ctx context.Context, ep providerEndpoint, prompt string) (*ScoreResult, error) {
+	reqURL := fmt.Sprintf(geminiAPIURL, ep.model)
 
 	reqPayload := map[string]any{
 		"contents": []map[string]any{
@@ -175,7 +247,7 @@ func (g *GeminiAnalyzer) callGemini(ctx context.Context, prompt string) (*ScoreR
 		return nil, fmt.Errorf("creating gemini request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", g.apiKey)
+	req.Header.Set("x-goog-api-key", ep.apiKey)
 
 	resp, err := g.client.Do(req)
 	if err != nil {
@@ -218,9 +290,9 @@ func (g *GeminiAnalyzer) callGemini(ctx context.Context, prompt string) (*ScoreR
 	return parseResult(rawText)
 }
 
-func (g *GeminiAnalyzer) callGroq(ctx context.Context, prompt string) (*ScoreResult, error) {
+func (g *GeminiAnalyzer) callGroqWith(ctx context.Context, ep providerEndpoint, prompt string) (*ScoreResult, error) {
 	reqBody := map[string]any{
-		"model": g.model,
+		"model": ep.model,
 		"messages": []map[string]any{
 			{
 				"role":    "user",
@@ -241,7 +313,7 @@ func (g *GeminiAnalyzer) callGroq(ctx context.Context, prompt string) (*ScoreRes
 		return nil, fmt.Errorf("creating groq request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+g.apiKey)
+	req.Header.Set("Authorization", "Bearer "+ep.apiKey)
 
 	resp, err := g.client.Do(req)
 	if err != nil {

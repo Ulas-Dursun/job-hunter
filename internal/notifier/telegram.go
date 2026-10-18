@@ -35,48 +35,74 @@ func (t *Telegram) IsConfigured() bool {
 	return t.token != "" && t.chatID != ""
 }
 
-// Notify, yüksek skorlu bir ilan için Telegram mesajı gönderir.
+// Notify, yüksek skorlu bir ilan için zenginleştirilmiş Telegram mesajı gönderir.
 func (t *Telegram) Notify(
 	ctx context.Context,
-	title, company, location, url string,
+	title, company, location, url, source string,
 	score *analyzer.ScoreResult,
 ) error {
 	if !t.IsConfigured() {
 		return nil
 	}
 
-	msg := t.formatMessage(title, company, location, url, score)
+	msg := t.formatMessage(title, company, location, url, source, score)
 	return t.send(ctx, msg)
 }
 
-// formatMessage, ilanı okunabilir Telegram mesajına dönüştürür.
+func formatSourceLabel(source string) string {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "greenhouse":
+		return "Greenhouse ATS"
+	case "lever":
+		return "Lever ATS"
+	case "smartrecruiters":
+		return "SmartRecruiters"
+	case "linkedin":
+		return "LinkedIn"
+	case "indeed":
+		return "Indeed"
+	case "arbeitnow":
+		return "Arbeitnow EU"
+	case "techcareer":
+		return "techcareer.net"
+	case "eurocontrol":
+		return "EUROCONTROL"
+	default:
+		if source == "" {
+			return "Job Board"
+		}
+		return source
+	}
+}
+
+// formatMessage, ilanı zengin ve okunabilir Telegram HTML kartına dönüştürür.
 func (t *Telegram) formatMessage(
-	title, company, location, url string,
+	title, company, location, url, source string,
 	score *analyzer.ScoreResult,
 ) string {
-	emoji := "👀"
-	if score.MatchScore >= 8.0 {
-		emoji = "🔥"
-	} else if score.MatchScore >= 7.0 {
-		emoji = "✅"
+	headerBadge := "✅ <b>YÜKSEK UYUMLU İLAN (≥ 7.5)</b>"
+	if score.MatchScore >= 8.5 {
+		headerBadge = "🔥 <b>HEDEF FIRSAT — KESİN BAŞVUR!</b>"
+	} else if score.MatchScore >= 8.0 {
+		headerBadge = "🚀 <b>ÇOK GÜÇLÜ EŞLEŞME</b>"
 	}
 
 	overlap := "—"
 	if len(score.SkillOverlap) > 0 {
-		overlap = strings.Join(score.SkillOverlap, ", ")
+		overlap = "✓ " + strings.Join(score.SkillOverlap, " • ✓ ")
 	}
 
-	missing := "—"
+	missing := "Tespit edilmedi"
 	if len(score.MissingSkills) > 0 {
-		missing = strings.Join(score.MissingSkills, ", ")
+		missing = "⚡ " + strings.Join(score.MissingSkills, " • ⚡ ")
 	}
 
-	flags := ""
-	if len(score.RedFlags) > 0 {
-		flags = fmt.Sprintf("\n⚠️ <b>Red flags:</b> %s", strings.Join(score.RedFlags, ", "))
+	roleTag := "Backend / Core"
+	if score.RoleFamily == "secondary" {
+		roleTag = "Data / Secondary"
 	}
 
-	// 💥 KESİN ÇÖZÜM: Telegram HTML parser'ın patlamaması için her şeyi temizliyoruz
+	// Telegram HTML parser güvenliği için özel karakterleri escape et
 	replacer := strings.NewReplacer(
 		"&", "&amp;",
 		"<", "&lt;",
@@ -86,32 +112,45 @@ func (t *Telegram) formatMessage(
 	cleanCompany := replacer.Replace(company)
 	cleanTitle := replacer.Replace(title)
 	cleanLocation := replacer.Replace(location)
+	if cleanLocation == "" {
+		cleanLocation = "Belirtilmemiş / Remote"
+	}
+	cleanSource := replacer.Replace(formatSourceLabel(source))
 	cleanReasoning := replacer.Replace(score.Reasoning)
 	cleanOverlap := replacer.Replace(overlap)
 	cleanMissing := replacer.Replace(missing)
-	cleanFlags := replacer.Replace(flags)
 
-	// URL içindeki & karakterlerini de Telegram'ın istediği formata çeviriyoruz
+	flagsLine := ""
+	if len(score.RedFlags) > 0 {
+		cleanFlags := replacer.Replace(strings.Join(score.RedFlags, ", "))
+		flagsLine = fmt.Sprintf("\n⚠️ <b>Dikkat / Red Flags:</b> %s", cleanFlags)
+	}
+
 	cleanURL := strings.ReplaceAll(url, "&", "&amp;")
 
 	return fmt.Sprintf(
-		"%s <b>Yeni Uygun İlan</b>\n\n"+
-			"🏢 <b>%s</b>\n"+
-			"📌 %s\n"+
-			"📍 %s\n\n"+
-			"🎯 <b>Match Score: %.1f/10</b>\n"+
-			"✨ <b>Eşleşen:</b> %s\n"+
-			"📚 <b>Eksik:</b> %s%s\n\n"+
-			"💡 <i>%s</i>\n\n"+
-			"🔗 <a href=\"%s\">İlana Git</a>",
-		emoji,
+		"%s\n"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"🏢 <b>%s</b>  <i>(%s)</i>\n"+
+			"💼 <b>%s</b>\n"+
+			"📍 %s  |  🏷️ <code>%s</code>\n\n"+
+			"🎯 <b>AI Uyum Skoru: %.1f / 10</b>\n"+
+			"🟢 <b>Eşleşen Beceriler:</b> %s\n"+
+			"🟡 <b>Eksik Beceriler:</b> %s%s\n\n"+
+			"💡 <b>AI Değerlendirmesi:</b>\n<i>“%s”</i>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"🔗 <a href=\"%s\"><b>İlana Git &amp; Başvur ↗</b></a>\n"+
+			"✨ <i>Dashboard (localhost:8080) üzerinden tek tıkla <b>ATS CV, Ön Yazı &amp; Mülakat Kiti</b> üretebilirsin.</i>",
+		headerBadge,
 		cleanCompany,
+		cleanSource,
 		cleanTitle,
 		cleanLocation,
+		roleTag,
 		score.MatchScore,
 		cleanOverlap,
 		cleanMissing,
-		cleanFlags,
+		flagsLine,
 		cleanReasoning,
 		cleanURL,
 	)

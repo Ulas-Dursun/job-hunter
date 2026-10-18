@@ -69,6 +69,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer pg.Close()
+	pg.StartRetentionCleaner(ctx)
 
 	// ── 6. Redis ──────────────────────────────────────────────────────────────
 	rc, err := store.NewRedisClient(ctx, config.RedisAddr(), &cfg.Redis)
