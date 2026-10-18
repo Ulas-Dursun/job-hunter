@@ -10,6 +10,7 @@
 # Go
 bin/
 *.exe
+*.exe~
 *.test
 coverage.out
 *.coverprofile
