@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -45,17 +46,19 @@ type providerEndpoint struct {
 	label    string
 }
 
-// collectEnvKeys reads primary and numbered/comma-separated env vars (e.g. GEMINI_API_KEY, GEMINI_API_KEY_2).
+// collectEnvKeys reads primary and numbered/comma-separated env vars (e.g. GEMINI_API_KEY, GEMINI_API_KEY_2 .. _5).
 func collectEnvKeys(baseEnv string) []string {
 	var raw []string
-	for _, envName := range []string{baseEnv, baseEnv + "_2", baseEnv + "_3"} {
+	seen := make(map[string]bool)
+	for _, envName := range []string{baseEnv, baseEnv + "_2", baseEnv + "_3", baseEnv + "_4", baseEnv + "_5"} {
 		val := strings.TrimSpace(os.Getenv(envName))
 		if val == "" {
 			continue
 		}
 		for _, part := range strings.Split(val, ",") {
 			k := strings.TrimSpace(part)
-			if k != "" {
+			if k != "" && !seen[k] {
+				seen[k] = true
 				raw = append(raw, k)
 			}
 		}
@@ -144,6 +147,7 @@ func buildFailoverChain(cfgModel string) []providerEndpoint {
 // GeminiAnalyzer, Google Gemini ve Groq API havuzu üzerinden kesintisiz (failover destekli) iş ilanı analizi yapar.
 type GeminiAnalyzer struct {
 	endpoints []providerEndpoint
+	cursor    atomic.Uint64
 	client    *http.Client
 	limiter   *rate.Limiter
 	builder   *PromptBuilder
@@ -158,7 +162,7 @@ const (
 
 func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConfig) *GeminiAnalyzer {
 	var cfgModel string
-	rpm := 20
+	rpm := 30
 	maxTok := 1000
 	if cfg != nil {
 		cfgModel = cfg.Model
@@ -176,10 +180,11 @@ func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConf
 	} else {
 		var labels []string
 		for _, ep := range endpoints {
-			labels = append(labels, fmt.Sprintf("%s(%s)", ep.label, ep.model))
+			labels = append(labels, ep.label)
 		}
-		slog.Info("ai analyzer failover zinciri aktif",
-			"endpoints", strings.Join(labels, " -> "),
+		slog.Info("ai analyzer failover havuzu aktif",
+			"toplam_istasyon", len(endpoints),
+			"zincir", strings.Join(labels, " -> "),
 			"rpm", rpm,
 		)
 	}
@@ -197,24 +202,29 @@ func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConf
 }
 
 // Analyze, bir iş ilanını AI ile analiz eder.
-// Birincil API anahtarı 429 (Rate Limit) veya 503 döndüğünde sıradaki anahtara veya Groq sağlayıcısına otomatik geçer (failover).
+// Aktif anahtar 429 (Rate Limit) veya 503 döndüğünde imleci (cursor) kalıcı olarak sıradaki sağlam anahtara kaydırır.
 func (g *GeminiAnalyzer) Analyze(
 	ctx context.Context,
 	title, company, location, description string,
 ) (*ScoreResult, error) {
-	if len(g.endpoints) == 0 {
+	n := len(g.endpoints)
+	if n == 0 {
 		return nil, fmt.Errorf("no AI API keys configured (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
 	}
 
 	prompt := g.builder.Build(title, company, location, description)
-	maxRounds := 3
+	maxRounds := 2
 
 	for round := 0; round < maxRounds; round++ {
 		if err := g.limiter.Wait(ctx); err != nil {
 			return nil, fmt.Errorf("rate limiter: %w", err)
 		}
 
-		for idx, ep := range g.endpoints {
+		startIdx := int(g.cursor.Load() % uint64(n))
+		for step := 0; step < n; step++ {
+			idx := (startIdx + step) % n
+			ep := g.endpoints[idx]
+
 			var res *ScoreResult
 			var err error
 
@@ -225,27 +235,28 @@ func (g *GeminiAnalyzer) Analyze(
 			}
 
 			if err == nil {
-				if idx > 0 {
-					slog.Info("ai analyzer yedek sağlayıcı ile başarılı oldu", "endpoint", ep.label, "company", company)
+				if step > 0 {
+					slog.Info("ai analyzer yedek istasyon ile başarılı oldu", "endpoint", ep.label, "company", company)
 				}
 				return res, nil
 			}
 
-			// Eğer bir sonraki yedek endpoint varsa beklemeden hemen ona geç!
-			if idx+1 < len(g.endpoints) {
-				slog.Warn("ai endpoint hatası, sıradaki yedek anahtara/sağlayıcıya geçiliyor...",
+			// Bu istasyon hata verdi; imleci bir sonraki istasyona ilerlet ki sonraki ilanlar doğrudan sağlam anahtara gitsin
+			nextIdx := (idx + 1) % n
+			g.cursor.Store(uint64(nextIdx))
+
+			if step+1 < n {
+				slog.Warn("ai istasyonu meşgul/limitli, sıradaki yedek anahtara geçiliyor...",
 					"failed_endpoint", ep.label,
-					"next_endpoint", g.endpoints[idx+1].label,
+					"next_endpoint", g.endpoints[nextIdx].label,
 					"company", company,
-					"error", err.Error(),
 				)
 				continue
 			}
 
-			// Son endpoint de 429/503 verdiyse kısa bir backoff sonrası turu tekrarla
 			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
-				backoffDuration := time.Duration((round+1)*5) * time.Second
-				slog.Warn("tüm ai sağlayıcıları meşgul (429/503), bekleniyor...",
+				backoffDuration := time.Duration((round+1)*4) * time.Second
+				slog.Warn("tüm ai istasyonları meşgul (429/503), kısa süre bekleniyor...",
 					"round", round+1,
 					"wait", backoffDuration.String(),
 					"company", company,
@@ -261,7 +272,7 @@ func (g *GeminiAnalyzer) Analyze(
 		}
 	}
 
-	return nil, fmt.Errorf("all AI endpoints rate-limited or failed after %d rounds", maxRounds)
+	return nil, fmt.Errorf("all %d AI endpoints rate-limited or failed after %d rounds", n, maxRounds)
 }
 
 func (g *GeminiAnalyzer) callGeminiWith(ctx context.Context, ep providerEndpoint, prompt string) (*ScoreResult, error) {

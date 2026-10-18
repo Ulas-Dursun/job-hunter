@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ulasdursun/job-hunter/internal/config"
@@ -92,6 +93,7 @@ TECHNICAL SKILLS:
 // TailorService coordinates ATS CV customization, Cover Letter generation, and Interview Prep via Gemini / Groq failover chain.
 type TailorService struct {
 	endpoints []providerEndpoint
+	cursor    atomic.Uint64
 	client    *http.Client
 }
 
@@ -133,13 +135,18 @@ func (s *TailorService) GenerateInterviewPrep(
 }
 
 func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (string, error) {
-	if len(s.endpoints) == 0 {
+	n := len(s.endpoints)
+	if n == 0 {
 		return "", fmt.Errorf("missing AI API key (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
 	}
 
-	maxRounds := 3
+	maxRounds := 2
 	for round := 0; round < maxRounds; round++ {
-		for idx, ep := range s.endpoints {
+		startIdx := int(s.cursor.Load() % uint64(n))
+		for step := 0; step < n; step++ {
+			idx := (startIdx + step) % n
+			ep := s.endpoints[idx]
+
 			var rawText string
 			var err error
 
@@ -150,24 +157,26 @@ func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (st
 			}
 
 			if err == nil {
-				if idx > 0 {
-					slog.Info("tailor service yedek sağlayıcı ile başarılı oldu", "endpoint", ep.label)
+				if step > 0 {
+					slog.Info("tailor service yedek istasyon ile başarılı oldu", "endpoint", ep.label)
 				}
 				return rawText, nil
 			}
 
-			if idx+1 < len(s.endpoints) {
-				slog.Warn("tailor endpoint hatası, sıradaki yedek anahtara/sağlayıcıya geçiliyor...",
+			nextIdx := (idx + 1) % n
+			s.cursor.Store(uint64(nextIdx))
+
+			if step+1 < n {
+				slog.Warn("tailor istasyonu meşgul/limitli, sıradaki yedek anahtara geçiliyor...",
 					"failed_endpoint", ep.label,
-					"next_endpoint", s.endpoints[idx+1].label,
-					"error", err.Error(),
+					"next_endpoint", s.endpoints[nextIdx].label,
 				)
 				continue
 			}
 
 			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
 				backoff := time.Duration((round+1)*3) * time.Second
-				slog.Warn("tailor service tüm sağlayıcılar meşgul (429/503), bekleniyor...",
+				slog.Warn("tailor service tüm istasyonlar meşgul (429/503), bekleniyor...",
 					"round", round+1,
 					"wait", backoff.String(),
 				)
@@ -182,7 +191,7 @@ func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (st
 		}
 	}
 
-	return "", fmt.Errorf("all AI endpoints busy or rate-limited after %d rounds", maxRounds)
+	return "", fmt.Errorf("all %d AI endpoints busy or rate-limited after %d rounds", n, maxRounds)
 }
 
 func (s *TailorService) buildPrompt(title, company, location, description string) string {

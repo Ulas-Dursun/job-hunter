@@ -368,7 +368,7 @@ server:
 gemini:
   model: "gemini-flash-lite-latest"
   max_tokens: 1000
-  rate_limit_rpm: 20
+  rate_limit_rpm: 30
 
 worker:
   pool_size: 1
