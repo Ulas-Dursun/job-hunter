@@ -3,10 +3,19 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ErrNotFound, istenen ilan kaydı bulunamadığında döner (HTTP 404'e çevrilir).
+var ErrNotFound = errors.New("job not found")
+
+// ErrInvalidStatus, izin verilen durum listesinde olmayan status değeri için döner (HTTP 400).
+var ErrInvalidStatus = errors.New("invalid status")
 
 // Repository handles all database queries for the dashboard API.
 type Repository struct {
@@ -43,6 +52,10 @@ const baseJobColumns = `
 	(interview_prep IS NOT NULL) AS has_interview_prep,
 	scraped_at`
 
+// listJobColumns: liste yanıtında açıklama 2000 karaktere kırpılır (kategori sınıflandırması ilk ~1800 karaktere bakar).
+// Tam metin modal açılınca GET /api/jobs/{id} ile çekilir; böylece 30 sn'lik yenilemede ~1.7MB yerine ~1MB'dan az veri taşınır.
+var listJobColumns = strings.Replace(baseJobColumns, "COALESCE(description, '')", "left(COALESCE(description, ''), 2000)", 1)
+
 // ListJobs returns jobs matching the given filter, sorted and paginated.
 func (r *Repository) ListJobs(ctx context.Context, f JobFilter) ([]JobDTO, int, error) {
 	orderClause := "ORDER BY match_score DESC NULLS LAST, scraped_at DESC"
@@ -61,7 +74,7 @@ func (r *Repository) ListJobs(ctx context.Context, f JobFilter) ([]JobDTO, int, 
 		  AND ($5::text   IS NULL OR title ILIKE '%%' || $5::text || '%%' OR company ILIKE '%%' || $5::text || '%%')
 		%s
 		LIMIT $6::int OFFSET $7::int
-	`, baseJobColumns, orderClause)
+	`, listJobColumns, orderClause)
 
 	rows, err := r.pool.Query(ctx, query,
 		f.Status, f.Action, f.RoleFamily, f.MinScore, f.Search, f.Limit, f.Offset,
@@ -130,6 +143,9 @@ func (r *Repository) GetJob(ctx context.Context, id string) (*JobDTO, error) {
 		&j.HasTailored, &j.HasInterviewPrep, &j.ScrapedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("getting job %s: %w", id, err)
 	}
 	return &j, nil
@@ -145,15 +161,18 @@ var allowedStatuses = map[string]bool{
 // Returns an error if the status value is not in allowedStatuses.
 func (r *Repository) UpdateStatus(ctx context.Context, id, status string) error {
 	if !allowedStatuses[status] {
-		return fmt.Errorf("invalid status: %s", status)
+		return fmt.Errorf("%w: %s", ErrInvalidStatus, status)
 	}
 
-	_, err := r.pool.Exec(ctx,
+	tag, err := r.pool.Exec(ctx,
 		`UPDATE jobs SET status = $1::text WHERE id = $2::uuid`,
 		status, id,
 	)
 	if err != nil {
 		return fmt.Errorf("updating status for job %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
@@ -263,10 +282,16 @@ func (r *Repository) topCompanies(ctx context.Context) ([]CompanyDTO, error) {
 	return companies, rows.Err()
 }
 
-// DeleteJob deletes a single job by id.
+// DeleteJob deletes a single job by id. Kayıt yoksa ErrNotFound döner.
 func (r *Repository) DeleteJob(ctx context.Context, id string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM jobs WHERE id = $1`, id)
-	return err
+	tag, err := r.pool.Exec(ctx, `DELETE FROM jobs WHERE id = $1::uuid`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ClearAllJobs truncates the jobs table.

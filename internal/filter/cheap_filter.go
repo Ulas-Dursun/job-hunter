@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -22,25 +23,68 @@ type CheapFilter struct {
 	blacklist []string // config'den gelir, küçük harfe normalize edilmiş
 }
 
-// NewCheapFilter, config'deki blacklist_keywords listesinden filter oluşturur.
+var defaultBlacklistKeywords = []string{
+	"stage", "team leader", "müdür", "müdürü", "yöneticisi", "ürün yöneticisi",
+	"product manager", "project manager", "scrum master", "account management",
+	"customer success", "fincrime", "financial crime", "risk analyst", "operational risk",
+	"credit risk", "deal intelligence", "cost analyst", "strategic finance",
+	"investor relations", "workday", "field engineer", "dijital pazarlama",
+}
+
+// NewCheapFilter, config'deki blacklist_keywords listesinden ve yerleşik kurumsal/kıdem redlerinden filter oluşturur.
 func NewCheapFilter(cfg *config.CandidateConfig) *CheapFilter {
-	blacklist := make([]string, len(cfg.BlacklistKeywords))
-	for i, kw := range cfg.BlacklistKeywords {
-		blacklist[i] = strings.ToLower(kw)
+	seen := make(map[string]struct{}, len(cfg.BlacklistKeywords)+len(defaultBlacklistKeywords))
+	blacklist := make([]string, 0, len(cfg.BlacklistKeywords)+len(defaultBlacklistKeywords))
+	for _, kw := range cfg.BlacklistKeywords {
+		k := strings.ToLower(strings.TrimSpace(kw))
+		if k != "" {
+			if _, ok := seen[k]; !ok {
+				seen[k] = struct{}{}
+				blacklist = append(blacklist, k)
+			}
+		}
+	}
+	for _, kw := range defaultBlacklistKeywords {
+		if _, ok := seen[kw]; !ok {
+			seen[kw] = struct{}{}
+			blacklist = append(blacklist, kw)
+		}
 	}
 	return &CheapFilter{blacklist: blacklist}
 }
 
 var techTitleKeywords = []string{
-	"developer", "engineer", "software", "backend", "frontend", "fullstack",
-	"programmer", "architect", "geliştirici", "mühendis", "yazılım",
-	"devops", "cloud", "platform engineer", "sre", "site reliability",
-	"infrastructure", "sysadmin", "systems engineer",
-	"data engineer", "data analyst", "database administrator", "database engineer",
-	"golang", "python", "java developer", "java engineer", "rust", "c++",
+	"developer", "engineer", "software", "backend", "frontend", "fullstack", "full-stack", "full stack",
+	"programmer", "architect", "geliştirici", "mühendis", "yazılım", "bilişim",
+	"devops", "cloud", "platform", "sre", "site reliability",
+	"infrastructure", "sysadmin", "systems",
+	"data", "data analyst", "analytics", "business intelligence", "bi analyst", "bi developer",
+	"technical analyst", "systems analyst", "security analyst", "soc analyst", "database", "dba",
+	"golang", "python", "java", "rust", "c++", "sql",
 	"cns", "avionics", "atm", "asterix", "surveillance",
-	"genç yetenek", "mt programı", "yazılım uzman yardımcısı",
-	"security engineer", "cybersecurity", "qa engineer", "test engineer",
+	"genç yetenek", "mt programı", "management trainee", "uzman yardımcısı",
+	"security", "cybersecurity", "siber güvenlik",
+	// ML / Data / AI ve geniş teknoloji/çözüm rolleri (yazılım mühendisi geniş yelpazede başvurabilir)
+	"scientist", "machine learning", "ml", "mlops", "ai",
+	"artificial intelligence", "veri", "veri analisti", "veri bilimci", "iş zekası", "sistem analisti", "yapay zeka",
+	"solutions engineer", "integration", "automation",
+}
+
+// entrySignals, ilanın giriş seviyesi (new grad / junior / 0-2 yıl) olduğunu gösteren ifadelerdir.
+// Başlıkta veya açıklamanın ilk bölümünde bu sinyal varsa ve ilan bariz kara listede değilse,
+// yumuşak filtre (soft pass) devreye girer ve ilanı AI değerlendirmesine geçirir.
+var entrySignals = []string{
+	"graduate", "new grad", "entry level", "entry-level", "junior", "trainee", "associate",
+	"yeni mezun", "genç yetenek", "mt programı", "management trainee", "uzman yardımcısı",
+	"0-2 years", "0-1 years", "0-2 yıl", "0-1 yıl", "1-2 years", "1-3 years", "early career", "young graduate",
+}
+
+// techDescTerms, açıklamanın gerçekten yazılım/veri işi olduğunu kanıtlayan somut araç/teknoloji terimleridir.
+var techDescTerms = []string{
+	"python", "java", "golang", "sql", "backend", "software", "api", "rest", "docker", "kubernetes",
+	"machine learning", "aws", "linux", "git", "yazılım", "database", "postgresql", "redis", "mongodb",
+	"c++", "rust", "microservices", "pipeline", "etl", "pandas", "spark", "power bi", "tableau",
+	"computer science", "software engineering", "bilgisayar mühendisliği", "yazılım mühendisliği",
 }
 
 // Check, ilanı dört katmanda filtreler:
@@ -61,11 +105,17 @@ func (f *CheapFilter) Check(title, company, description string, source ...string
 		return FilterResult{Rejected: true, Reason: "empty_company"}
 	}
 
-	// ── Katman 2: Pozitif Teknoloji/Mühendislik Uygunluğu ────────────────────
+	// ── Katman 2: Pozitif Teknoloji/Analitik Uygunluğu + Yumuşak 0-2 Yıl Kapısı ──
 	// Tıbbi, idari, satış veya tesisat gibi alakasız rolleri AI'ya göndermeden kes.
+	// Ancak başlıkta VEYA açıklamada 0-2 yıl / new grad / junior sinyali varsa ve açıklamada
+	// en az 1 teknik/yazılım/veri sinyali geçiyorsa yumuşak filtre ile geçir (AI değerlendirsin).
 	titleLower := strings.ToLower(title)
+	descPreview := strings.ToLower(description[:min(len(description), 2500)])
 	if sourceName != "eurocontrol" && !hasAnyTechKeyword(titleLower) {
-		return FilterResult{Rejected: true, Reason: "non_tech_role"}
+		softEntryPass := (hasEntrySignal(titleLower) || hasEntrySignal(descPreview)) && countTechTerms(descPreview) >= 1
+		if !softEntryPass {
+			return FilterResult{Rejected: true, Reason: "non_tech_role"}
+		}
 	}
 
 	// ── Katman 3: Title blacklist ─────────────────────────────────────────────
@@ -86,6 +136,10 @@ func (f *CheapFilter) Check(title, company, description string, source ...string
 	checkLen := 2500
 	if len(description) < checkLen {
 		checkLen = len(description)
+	}
+	// Çok baytlı (Türkçe/Almanca) karakteri ortadan kesme.
+	for checkLen > 0 && checkLen < len(description) && !utf8.RuneStart(description[checkLen]) {
+		checkLen--
 	}
 	descLower := strings.ToLower(description[:checkLen])
 
@@ -131,6 +185,26 @@ func (f *CheapFilter) Check(title, company, description string, source ...string
 	for _, pattern := range yearPatterns {
 		if strings.Contains(descLower, pattern) {
 			return FilterResult{Rejected: true, Reason: "exp_req:" + pattern}
+		}
+	}
+
+	// ── Katman 4: Deterministik dil / kıdem kapıları (AI kotası koruma) ─────────
+	// Tüm açıklama taranır (gereksinimler sıklıkla 2500. karakterden sonra gelir).
+	fullLower := strings.ToLower(description)
+
+	if sourceName != "eurocontrol" {
+		if p, ok := hasLanguageBarrier(fullLower); ok {
+			return FilterResult{Rejected: true, Reason: "language_barrier:" + p}
+		}
+		if lang, ok := nonEnglishPosting(fullLower); ok {
+			return FilterResult{Rejected: true, Reason: "non_english_posting:" + lang}
+		}
+	}
+
+	// Başlıkta açık giriş seviyesi sinyali (junior/graduate/trainee...) varsa yıl şartı AI'ya bırakılır.
+	if !hasEntrySignal(titleLower) {
+		if n := minYearsRequired(fullLower); n >= maxAllowedMinYears {
+			return FilterResult{Rejected: true, Reason: "exp_req_years:" + strconv.Itoa(n)}
 		}
 	}
 
@@ -199,9 +273,29 @@ func hasAnyTechKeyword(titleLower string) bool {
 	return false
 }
 
+func hasEntrySignal(titleLower string) bool {
+	for _, kw := range entrySignals {
+		if containsWord(titleLower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+func countTechTerms(descLower string) int {
+	n := 0
+	for _, kw := range techDescTerms {
+		if containsWord(descLower, kw) {
+			n++
+		}
+	}
+	return n
+}
+
 func isInternshipKeyword(kw string) bool {
 	switch strings.ToLower(kw) {
-	case "intern", "internship", "stajyer", "staj", "working student", "werkstudent", "part-time intern", "long-term intern":
+	case "intern", "internship", "stajyer", "staj", "working student", "werkstudent", "part-time intern", "long-term intern",
+		"praktikum", "praktikant", "praktikantin", "stagiair", "stagiaire", "stage":
 		return true
 	default:
 		return false

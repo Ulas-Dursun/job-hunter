@@ -15,21 +15,15 @@ from bs4 import BeautifulSoup
 
 from scraper.models.job import Job
 from scraper.sources.base import BaseSource
+from scraper.sources.filters import is_tech_title, has_word
 
 logger = logging.getLogger("scraper.ats")
 
 
-TECH_TITLE_KEYWORDS = [
-    "developer", "engineer", "software", "backend", "frontend", "fullstack",
-    "programmer", "architect", "geliştirici", "mühendis", "yazılım",
-    "devops", "cloud", "platform engineer", "sre", "site reliability",
-    "infrastructure", "sysadmin", "systems engineer",
-    "data engineer", "data analyst", "database administrator", "database engineer",
-    "golang", "python", "java developer", "java engineer", "rust", "c++",
-    "cns", "avionics", "atm", "asterix", "surveillance",
-    "genç yetenek", "mt programı", "yazılım uzman yardımcısı",
-    "security engineer", "cybersecurity", "qa engineer", "test engineer"
-]
+# SmartRecruiters liste uç noktası sayfalama kullanır; ilan başına detay isteği pahalı olduğundan
+# yalnızca başlık+lokasyon filtresini geçen ilanlar için detay çekilir.
+SR_PAGE_SIZE = 100
+SR_MAX_POSTINGS = 500
 
 
 DISALLOWED_REGIONS = {
@@ -73,23 +67,15 @@ def clean_html(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", soup.get_text("\n")).strip()
 
 
-def is_tech_title(title: str) -> bool:
-    """Yalnızca yazılım, mühendislik, veri ve altyapı pozisyonlarını kabul eder."""
-    if not title:
-        return False
-    title_lower = title.lower()
-    return any(re.search(r"\b" + re.escape(kw) + r"\b", title_lower) for kw in TECH_TITLE_KEYWORDS)
-
-
 def is_allowed_location(loc: str) -> bool:
     """Yalnızca Türkiye, Avrupa (Brüksel, Amsterdam, Berlin, Londra vb.) ve EMEA Remote lokasyonları kabul eder."""
     if not loc:
         return True
     loc_lower = loc.lower()
-    # Eğer lokasyon hem Avrupa/Türkiye hem ABD içeriyorsa (multi-location ilanlar) Avrupa olduğu için izin ver,
-    # ancak yalnızca ABD/APAC ise kesinlikle reddet.
-    has_eu_tr = any(ind in loc_lower for ind in EU_TR_INDICATORS)
-    has_disallowed = any(dis in loc_lower for dis in DISALLOWED_REGIONS)
+    # Kısa token'lar ('uk', 'us') kelime sınırıyla aranır: "Ukraine" artık 'uk' sayılmaz,
+    # "Remote - US" artık sadece 'remote' içerdiği için geçmez.
+    has_eu_tr = any(has_word(loc_lower, ind) for ind in EU_TR_INDICATORS)
+    has_disallowed = any(has_word(loc_lower, dis) for dis in DISALLOWED_REGIONS) or has_word(loc_lower, "us")
 
     if has_eu_tr:
         return True
@@ -163,7 +149,7 @@ class ATSSource(BaseSource):
 
                 if not title or not job_url:
                     continue
-                if not is_tech_title(title):
+                if not is_tech_title(title, desc):
                     continue
                 if not is_allowed_location(loc):
                     continue
@@ -205,7 +191,7 @@ class ATSSource(BaseSource):
 
                 if not title or not job_url:
                     continue
-                if not is_tech_title(title):
+                if not is_tech_title(title, desc):
                     continue
                 if not is_allowed_location(loc):
                     continue
@@ -226,27 +212,46 @@ class ATSSource(BaseSource):
         return jobs
 
     def _fetch_smartrecruiters(self, company_name: str, company_id: str) -> list[Job]:
-        url = f"https://api.smartrecruiters.com/v1/companies/{company_id}/postings"
+        """
+        SmartRecruiters: liste uç noktası açıklama vermez ve sayfalıdır.
+        1) Sayfalayarak tüm ilanları gez (SR_MAX_POSTINGS'e kadar)
+        2) Başlık + lokasyon filtresini geçenler için detay uç noktasından açıklamayı çek
+        (açıklamasız ilan LLM'e giderse yalnızca başlıkla puanlanır — güvenilmez skor).
+        """
+        base = f"https://api.smartrecruiters.com/v1/companies/{company_id}/postings"
         jobs: list[Job] = []
         try:
-            r = self.session.get(url, timeout=12)
-            if r.status_code != 200:
-                logger.warning("smartrecruiters %s returned status %d", company_id, r.status_code)
-                return jobs
-            data = r.json()
-            items = data.get("content", [])
+            items: list[dict] = []
+            offset = 0
+            while offset < SR_MAX_POSTINGS:
+                r = self.session.get(base, params={"limit": SR_PAGE_SIZE, "offset": offset}, timeout=12)
+                if r.status_code != 200:
+                    logger.warning("smartrecruiters %s returned status %d", company_id, r.status_code)
+                    break
+                data = r.json()
+                page = data.get("content", [])
+                items.extend(page)
+                offset += SR_PAGE_SIZE
+                if not page or offset >= int(data.get("totalFound", 0)):
+                    break
+
             for item in items:
                 title = item.get("name", "").strip()
                 ext_id = str(item.get("id", ""))
-                loc_data = item.get("location", {})
+                loc_data = item.get("location", {}) or {}
                 loc = f"{loc_data.get('city', '')}, {loc_data.get('country', '')}".strip(", ")
                 job_url = f"https://jobs.smartrecruiters.com/{company_id}/{ext_id}"
 
                 if not title or not ext_id:
                     continue
-                if not is_tech_title(title):
+                # Başlık-only ön eleme (açıklama henüz yok): giriş sinyali olan teknik dışı başlıklar da ilk turu geçer.
+                if not is_tech_title(title, "python software data"):
                     continue
                 if not is_allowed_location(loc):
+                    continue
+
+                desc = self._sr_description(base, ext_id)
+                if not is_tech_title(title, desc):
                     continue
 
                 jobs.append(Job(
@@ -256,10 +261,27 @@ class ATSSource(BaseSource):
                     title=title,
                     company=company_name,
                     location=loc,
-                    description="",  # SmartRecruiters liste uç noktası özet verir, detay Go veya filter'da zenginleşebilir
+                    description=desc,
                     posted_at=item.get("releasedDate"),
                 ))
             logger.info("smartrecruiters %s (%s): %d jobs found", company_name, company_id, len(jobs))
         except Exception as e:
             logger.error("smartrecruiters fetch error for %s (%s): %s", company_name, company_id, e)
         return jobs
+
+    def _sr_description(self, base: str, posting_id: str) -> str:
+        """İlan detayından (jobAd.sections) düz metin açıklama üretir; hata olursa boş döner."""
+        try:
+            r = self.session.get(f"{base}/{posting_id}", timeout=12)
+            if r.status_code != 200:
+                return ""
+            sections = (r.json().get("jobAd") or {}).get("sections") or {}
+            parts = []
+            for key in ("companyDescription", "jobDescription", "qualifications", "additionalInformation"):
+                text = (sections.get(key) or {}).get("text")
+                if text:
+                    parts.append(clean_html(text))
+            return "\n\n".join(parts)
+        except Exception as exc:
+            logger.debug("smartrecruiters detail failed id=%s: %s", posting_id, exc)
+            return ""

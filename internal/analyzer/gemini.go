@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -155,7 +154,7 @@ type GeminiAnalyzer struct {
 }
 
 const (
-	groqAPIURL   = "https://api.groq.com/openai/v1/chat/completions"
+	groqAPIURL = "https://api.groq.com/openai/v1/chat/completions"
 	// API anahtarı URL'de değil, x-goog-api-key header'ında gönderilir (log/hata sızıntısı riski yok).
 	geminiAPIURL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent"
 )
@@ -201,6 +200,13 @@ func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConf
 	}
 }
 
+// SetFeedback, kullanıcının Kanban kararlarından üretilen geri bildirim özetini PromptBuilder'a iletir.
+func (g *GeminiAnalyzer) SetFeedback(feedback string) {
+	if g != nil && g.builder != nil {
+		g.builder.SetFeedback(feedback)
+	}
+}
+
 // Analyze, bir iş ilanını AI ile analiz eder.
 // Aktif anahtar 429 (Rate Limit) veya 503 döndüğünde imleci (cursor) kalıcı olarak sıradaki sağlam anahtara kaydırır.
 func (g *GeminiAnalyzer) Analyze(
@@ -221,6 +227,8 @@ func (g *GeminiAnalyzer) Analyze(
 		}
 
 		startIdx := int(g.cursor.Load() % uint64(n))
+		// Turdaki herhangi bir istasyon 429/503 verdiyse sonuncunun hatası farklı olsa bile backoff uygulanır.
+		sawRetryable := false
 		for step := 0; step < n; step++ {
 			idx := (startIdx + step) % n
 			ep := g.endpoints[idx]
@@ -241,6 +249,14 @@ func (g *GeminiAnalyzer) Analyze(
 				return res, nil
 			}
 
+			// İstek iptal edildiyse (shutdown) imleci bozma ve diğer anahtarları boşuna deneme.
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if isRetryable(err) {
+				sawRetryable = true
+			}
+
 			// Bu istasyon hata verdi; imleci bir sonraki istasyona ilerlet ki sonraki ilanlar doğrudan sağlam anahtara gitsin
 			nextIdx := (idx + 1) % n
 			g.cursor.Store(uint64(nextIdx))
@@ -254,7 +270,7 @@ func (g *GeminiAnalyzer) Analyze(
 				continue
 			}
 
-			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
+			if sawRetryable {
 				backoffDuration := time.Duration((round+1)*4) * time.Second
 				slog.Warn("tüm ai istasyonları meşgul (429/503), kısa süre bekleniyor...",
 					"round", round+1,
@@ -272,7 +288,7 @@ func (g *GeminiAnalyzer) Analyze(
 		}
 	}
 
-	return nil, fmt.Errorf("all %d AI endpoints rate-limited or failed after %d rounds", n, maxRounds)
+	return nil, fmt.Errorf("%w: all %d AI endpoints rate-limited or failed after %d rounds", ErrAIBusy, n, maxRounds)
 }
 
 func (g *GeminiAnalyzer) callGeminiWith(ctx context.Context, ep providerEndpoint, prompt string) (*ScoreResult, error) {
@@ -311,17 +327,8 @@ func (g *GeminiAnalyzer) callGeminiWith(ctx context.Context, ep providerEndpoint
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 429 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini rate limited (429): %s", string(b))
-	}
-	if resp.StatusCode == 503 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini server busy (503): %s", string(b))
-	}
-	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini status %d: %s", resp.StatusCode, string(b))
+	if resp.StatusCode != http.StatusOK {
+		return nil, newStatusError("gemini", resp)
 	}
 
 	var geminiResp struct {
@@ -381,13 +388,8 @@ func (g *GeminiAnalyzer) callGroqWith(ctx context.Context, ep providerEndpoint, 
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 429 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("groq rate limited (429): %s", string(b))
-	}
-	if resp.StatusCode != 200 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("groq status %d: %s", resp.StatusCode, string(bodyBytes))
+	if resp.StatusCode != http.StatusOK {
+		return nil, newStatusError("groq", resp)
 	}
 
 	var apiResp struct {

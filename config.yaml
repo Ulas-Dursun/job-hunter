@@ -18,7 +18,8 @@ candidate:
     infra:      ["Docker", "Docker Compose", "CI/CD (GitHub Actions)", "Prometheus", "Grafana"]
     cloud:      ["AWS (Certified AI Practitioner)"]
     concepts:   ["REST API", "JWT", "Concurrency", "Worker Pool",
-                 "Distributed Systems", "TCP/UDP", "Microservices", "Testcontainers"]
+                 "Distributed Systems", "TCP/UDP", "Microservices", "Testcontainers",
+                 "Machine Learning (coursework)"]
 
   target_roles:
     primary:
@@ -73,6 +74,14 @@ candidate:
     - "staj"
     - "working student"
     - "werkstudent"
+    - "Praktikum"
+    - "Praktikant"
+    - "Praktikantin"
+    - "Stagiair"
+    - "Stagiaire"
+    - "Ausbildung"
+    - "Azubi"
+    - "Duales Studium"
     - "part-time intern"
     - "long-term intern"
     - "6+ years"
@@ -221,8 +230,8 @@ candidate:
     - "CERN"
 
 scoring:
-  telegram_threshold_primary:   7.5
-  telegram_threshold_secondary: 7.5
+  telegram_threshold_primary:   8.0
+  telegram_threshold_secondary: 8.0
   save_threshold:               0.0 # Tüm puanlanan ilanlar DB'ye kaydedilir
 
 sources:
@@ -260,15 +269,20 @@ sources:
         token: "wolt"
       - name: "Deliveroo"
         token: "deliveroo"
-    lever:
-      - name: "Trendyol"
-        slug: "trendyol"
-      - name: "Commencis"
-        slug: "commencis"
-      - name: "Iyzico"
-        slug: "iyzico"
-      - name: "Peak Games"
-        slug: "peakgames"
+      - name: "Collibra"
+        token: "collibra"
+      - name: "Guardsquare"
+        token: "guardsquare"
+      - name: "Contentful"
+        token: "contentful"
+      - name: "GetYourGuide"
+        token: "getyourguide"
+      - name: "Monzo"
+        token: "monzo"
+      - name: "Canonical"
+        token: "canonical"
+    # Lever: Trendyol/Commencis/Iyzico/Peak Games slug'ları 404 döndürdüğü için kaldırıldı (Ekim 2026 doğrulaması).
+    # Geçerli bir slug bulunursa şu formatta eklenebilir:  lever: [{name: "X", slug: "x"}]
     smartrecruiters:
       - name: "Frequentis"
         company_id: "frequentis"
@@ -285,13 +299,16 @@ sources:
   techcareer:
     enabled: true
 
+  coderspace:
+    enabled: true
+
   arbeitnow:
     enabled: true
 
   jobspy:
     enabled: true
-    poll_interval_minutes: 30
-    max_age_days: 7
+    poll_interval_minutes: 240   # LinkedIn ban riskini azaltmak için seyrek tarama
+    max_age_days: 3
     results_per_keyword: 20
     location: "Istanbul, Turkey"
     locations:
@@ -300,58 +317,36 @@ sources:
       - "Amsterdam, Netherlands"
       - "Berlin, Germany"
       - "Munich, Germany"
+    # Anahtar kelimeler bilinçli olarak az tutuldu: LinkedIn/Indeed benzer başlıklar için aynı ilanları döndürür.
+    # Giriş seviyesi + ML/Data kelimeleri eklendi (aday Python + ML ders geçmişine sahip).
     keywords:
-      # ── Backend — Go/Java ─────────────────────
-      - "backend developer"
+      # ── Backend / Software ────────────────────
       - "backend engineer"
       - "software engineer"
-      - "software developer"
       - "go developer"
-      - "golang developer"
-      - "java developer"
       - "java spring boot developer"
-      - "distributed systems"
-
-      # ── Backend — Python ──────────────────────
       - "python developer"
-      - "python backend developer"
-      - "junior python developer"
-
       # ── Cloud / DevOps ────────────────────────
-      - "cloud engineer"
       - "devops engineer"
+      - "cloud engineer"
       - "platform engineer"
       - "site reliability engineer"
-      - "sre"
-      - "aws engineer"
-      - "infrastructure engineer"
-
-      # ── Türkçe — Yeni Mezun & MT Programları ────
-      - "yazılım mühendisi"
-      - "yeni mezun yazılım"
+      # ── Giriş seviyesi sinyalleri ─────────────
+      - "graduate software engineer"
+      - "junior software developer"
+      - "new grad software engineer"
+      - "entry level software engineer"
+      - "trainee software engineer"
+      # ── Data / ML (junior) ────────────────────
+      - "data engineer"
+      - "junior data analyst"
+      - "junior data scientist"
+      - "junior machine learning engineer"
+      # ── Türkçe (yalnızca TR lokasyonunda aranır) ─
       - "yeni mezun yazılım mühendisi"
-      - "yeni mezun bilgisayar mühendisi"
+      - "yazılım mühendisi"
       - "genç yetenek"
       - "mt programı"
-      - "yazılım uzman yardımcısı"
-      - "backend geliştirici"
-
-      # ── English — Junior & Entry Signals ────────
-      - "graduate software engineer"
-      - "trainee software engineer"
-      - "associate software engineer"
-      - "junior software developer"
-      - "junior backend engineer"
-      - "junior devops engineer"
-      - "junior cloud engineer"
-
-      # ── Data (secondary track) ────────────────
-      - "data engineer"
-      - "data platform engineer"
-      - "analytics engineer"
-      - "data analyst"
-      - "junior data analyst"
-
 redis:
   stream_raw:      "jobs:raw"
   stream_filtered: "jobs:filtered"
@@ -371,7 +366,7 @@ gemini:
   rate_limit_rpm: 30
 
 worker:
-  pool_size: 1
+  pool_size: 3
 
 notifications:
   telegram_enabled: true

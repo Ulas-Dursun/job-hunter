@@ -4,3 +4,8 @@ httpx==0.27.2
 playwright==1.47.0
 python-dotenv==1.0.1
 fake-useragent==1.5.1
+# --- Aktif kaynakların kullandığı bağımlılıklar (önceden eksikti; Docker imajı bu yüzden çalışmıyordu) ---
+python-jobspy==1.1.80
+pandas==2.3.3
+requests>=2.32,<3
+beautifulsoup4>=4.12,<5

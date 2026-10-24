@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 
 from scraper.models.job import Job
 from scraper.sources.base import BaseSource
+from scraper.sources.filters import is_tech_title
 
 logger = logging.getLogger("scraper.arbeitnow")
 
@@ -52,18 +53,7 @@ class ArbeitnowSource(BaseSource):
             data = r.json()
             items = data.get("data", [])
 
-            TECH_KEYWORDS = [
-                "developer", "engineer", "software", "backend", "frontend", "fullstack",
-                "programmer", "architect", "geliştirici", "mühendis", "yazılım",
-                "devops", "cloud", "platform engineer", "sre", "site reliability",
-                "infrastructure", "sysadmin", "systems engineer",
-                "data engineer", "data analyst", "database administrator", "database engineer",
-                "golang", "python", "java developer", "java engineer", "rust", "c++",
-                "cns", "avionics", "atm", "asterix", "surveillance",
-                "genç yetenek", "mt programı", "yazılım uzman yardımcısı",
-                "security engineer", "cybersecurity", "qa engineer", "test engineer"
-            ]
-
+            # Ortak filtre (scraper/sources/filters.py) — Go cheap filter ile uyumlu tutulur.
             for item in items:
                 title = item.get("title", "").strip()
                 company = item.get("company_name", "").strip()
@@ -81,7 +71,7 @@ class ArbeitnowSource(BaseSource):
 
                 # Yalnızca teknoloji/yazılım/mühendislik odaklı pozisyonları kabul et
                 combined_text = f"{title.lower()} {' '.join(tags)}"
-                if not any(re.search(r"\b" + re.escape(kw) + r"\b", combined_text) for kw in TECH_KEYWORDS):
+                if not is_tech_title(combined_text, desc):
                     continue
 
                 if remote and not loc:

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -46,48 +45,53 @@ type InterviewPrepAssets struct {
 	QuestionsToAsk      []string         `json:"questions_to_ask"`
 }
 
-// MasterCandidateProfile represents the factual, unalterable master CV of Ulaş Dursun.
+// MasterCandidateProfile represents the factual, unalterable master CV of Ulaş Dursun
+// (unified from his Data/Backend CV, Backend/Cloud CV, and EUROCONTROL Agreement 46449_TRAI_2026_NMD).
+// Not: Telefon ve kişisel e-posta gizlilik (PII) nedeniyle kaynak kodda tutulmaz.
 const MasterCandidateProfile = `
 CANDIDATE FULL NAME: Ulaş Dursun
-CONTACT: Istanbul, TR • ulasdursun03@gmail.com • +90 533 407 65 80
+LOCATION: Istanbul, TR & Brussels, BE (EUROCONTROL Headquarters, 16 Nov 2026 – 30 Apr 2027)
 LINKS: linkedin.com/in/ulas-dursun • github.com/ulas-dursun
 
-SUMMARY:
-Software Engineer focused on backend systems and cloud-native development. Experience building API-driven services, concurrent systems, authentication flows, and containerized deployments using Java, Python, and Go.
+SUMMARY VARIANTS (Adapt based on target role):
+- Backend & Cloud Variant: Software Engineer focused on backend systems and cloud-native development. Experience building API-driven services, concurrent systems, authentication flows, and containerized deployments using Java, Python, and Go.
+- Data & Distributed Systems Variant: Software Engineer experienced in backend systems, data-intensive applications, and cloud-native development using Python, SQL, PostgreSQL, MongoDB, Redis, and Docker.
 
 EDUCATION & STATUS:
 - Bahcesehir University | B.Sc. Software Engineering (2021 – 2026) | Istanbul, TR
-- Fluent English (C1/C2). Open to Turkey, Belgium (Brussels), Netherlands, Germany, Switzerland, UK, and EU/Global Remote.
+- Relevant Coursework: Machine Learning, Data Structures & Algorithms, Distributed Systems, Database Systems.
+- Fluent English (C1/C2), Native Turkish, Beginner German. Open to Turkey, Belgium (Brussels), Netherlands, Germany, Switzerland, UK, and EU/Global Remote.
 
 CERTIFICATIONS:
 - AWS Certified AI Practitioner — Amazon Web Services (2026)
-- AWS Certified Cloud Practitioner (in progress)
 
-WORK EXPERIENCE:
+WORK EXPERIENCE & OFFICIAL EUROPEAN TRAINEESHIP:
 1. Sanlab | Software Engineering Internship | Istanbul | Aug 2024 – Oct 2024
    - Developed a web-based market management system, integrating a JWT-authenticated Go application with a Rust REST API across 12 endpoints, utilizing MongoDB with atomic sequence-based ID generation.
    - Implemented client-server communication modules in Rust using TCP and UDP sockets for direct message exchange between standalone services.
    - Participated in an Agile/Scrum workflow within a 7-person engineering team, contributing to daily stand-ups, sprint planning, and code reviews.
-2. Work and Travel Program | Sales & Lifeguard Roles | Jun 2025 – Sep 2025
-   - Handled ~100 daily customer interactions while ensuring pool safety for 30-40 guests per shift.
+2. EUROCONTROL | Software Engineering Trainee (NMD/INF/CNS Unit) | Brussels, Belgium | 16 Nov 2026 – 30 Apr 2027 (Confirmed Agreement)
+   - Selected to contribute to the ASTERIX E-ARCO C++ Core Library and Python/Java client interfaces used in operational European air traffic management systems (ARTAS, SDDS, SASS-C), focusing on data-driven JSON schema validation and CI/CD unit/regression test automation.
+3. Work and Travel Program | Sales & Lifeguard Roles | USA | Jun 2025 – Sep 2025
+   - Handled ~100 daily customer interactions in English while ensuring pool safety for 30-40 guests per shift, following strict safety and service protocols.
 
 KEY PROJECTS:
 1. Distributed Job Processing System | Go, Redis, PostgreSQL, Docker, Prometheus
-   - Developed a concurrent job processing system using a 5-goroutine worker pool and Redis with exponential backoff retries, successfully handling load tests of 500 concurrent submissions.
-   - Containerized the system with Docker, instrumented metrics with Prometheus (validating 98% of jobs completed in under 100ms) and automated CI pipelines using GitHub Actions.
+   - Built a distributed job processing pipeline using Go, Redis, and PostgreSQL with a 5-goroutine worker pool and exponential backoff retries, handling load tests of 500 concurrent submissions.
+   - Containerized the system with Docker, implemented Prometheus monitoring, and automated CI pipelines with GitHub Actions, validating 98% of jobs completed in under 100ms.
 2. Order & Inventory Management API | Java 21, Spring Boot, PostgreSQL, Docker
    - Designed a REST API with an admin panel and real-time inventory tracking, utilizing Java 21, Spring Boot, JWT authentication, RBAC, and a state machine for order lifecycle transitions.
    - Secured concurrent stock operations using pessimistic locking and implemented integration tests against a PostgreSQL instance via Testcontainers, achieving ~75% line coverage across core domain services.
 3. Capstone Project | IoT-Based Smart Indoor Plant Control System | React, Firebase, ESP32
-   - Built a real-time IoT dashboard using React and Firebase to monitor plant health and manage remote irrigation via an ESP32-based sensor system.
+   - Built a real-time IoT data pipeline and dashboard using React and Firebase to collect, monitor, and visualize sensor data from an ESP32-based system.
    - Achieved >99% successful data delivery and an average end-to-end command latency of ~500ms for data transmitted at 60-second intervals.
 
 TECHNICAL SKILLS:
-- Programming Languages: Python, Java, Go, Rust, SQL
-- Backend & Architecture: REST APIs, Microservices, JWT, Concurrency, TCP/UDP
+- Programming Languages: Python, Java, Go, Rust, SQL, C++ (Working Knowledge)
+- Backend, Data & Distributed Systems: Spring Boot, REST APIs, Microservices, JWT, Concurrency, TCP/UDP, Real-time Data Processing, Data Pipelines, Distributed Job Processing, Machine Learning Fundamentals (coursework)
 - Databases: PostgreSQL, MongoDB, Redis
-- DevOps & Cloud: Git, Linux (CLI, Bash), Docker, Docker Compose, CI/CD (GitHub Actions), Postman, Prometheus, Grafana, AWS
-- Spoken Languages: English (Fluent), Turkish (Native), German (Beginner)
+- Cloud: AWS (EC2, S3, IAM, VPC), AWS Certified AI Practitioner
+- DevOps & Tooling: Git, Linux (CLI, Bash), Docker, Docker Compose, CI/CD (GitHub Actions), Testcontainers, Postman, Prometheus, Grafana
 `
 
 // TailorService coordinates ATS CV customization, Cover Letter generation, and Interview Prep via Gemini / Groq failover chain.
@@ -143,6 +147,7 @@ func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (st
 	maxRounds := 2
 	for round := 0; round < maxRounds; round++ {
 		startIdx := int(s.cursor.Load() % uint64(n))
+		sawRetryable := false
 		for step := 0; step < n; step++ {
 			idx := (startIdx + step) % n
 			ep := s.endpoints[idx]
@@ -163,6 +168,13 @@ func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (st
 				return rawText, nil
 			}
 
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
+			if isRetryable(err) {
+				sawRetryable = true
+			}
+
 			nextIdx := (idx + 1) % n
 			s.cursor.Store(uint64(nextIdx))
 
@@ -174,7 +186,7 @@ func (s *TailorService) executeWithRetry(ctx context.Context, prompt string) (st
 				continue
 			}
 
-			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "503") {
+			if sawRetryable {
 				backoff := time.Duration((round+1)*3) * time.Second
 				slog.Warn("tailor service tüm istasyonlar meşgul (429/503), bekleniyor...",
 					"round", round+1,
@@ -201,27 +213,31 @@ func (s *TailorService) buildPrompt(title, company, location, description string
 	}
 
 	return fmt.Sprintf(`You are a Principal Software Engineer and European Tech Hiring Lead coaching Ulaş Dursun.
-Your goal is to write a sharp, natural, human-sounding Cover Letter and genuinely tailored CV bullet points for the job below.
+Your goal is to write a sharp, recruiter-friendly, zero-fluff Cover Letter and concise CV bullet revisions for the job below.
 
 CRITICAL ZERO-HALLUCINATION POLICY:
 1. NEVER invent companies, degrees, years of experience, or technologies not in the Candidate's Master Profile.
 2. Keep all factual numbers intact (12 endpoints, 7-person team, 5-goroutine worker pool, 500 concurrent submissions, 98%% under 100ms, ~75%% coverage, >99%% delivery, ~500ms latency).
+3. LANGUAGE MATCHING: Detect the language of the job posting. If the posting is primarily in Turkish, write cover_letter, tailored_summary, and all bullets in natural, professional Turkish (keeping technical terms in English). Otherwise, write in crisp English.
 
-COVER LETTER — HUMAN & ENGINEER-TO-ENGINEER VOICE RULES (STRICT):
-1. BANNED AI CLICHÉS (NEVER USE THESE PHRASES):
-   - "I am thrilled to apply" / "I am excited to apply" / "I am writing to express my strong interest"
-   - "Throughout my academic and practical journey"
-   - "deep passion for" / "passionate about" / "thrive in environments"
-   - "Furthermore, in my personal projects" / "testament to" / "delve" / "synergy"
-2. LENGTH & STRUCTURE (CONCISE & PUNCHY — 180 to 220 words total, 3 short paragraphs):
-   - Paragraph 1 (Direct Hook, 2-3 sentences): Open directly with what %s is building/solving and why the %s role caught your eye as a backend/systems engineer. Sound like a real engineer speaking to another engineer.
-   - Paragraph 2 (Connected Technical Proof, 3-4 sentences): DO NOT copy-paste CV bullet points verbatim into a laundry list! Pick ONLY the 2 most relevant technical experiences from Ulaş's profile (e.g., if real-time/low-latency: pair Sanlab's raw Rust TCP/UDP sockets & Go APIs with the Go/Redis <100ms worker pool or ESP32 ~500ms real-time telemetry; if enterprise/backend: pair Java 21 Spring Boot pessimistic locking & Testcontainers with Go/Rust microservices). Explain *why* building those systems prepared you for %s's specific technical challenges.
-   - Paragraph 3 (Pragmatic Close, 2 sentences): Briefly note your readiness to ship clean, containerized code (Docker, CI/CD, Prometheus, AWS Certified AI Practitioner) and end with a straightforward, confident sign-off.
+COVER LETTER — SHORT, PUNCHY & ENGINEER-TO-ENGINEER (130 to 170 words MAX, 3 short paragraphs):
+Recruiters and hiring managers scan cover letters in 15 seconds. Long, repetitive letters hurt the candidate.
+1. BANNED AI CLICHÉS (NEVER USE):
+   - "I am thrilled/excited to apply", "I am writing to express my strong interest", "Throughout my academic journey", "deep passion for", "thrive in", "testament to", "delve", "synergy".
+2. STRUCTURE:
+   - Paragraph 1 (Direct Hook, 2 sentences): Reference what %s is building and why the %s role fits Ulaş's profile (mention EUROCONTROL Brussels traineeship or new-grad availability if relevant to location/domain).
+   - Paragraph 2 (Focused Proof, 2-3 sentences): Pick ONLY the 2 most relevant experiences/projects for THIS specific role (do NOT list everything). Connect the concrete engineering trade-offs (e.g., Go/Redis concurrency & <100ms latency, Java 21 pessimistic locking & Testcontainers, Sanlab Go/Rust APIs & TCP/UDP, or EUROCONTROL C++/Python validation) directly to %s's stack.
+   - Paragraph 3 (Clean Close, 1-2 sentences): Direct, confident sign-off without begging or fluff.
 
-TAILORED CV BULLETS — TRUE DOMAIN ADAPTATION RULES:
-1. Do NOT just copy the original CV bullets word-for-word!
-2. Rewrite and angle the bullets so they naturally incorporate the target job's terminology and engineering focus while staying 100%% truthful to Ulaş's work.
-3. For tailored_project_bullets (4 bullets): Select from ALL 3 projects (Distributed Job Processing in Go/Redis, Order & Inventory API in Java 21/Spring Boot, AND Capstone Real-Time IoT System) based on what fits this job best. If the job involves real-time data, telemetry, streaming, or full-stack, MUST include a bullet from the Capstone IoT project (>99%% delivery, ~500ms latency).
+TAILORED CV REVISIONS — HIGH-SIGNAL, SCANNABLE BULLETS:
+1. tailored_summary (MAX 2 sentences, <= 32 words): Based on Ulaş's two real CV Summary Variants (Backend/Cloud vs Data/Distributed Systems), write a sharp 1-2 sentence summary tailored to this role's focus.
+2. tailored_experience_bullets (EXACTLY 3 bullets, each <= 22 words):
+   - Rewrite Ulaş's 3 Sanlab internship bullets (Go + Rust 12 REST endpoints & MongoDB atomic IDs; Rust TCP/UDP sockets; 7-person Agile/Scrum team) angled toward the target job's terminology (if the role is European/Aerospace/C++/Python, you may also reference his confirmed EUROCONTROL Brussels traineeship on ASTERIX E-ARCO C++/Python/Java). Keep all numbers intact.
+3. tailored_project_bullets (EXACTLY 3 bullets, each <= 22 words):
+   - Pick the 3 strongest bullets across Ulaş's 3 projects (Go/Redis 5-goroutine worker pool <100ms; Java 21 Spring Boot pessimistic locking & Testcontainers ~75%% coverage; ESP32/React/Firebase real-time IoT data pipeline >99%% delivery ~500ms latency) that best fit this role (e.g., emphasize the IoT data pipeline & Go/Redis pipeline for Data/Analytics roles; emphasize Java 21 & Go/Redis for Backend/Cloud roles).
+4. HONEST KEYWORD MAPPING:
+   - "skills_highlight": 5-7 skills Ulaş ACTUALLY has in his profile that match this posting (safe to put at the top of his CV).
+   - "ats_keywords": Key technical terms from the job posting. If Ulaş has the skill, list it normally (e.g. "PostgreSQL"). If the posting requires a tool Ulaş does NOT have in his profile, append " (gap — do not claim on CV)" (e.g. "Kubernetes (gap — do not claim on CV)").
 
 CANDIDATE MASTER PROFILE:
 %s
@@ -239,7 +255,7 @@ Respond with a strict, valid JSON object without markdown formatting, backticks,
   "cover_letter": "string",
   "tailored_summary": "string",
   "tailored_experience_bullets": ["string", "string", "string"],
-  "tailored_project_bullets": ["string", "string", "string", "string"],
+  "tailored_project_bullets": ["string", "string", "string"],
   "skills_highlight": ["string", "string"],
   "ats_keywords": ["string", "string"]
 }`, company, title, company, MasterCandidateProfile, title, company, location, desc)
@@ -252,21 +268,21 @@ func (s *TailorService) buildInterviewPrompt(title, company, location, descripti
 	}
 
 	return fmt.Sprintf(`You are a Staff Engineer and Hiring Manager at %s interviewing Ulaş Dursun for the %s position (%s).
-Create a practical, high-signal Interview Preparation Kit specifically connecting %s's tech stack/domain with Ulaş's actual CV projects.
+Create a concise, high-signal Interview Preparation Kit connecting %s's domain with Ulaş's actual projects.
 
 REQUIREMENTS:
 1. role_focus_summary:
-   - 2-3 concise sentences in Turkish summarizing what %s cares about most technically for this role and which of Ulaş's projects (Go/Redis worker pool, Sanlab Go/Rust TCP/UDP, Java 21 Spring Boot pessimistic locking, or ESP32 real-time telemetry) should be his centerpiece in the interview.
-2. technical_questions (EXACTLY 5 items):
-   - Combine the job posting's technical requirements with Ulaş's specific projects (Sanlab Go/Rust JWT & TCP/UDP sockets, Go 5-goroutine Redis worker pool with exponential backoff & Prometheus, Java 21 Spring Boot PostgreSQL pessimistic locking & Testcontainers, ESP32/React real-time telemetry).
-   - "question": The exact technical / system-design question the interviewer will ask (in English, with Turkish explanation in parentheses if helpful).
-   - "why_they_ask": 1 concise sentence in Turkish explaining what the interviewer is testing.
-   - "answer_strategy": Concrete, senior-level talking points (in Turkish, keeping technical terms in English) showing how Ulaş should answer using his real metrics and architectural trade-offs.
-3. behavioral_questions (EXACTLY 3 items):
+   - 2 concise sentences in Turkish summarizing what %s cares about most for this role and which 1-2 of Ulaş's experiences (EUROCONTROL C++/Python, Sanlab Go/Rust TCP/UDP, Go/Redis worker pool, Java 21 Spring Boot pessimistic locking, ESP32 telemetry, or Python/ML coursework) should be his centerpiece.
+2. technical_questions (EXACTLY 3 items — quality over quantity):
+   - Pick the 3 most likely technical / system-design questions for THIS specific role.
+   - "question": The exact question the interviewer will ask (in English, with brief Turkish context if helpful).
+   - "why_they_ask": 1 short sentence in Turkish explaining what they are testing.
+   - "answer_strategy": 2-3 punchy sentences in Turkish (keeping technical terms in English) showing how Ulaş should answer using his real metrics and trade-offs — no long essays.
+3. behavioral_questions (EXACTLY 2 items):
    - "question": The behavioral question in English.
-   - "star_story_guide": A ready-to-use STAR (Situation, Task, Action, Result) response guide in Turkish based on Ulaş's real experience (Sanlab 7-person Scrum team, debugging concurrency/latency in projects, or high-responsibility Work & Travel customer/safety management).
+   - "star_story_guide": Concise 3-sentence STAR (Situation/Task, Action, Result) guide in Turkish based on Ulaş's real experience (EUROCONTROL, Sanlab 7-person Scrum team, debugging concurrency/latency, or Work & Travel high-responsibility operations).
 4. questions_to_ask (EXACTLY 2 items):
-   - 2 sharp, impressive engineering questions (in English, with a brief Turkish note on why it's effective) that Ulaş should ask the interviewers at the end of the call.
+   - 2 sharp engineering questions (in English, with a 1-line Turkish note on why it works) for the end of the interview.
 
 CANDIDATE MASTER PROFILE:
 %s
@@ -336,8 +352,7 @@ func (s *TailorService) callGeminiRaw(ctx context.Context, ep providerEndpoint, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("gemini status %d: %s", resp.StatusCode, string(b))
+		return "", newStatusError("gemini", resp)
 	}
 
 	var geminiResp struct {
@@ -397,8 +412,7 @@ func (s *TailorService) callGroqRaw(ctx context.Context, ep providerEndpoint, pr
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("groq status %d: %s", resp.StatusCode, string(b))
+		return "", newStatusError("groq", resp)
 	}
 
 	var apiResp struct {
@@ -446,7 +460,43 @@ func parseTailoredResult(text string) (*TailoredAssets, error) {
 		result.ATSKeywords = []string{}
 	}
 
+	sanitizeTailoredAssets(&result)
 	return &result, nil
+}
+
+// unownedTech, adayın profilinde kesinlikle bulunmayan teknolojilerdir;
+// LLM yanlışlıkla skills_highlight içine koyarsa elenir, ats_keywords içinde ise gap olarak işaretlenir.
+var unownedTech = []string{
+	"c#", ".net", "asp.net", "php", "laravel", "symfony", "ruby", "rails",
+	"swift", "objective-c", "kotlin", "angular", "vue.js", "cobol", "sap",
+	"kubernetes", "terraform", "ansible", "kafka", "spark", "hadoop", "pytorch", "tensorflow",
+}
+
+func isUnownedSkill(s string) bool {
+	low := strings.ToLower(strings.TrimSpace(s))
+	for _, bad := range unownedTech {
+		if low == bad || strings.Contains(low, bad) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeTailoredAssets(res *TailoredAssets) {
+	kept := make([]string, 0, len(res.SkillsHighlight))
+	for _, sk := range res.SkillsHighlight {
+		if !isUnownedSkill(sk) {
+			kept = append(kept, sk)
+		}
+	}
+	res.SkillsHighlight = kept
+
+	for i, kw := range res.ATSKeywords {
+		low := strings.ToLower(kw)
+		if isUnownedSkill(kw) && !strings.Contains(low, "gap") && !strings.Contains(low, "eksik") {
+			res.ATSKeywords[i] = kw + " (gap — do not claim on CV)"
+		}
+	}
 }
 
 func parseInterviewResult(text string) (*InterviewPrepAssets, error) {

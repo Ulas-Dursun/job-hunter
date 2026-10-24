@@ -18,6 +18,7 @@ from scraper.sources.jobspy_source import JobSpySource
 from scraper.sources.ats_source import ATSSource
 from scraper.sources.eurocontrol_source import EurocontrolSource
 from scraper.sources.techcareer_source import TechcareerSource
+from scraper.sources.coderspace_source import CoderspaceSource
 from scraper.sources.arbeitnow_source import ArbeitnowSource
 
 logging.basicConfig(
@@ -83,6 +84,7 @@ def main() -> None:
         client=redis_client,
         stream_name=redis_cfg["stream_raw"],
         dedup_set_key=redis_cfg["dedup_set_key"],
+        ttl_days=redis_cfg.get("dedup_ttl_days", 30),
     )
 
     # ── Sources ───────────────────────────────────────────────────────────
@@ -98,6 +100,10 @@ def main() -> None:
     if cfg["sources"].get("techcareer", {}).get("enabled", False):
         sources.append(TechcareerSource(cfg["sources"]["techcareer"]))
         logger.info("techcareer source enabled (techcareer.net)")
+
+    if cfg["sources"].get("coderspace", {}).get("enabled", False):
+        sources.append(CoderspaceSource(cfg["sources"]["coderspace"]))
+        logger.info("coderspace source enabled (coderspace.io talent programs)")
 
     if cfg["sources"].get("arbeitnow", {}).get("enabled", False):
         sources.append(ArbeitnowSource(cfg["sources"]["arbeitnow"]))
@@ -120,7 +126,7 @@ def main() -> None:
         return
 
     # ── Sürekli Döngü Modu ────────────────────────────────────────────────
-    poll_interval = cfg["sources"]["jobspy"].get("poll_interval_minutes", 30) * 60
+    poll_interval = cfg["sources"].get("jobspy", {}).get("poll_interval_minutes", 240) * 60
 
     while True:
         logger.info("─── poll cycle starting ───")

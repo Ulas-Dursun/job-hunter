@@ -1,6 +1,7 @@
 package filter_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ulasdursun/job-hunter/internal/config"
@@ -16,7 +17,7 @@ func testFilter() *filter.CheapFilter {
 			"7+ years", "8+ years", "10+ years",
 			"Senior", "Manager", "Lead", "Principal",
 			"Sales", "Satış", "Üretim", "6+ years",
-			"intern", "stajyer", "working student", "werkstudent",
+			"intern", "stajyer", "working student", "werkstudent", "praktikum",
 		},
 	}
 	return filter.NewCheapFilter(cfg)
@@ -184,7 +185,8 @@ func TestCheapFilter_PassesAcceptableExperience(t *testing.T) {
 		{"Junior or entry level candidates welcome."},
 		{"New grad position, no experience required."},
 		{"1-3 years of backend experience is ideal."},
-		{"4 years of experience in Go or Java."},
+		{"3 years of experience in Go or Java."},
+		{"Over 20 years of experience in the industry, we build great software."},
 	}
 
 	for _, tc := range cases {
@@ -192,5 +194,118 @@ func TestCheapFilter_PassesAcceptableExperience(t *testing.T) {
 		if result.Rejected {
 			t.Errorf("expected pass for desc=%q, got rejected: %s", tc.description, result.Reason)
 		}
+	}
+}
+
+func TestCheapFilter_PraktikumRejected(t *testing.T) {
+	f := testFilter()
+	if r := f.Check("Praktikum Backend Developer (m/w/d)", "Stella", ""); !r.Rejected {
+		t.Error("Praktikum ilanı elenmeliydi")
+	}
+}
+
+func TestCheapFilter_MLAndDataTitlesPass(t *testing.T) {
+	f := testFilter()
+	for _, title := range []string{
+		"Junior Data Scientist",
+		"Machine Learning Engineer (Graduate)",
+		"Veri Bilimci",
+		"AI Engineer - New Grad",
+		"Data Analyst",
+		"Business Intelligence Analyst",
+		"Veri Analisti",
+	} {
+		if r := f.Check(title, "Acme", "Python and SQL"); r.Rejected {
+			t.Errorf("%q geçmeliydi, red: %s", title, r.Reason)
+		}
+	}
+}
+
+func TestCheapFilter_RejectsCorporateNoiseAndStage(t *testing.T) {
+	f := testFilter()
+	for _, title := range []string{
+		"Operational Risk Analyst",
+		"FinCrime Analyst",
+		"Deal Intelligence Analyst",
+		"Product Cost Analyst",
+		"Stage: Software Developer",
+		"Veri Merkezleri İşletme Müdürü",
+		"Technical Account Management Team Leader France",
+	} {
+		if r := f.Check(title, "Acme", "We are a fast-growing cloud company."); !r.Rejected {
+			t.Errorf("%q elenmeliydi ama geçti", title)
+		}
+	}
+}
+
+func TestCheapFilter_EntrySignalGivesChance(t *testing.T) {
+	f := testFilter()
+	// Başlıkta engineer/developer yok ama new-grad sinyali + teknik açıklama → AI'ya gitmeli.
+	desc := "Graduate programme: you will work with Python, SQL and backend APIs."
+	if r := f.Check("Graduate Programme 2026", "Acme", desc); r.Rejected {
+		t.Errorf("giriş seviyesi + teknik açıklama geçmeliydi, red: %s", r.Reason)
+	}
+	// Teknik içerik yoksa yine elenmeli.
+	if r := f.Check("Graduate Programme 2026", "Acme", "Join our sales and marketing rotation."); !r.Rejected {
+		t.Error("teknik olmayan graduate programı elenmeliydi")
+	}
+	// Sinyal yoksa katı kalmalı.
+	if r := f.Check("Office Assistant", "Acme", "Python SQL backend software api"); !r.Rejected {
+		t.Error("sinyalsiz alakasız başlık elenmeliydi")
+	}
+}
+
+func TestCheapFilter_RejectsFourPlusYears(t *testing.T) {
+	f := testFilter()
+	for _, d := range []string{
+		"You have 4+ years of experience in Go or Java.",
+		"Experience of at least 5 years building backend services.",
+		"4-6 years of professional experience required.",
+		"Mindestens 4 Jahre Berufserfahrung als Entwickler.",
+	} {
+		if r := f.Check("Backend Developer", "Acme", d); !r.Rejected {
+			t.Errorf("%q elenmeliydi", d)
+		}
+	}
+	// Başlıkta açık giriş sinyali varsa yıl şartı AI'ya bırakılır.
+	if r := f.Check("Junior Backend Developer", "Acme", "4+ years of experience preferred"); r.Rejected {
+		t.Errorf("junior başlık yıl kapısına takılmamalı: %s", r.Reason)
+	}
+}
+
+func TestCheapFilter_LanguageBarrier(t *testing.T) {
+	f := testFilter()
+	for _, d := range []string{
+		"Fluent German (C1) is required for daily communication with customers.",
+		"Sie bringen sehr gute Deutschkenntnisse mit.",
+		"Vloeiend Nederlands is vereist voor deze rol.",
+	} {
+		if r := f.Check("Software Engineer", "Acme", d); !r.Rejected {
+			t.Errorf("%q dil bariyeri olarak elenmeliydi", d)
+		}
+	}
+	for _, d := range []string{
+		"German is a plus but not required. We work in English.",
+		"Deutschkenntnisse von Vorteil, Arbeitssprache Englisch.",
+	} {
+		if r := f.Check("Software Engineer", "Acme", d); r.Rejected {
+			t.Errorf("%q yumuşak dil şartı, elenmemeli: %s", d, r.Reason)
+		}
+	}
+}
+
+func TestCheapFilter_NonEnglishPosting(t *testing.T) {
+	f := testFilter()
+	nl := strings.Repeat("Wij zoeken een ervaren developer voor ons team met een leuke sfeer bij een mooi bedrijf. ", 8)
+	if r := f.Check("Software Engineer", "Acme", nl); !r.Rejected {
+		t.Error("Felemenkçe ilan elenmeliydi")
+	}
+	en := strings.Repeat("We are looking for a developer to join our team and build the platform with you. ", 8)
+	if r := f.Check("Software Engineer", "Acme", en); r.Rejected {
+		t.Errorf("İngilizce ilan elenmemeli: %s", r.Reason)
+	}
+	friendly := nl + " Dutch is not required, we are an English-speaking team."
+	if r := f.Check("Software Engineer", "Acme", friendly); r.Rejected {
+		t.Errorf("İngilizce-dostu ilan elenmemeli: %s", r.Reason)
 	}
 }

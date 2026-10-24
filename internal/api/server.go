@@ -1,18 +1,24 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ulasdursun/job-hunter/internal/analyzer"
 )
 
+// maxBodyBytes, istek gövdesi için üst sınırdır (PATCH status gibi küçük JSON'lar için fazlasıyla yeterli).
+const maxBodyBytes = 1 << 20
+
 // StartServer starts the dashboard HTTP server in a background goroutine.
 // Serves both the REST API and the static frontend from the "web" directory.
-func StartServer(port int, pool *pgxpool.Pool, tailor *analyzer.TailorService) {
+// ctx iptal edildiğinde sunucu graceful shutdown yapar.
+func StartServer(ctx context.Context, port int, pool *pgxpool.Pool, tailor *analyzer.TailorService) {
 	repo := NewRepository(pool)
 	h := NewHandlers(repo, tailor)
 
@@ -20,6 +26,7 @@ func StartServer(port int, pool *pgxpool.Pool, tailor *analyzer.TailorService) {
 
 	// ── API routes ───────────────────────────────────────────────────────────
 	mux.HandleFunc("GET /api/jobs", h.ListJobs)
+	mux.HandleFunc("GET /api/jobs/{id}", h.GetJob)
 	mux.HandleFunc("GET /api/stats", h.GetStats)
 	mux.HandleFunc("PATCH /api/jobs/{id}/status", h.UpdateJobStatus)
 	mux.HandleFunc("POST /api/jobs/{id}/tailor", h.TailorJob)
@@ -34,10 +41,29 @@ func StartServer(port int, pool *pgxpool.Pool, tailor *analyzer.TailorService) {
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           guard(port, mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// Tailor/Interview Prep LLM çağrıları (failover + backoff) uzun sürebilir.
+		WriteTimeout: 5 * time.Minute,
+		IdleTimeout:  60 * time.Second,
+	}
+
 	go func() {
 		slog.Info("dashboard server listening", "addr", "http://"+addr)
-		if err := http.ListenAndServe(addr, withCORS(mux)); err != nil {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("dashboard server crashed", "error", err)
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("dashboard server shutdown error", "error", err)
 		}
 	}()
 }
@@ -51,20 +77,56 @@ func noCache(next http.Handler) http.Handler {
 	})
 }
 
-// withCORS restricts CORS requests strictly to localhost origins.
-func withCORS(next http.Handler) http.Handler {
+// guard; Host doğrulama (DNS rebinding), katı CORS, cross-site state-changing istek reddi,
+// gövde boyutu sınırı ve temel güvenlik başlıklarını tek middleware'de toplar.
+func guard(port int, next http.Handler) http.Handler {
+	allowedOrigins := map[string]bool{
+		fmt.Sprintf("http://localhost:%d", port): true,
+		fmt.Sprintf("http://127.0.0.1:%d", port): true,
+	}
+	allowedHosts := map[string]bool{
+		fmt.Sprintf("localhost:%d", port): true,
+		fmt.Sprintf("127.0.0.1:%d", port): true,
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin != "" && (origin == "http://localhost:8080" || origin == "http://127.0.0.1:8080" ||
-			strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
+		// DNS rebinding koruması: yalnızca beklenen Host değerleri.
+		if !allowedHosts[r.Host] {
+			http.Error(w, "forbidden host", http.StatusForbidden)
 			return
 		}
+
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+
+		origin := r.Header.Get("Origin")
+		originOK := origin != "" && allowedOrigins[origin]
+		if originOK {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Confirm")
+		}
+
+		if r.Method == http.MethodOptions {
+			if origin != "" && !originOK {
+				http.Error(w, "origin not allowed", http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// State-changing isteklerde yabancı origin / cross-site istekleri reddet (CSRF).
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if (origin != "" && !originOK) || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+				http.Error(w, "cross-origin request blocked", http.StatusForbidden)
+				return
+			}
+		}
+
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		next.ServeHTTP(w, r)
 	})
 }

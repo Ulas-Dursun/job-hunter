@@ -97,3 +97,33 @@ func TestBuildPrompt_TruncatesLongDescription(t *testing.T) {
 		t.Errorf("expected truncated description with ellipsis")
 	}
 }
+
+func TestSanitizeTailoredAssets_FiltersUnownedTech(t *testing.T) {
+	rawJSON := `{
+		"cover_letter": "Short letter",
+		"tailored_summary": "Summary",
+		"tailored_experience_bullets": ["Bullet 1"],
+		"tailored_project_bullets": ["Bullet 2"],
+		"skills_highlight": ["Go", "Kubernetes", "PostgreSQL", "C#"],
+		"ats_keywords": ["Go", "Kubernetes", "Terraform (gap — do not claim on CV)"]
+	}`
+
+	res, err := parseTailoredResult(rawJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, sk := range res.SkillsHighlight {
+		if sk == "Kubernetes" || sk == "C#" {
+			t.Errorf("unowned skill %q should have been removed from skills_highlight", sk)
+		}
+	}
+	foundMarked := false
+	for _, kw := range res.ATSKeywords {
+		if strings.HasPrefix(kw, "Kubernetes") && strings.Contains(kw, "gap") {
+			foundMarked = true
+		}
+	}
+	if !foundMarked {
+		t.Errorf("expected unowned ATS keyword 'Kubernetes' to be marked as gap, got %v", res.ATSKeywords)
+	}
+}

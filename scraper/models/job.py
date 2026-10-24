@@ -7,6 +7,7 @@ Farklı kaynaklardan gelen verilerin normalizasyonu burada olur.
 """
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -63,6 +64,19 @@ class Job:
 
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
+    def content_hash(self) -> str:
+        """
+        Çapraz-site duplicate tespiti: aynı ilan LinkedIn ve Indeed'de farklı URL ile gelir.
+        company + title + şehir (normalize) üzerinden hash üretir; cinsiyet ekleri (m/f/d) ve noktalama yok sayılır.
+        """
+        def norm(s: str) -> str:
+            s = re.sub(r"\((?:[mfwdx]\s*/\s*){1,3}[mfwdx]\)", " ", (s or "").lower())
+            return re.sub(r"[^\w]+", " ", s, flags=re.UNICODE).strip()
+
+        city = norm((self.location or "").split(",")[0])
+        canonical = f"{norm(self.company)}|{norm(self.title)}|{city}"
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
     def to_redis_fields(self) -> dict[str, str]:
         """
         Redis XADD için flat string dict üretir.
@@ -80,6 +94,7 @@ class Job:
             "posted_at":    self.posted_at or "",
             "scraped_at":   self.scraped_at,
             "dedup_hash":   self.dedup_hash(),
+            "content_hash": self.content_hash(),
         }
 
     def __repr__(self) -> str:

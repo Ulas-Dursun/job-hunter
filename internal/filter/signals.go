@@ -1,0 +1,177 @@
+package filter
+
+import (
+	"regexp"
+	"strconv"
+	"strings"
+	"unicode"
+)
+
+// maxAllowedMinYears: ilanın istediği asgari deneyim bu değerin üstündeyse (>=) AI'ya gitmeden elenir.
+// Aday 0-2 yıl bandında; "3+ yıl" sınırda olduğu için AI'ya bırakılır, 4+ kesin red.
+const maxAllowedMinYears = 4
+
+var (
+	// "5 years of experience", "4+ yrs ... experience", "3-5 years experience" (alt sınır alınır)
+	reYearsThenExp = regexp.MustCompile(`(\d{1,2})\s*\+?\s*(?:[-–]\s*\d{1,2}\s*)?(?:years?|yrs?|jahre[n]?|jaar|yıl|ans)\b.{0,40}?(?:experience|erfahrung|ervaring|deneyim|expérience)`)
+	// "experience of 4+ years", "Berufserfahrung von mindestens 5 Jahren"
+	reExpThenYears = regexp.MustCompile(`(?:experience|erfahrung|ervaring|deneyim|expérience)\D{0,30}(\d{1,2})\s*\+?\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans)\b`)
+	// "at least 5 years", "minimum of 6 years", "mindestens 4 Jahre", "en az 5 yıl"
+	reMinYears = regexp.MustCompile(`(?:at least|minimum(?: of)?|min\.|mindestens|en az|minstens|au moins)\s*(\d{1,2})\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans)\b`)
+)
+
+// companyClaimPrefixes: sayının hemen öncesinde geçerse ifade şirket tanıtımıdır ("over 20 years of experience"),
+// adaydan istenen şart değildir.
+var companyClaimPrefixes = []string{"over ", "more than ", "nearly ", "almost ", "meer dan ", "plus de ", "mehr als ", "über ", "since ", "for "}
+
+// minYearsRequired, açıklamada geçen deneyim şartlarının en yükseğini (alt sınır olarak) döndürür; yoksa 0.
+// 13+ yıl ve "over/more than N years" kalıpları şirket tanıtımı sayılıp yok sayılır.
+func minYearsRequired(descLower string) int {
+	best := 0
+	for _, re := range []*regexp.Regexp{reYearsThenExp, reExpThenYears, reMinYears} {
+		for _, loc := range re.FindAllStringSubmatchIndex(descLower, -1) {
+			n, err := strconv.Atoi(descLower[loc[2]:loc[3]])
+			if err != nil || n > 12 || n <= best {
+				continue
+			}
+			from := loc[2] - 12
+			if from < 0 {
+				from = 0
+			}
+			prefix := descLower[from:loc[2]]
+			claim := false
+			for _, p := range companyClaimPrefixes {
+				if strings.HasSuffix(prefix, p) {
+					claim = true
+					break
+				}
+			}
+			if !claim {
+				best = n
+			}
+		}
+	}
+	return best
+}
+
+// languageBarrierPatterns: aday İngilizce (C1/C2) + Türkçe (ana dil) + Almanca (başlangıç) bilir.
+// Almanca/Felemenkçe/Fransızca'yı zorunlu kılan ifadeler (aşağıdaki yumuşatıcı kelimeler yoksa) red sebebidir.
+var languageBarrierPatterns = []string{
+	"fluent german", "fluent in german", "german fluent", "fluent dutch", "fluent in dutch", "dutch fluent",
+	"fluent french", "fluent in french", "french fluent", "native german", "german native", "native dutch",
+	"native french", "german (c1", "german c1", "german c2", "german (c2", "dutch (c1", "dutch c1",
+	"verhandlungssicher", "fließend deutsch", "fliessend deutsch", "fließende deutschkenntnisse",
+	"sehr gute deutschkenntnisse", "gute deutschkenntnisse", "deutsch c1", "deutsch c2", "muttersprache deutsch",
+	"vloeiend nederlands", "nederlands vereist", "goede beheersing van het nederlands",
+	"uitstekende beheersing van het nederlands", "français courant", "maîtrise du français",
+}
+
+// languageSoftWords: bariyer ifadesinin yakınında geçerse dil şartı "artı/tercih" sayılır ve ilan elenmez.
+var languageSoftWords = []string{
+	"plus", "advantage", "nice to have", "nice-to-have", "preferred", "desirable", "bonus", "beneficial",
+	"von vorteil", "wünschenswert", "vorteilhaft", "english", "englisch", "engels", "anglais",
+}
+
+// hasLanguageBarrier, Almanca/Felemenkçe/Fransızca zorunluluğu bildiren bir ifade bulursa (ifade) döndürür.
+func hasLanguageBarrier(descLower string) (string, bool) {
+	for _, p := range languageBarrierPatterns {
+		from := 0
+		for {
+			i := strings.Index(descLower[from:], p)
+			if i < 0 {
+				break
+			}
+			idx := from + i
+			lo := idx - 60
+			if lo < 0 {
+				lo = 0
+			}
+			hi := idx + len(p) + 80
+			if hi > len(descLower) {
+				hi = len(descLower)
+			}
+			// Rune sınırlarına hizala (UTF-8 ortasından kesme).
+			for lo > 0 && lo < len(descLower) && !isRuneStart(descLower[lo]) {
+				lo--
+			}
+			for hi < len(descLower) && !isRuneStart(descLower[hi]) {
+				hi++
+			}
+			window := descLower[lo:hi]
+			soft := false
+			for _, w := range languageSoftWords {
+				if strings.Contains(window, w) {
+					soft = true
+					break
+				}
+			}
+			if !soft {
+				return p, true
+			}
+			from = idx + len(p)
+		}
+	}
+	return "", false
+}
+
+func isRuneStart(b byte) bool { return b&0xC0 != 0x80 }
+
+var (
+	stopEN = toSet("the", "and", "we", "with", "for", "you", "are", "our", "will", "to", "of", "in", "your", "is", "have", "be")
+	stopDE = toSet("und", "der", "die", "das", "wir", "mit", "für", "sie", "ein", "eine", "den", "im", "von", "zu", "auf", "ist", "sind", "werden", "du", "deine", "bei", "unser", "unsere", "dich", "uns", "oder", "als")
+	stopNL = toSet("het", "een", "wij", "voor", "met", "van", "je", "jij", "ons", "bij", "zijn", "naar", "ook", "jouw", "wat", "dat", "worden", "onze", "kun")
+	stopFR = toSet("les", "des", "nous", "vous", "pour", "avec", "une", "est", "dans", "sur", "que", "du", "au", "aux", "votre", "notre", "vos", "nos")
+)
+
+func toSet(words ...string) map[string]struct{} {
+	m := make(map[string]struct{}, len(words))
+	for _, w := range words {
+		m[w] = struct{}{}
+	}
+	return m
+}
+
+// englishFriendlyPhrases: ilan metni yerel dilde olsa bile İngilizce çalışmanın açıkça kabul edildiğini gösterir.
+var englishFriendlyPhrases = []string{
+	"english-speaking", "english speaking", "working language is english", "company language is english",
+	"dutch is not required", "dutch not required", "no dutch required", "german is not required",
+	"german not required", "no german required", "arbeitssprache ist englisch", "voertaal is engels",
+}
+
+// nonEnglishPosting, ilan metni ağırlıklı olarak Almanca/Felemenkçe/Fransızca yazılmışsa (dil kodu) döndürür.
+// İki dilli ilanlarda İngilizce stop-word sayısı da yüksek olacağından oran koşulu yanlış pozitifi önler.
+func nonEnglishPosting(descLower string) (string, bool) {
+	for _, ok := range englishFriendlyPhrases {
+		if strings.Contains(descLower, ok) {
+			return "", false
+		}
+	}
+	words := strings.FieldsFunc(descLower, func(r rune) bool { return !unicode.IsLetter(r) })
+	if len(words) < 60 {
+		return "", false
+	}
+	var en, de, nl, fr int
+	for _, w := range words {
+		if _, ok := stopEN[w]; ok {
+			en++
+		}
+		if _, ok := stopDE[w]; ok {
+			de++
+		}
+		if _, ok := stopNL[w]; ok {
+			nl++
+		}
+		if _, ok := stopFR[w]; ok {
+			fr++
+		}
+	}
+	switch {
+	case de >= 12 && de > 2*en:
+		return "de", true
+	case nl >= 10 && nl > 2*en:
+		return "nl", true
+	case fr >= 12 && fr > 2*en:
+		return "fr", true
+	}
+	return "", false
+}

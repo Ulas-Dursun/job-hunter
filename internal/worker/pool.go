@@ -13,6 +13,7 @@ import (
 
 	"github.com/ulasdursun/job-hunter/internal/analyzer"
 	"github.com/ulasdursun/job-hunter/internal/config"
+	"github.com/ulasdursun/job-hunter/internal/filter"
 	"github.com/ulasdursun/job-hunter/internal/metrics"
 	"github.com/ulasdursun/job-hunter/internal/store"
 )
@@ -29,6 +30,33 @@ type Pool struct {
 	scoring       *config.ScoringConfig
 	notifier      *notifier.Telegram
 	notifyEnabled bool
+
+	attemptsMu sync.Mutex
+	attempts   map[string]int // msgID → DB yazma / geçici AI hatası deneme sayısı
+
+	preFilter *filter.CheapFilter // opsiyonel: kuyrukta bekleyen eski ilanları AI öncesi eler
+}
+
+// SetPreFilter, worker'ın AI çağrısından önce uygulayacağı CheapFilter'ı ayarlar.
+func (p *Pool) SetPreFilter(f *filter.CheapFilter) { p.preFilter = f }
+
+// maxDBRetries, bir mesajın DB'ye yazılamadığında jobs:failed'e taşınmadan önceki deneme sınırıdır.
+const maxDBRetries = 5
+
+// maxAITransientRetries, geçici AI kota hatalarında (429/503) jobs:failed'e taşımadan önceki deneme sınırıdır.
+const maxAITransientRetries = 8
+
+func (p *Pool) bumpAttempts(id string) int {
+	p.attemptsMu.Lock()
+	defer p.attemptsMu.Unlock()
+	p.attempts[id]++
+	return p.attempts[id]
+}
+
+func (p *Pool) clearAttempts(id string) {
+	p.attemptsMu.Lock()
+	delete(p.attempts, id)
+	p.attemptsMu.Unlock()
 }
 
 func New(
@@ -52,6 +80,7 @@ func New(
 		scoring:       scoring,
 		notifier:      n,
 		notifyEnabled: notifyEnabled,
+		attempts:      make(map[string]int),
 	}
 }
 
@@ -91,10 +120,17 @@ func (p *Pool) runWorker(ctx context.Context, id int) {
 }
 
 func (p *Pool) processNext(ctx context.Context, workerID int) {
+	// Worker 0 ana ConsumerName'i kullanır (eski pending mesajları da devralır);
+	// diğer worker'lar benzersiz ad alır ki aynı pending mesajı iki worker aynı anda çekmesin.
+	consumerName := p.cfg.ConsumerName
+	if workerID > 0 {
+		consumerName = fmt.Sprintf("%s-%d", p.cfg.ConsumerName, workerID)
+	}
+
 	// 1. Önce bekleyen (pending) mesajları kontrol et (ID: "0")
 	streams, err := p.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    p.cfg.ConsumerGroup,
-		Consumer: p.cfg.ConsumerName,
+		Consumer: consumerName,
 		Streams:  []string{p.cfg.StreamFiltered, "0"},
 		Count:    1,
 	}).Result()
@@ -103,7 +139,7 @@ func (p *Pool) processNext(ctx context.Context, workerID int) {
 	if err != nil || len(streams) == 0 || len(streams[0].Messages) == 0 {
 		streams, err = p.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    p.cfg.ConsumerGroup,
-			Consumer: p.cfg.ConsumerName,
+			Consumer: consumerName,
 			Streams:  []string{p.cfg.StreamFiltered, ">"},
 			Count:    1,
 			Block:    2 * time.Second,
@@ -135,6 +171,25 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 	url := field(msg.Values, "url")
 	postedAt := field(msg.Values, "posted_at")
 
+	// ── Ön filtre (kuyrukta bekleyen eski ilanlar için) ───────────────────────
+	// jobs:filtered'a eski/gevşek kurallarla girmiş ilanlar AI kotası harcamadan elenir.
+	if p.preFilter != nil {
+		if fr := p.preFilter.Check(title, company, description, source); fr.Rejected {
+			slog.Debug("worker prefilter rejected", "title", title, "reason", fr.Reason)
+			p.metrics.JobsCheapFiltered.Inc()
+			p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
+			return
+		}
+	}
+
+	// Aynı şirket+başlık daha önce düşük puan aldıysa (çok şehirli kopya ilan) AI'ya gitme.
+	if twin, err := p.jobStore.HasLowScoreTwin(ctx, company, title); err == nil && twin {
+		slog.Debug("worker skipped low-score twin", "title", title, "company", company)
+		p.metrics.JobsCheapFiltered.Inc()
+		p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
+		return
+	}
+
 	// ── Gemini analizi ────────────────────────────────────────────────────────
 	start := time.Now()
 	result, err := p.analyzer.Analyze(ctx, title, company, location, description)
@@ -146,15 +201,36 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 		if errors.Is(err, context.Canceled) {
 			return
 		}
+		p.metrics.GeminiRequests.With(map[string]string{"status": "error"}).Inc()
+
+		// Geçici kota/yoğunluk hatası: ilanı kaybetme, ACK'leme; backoff ile pending'den yeniden dene.
+		if analyzer.IsTransient(err) {
+			attempts := p.bumpAttempts(msg.ID)
+			if attempts < maxAITransientRetries {
+				wait := time.Duration(attempts) * 20 * time.Second
+				if wait > 2*time.Minute {
+					wait = 2 * time.Minute
+				}
+				slog.Warn("gemini transient failure, will retry",
+					"title", title, "attempt", attempts, "wait", wait.String())
+				select {
+				case <-time.After(wait):
+				case <-ctx.Done():
+				}
+				return
+			}
+			p.clearAttempts(msg.ID)
+		}
+
 		slog.Error("gemini failed",
 			"title", title,
 			"company", company,
 			"error", err,
 		)
-		p.metrics.GeminiRequests.With(map[string]string{"status": "error"}).Inc()
 		p.toFailed(ctx, msg)
 		return
 	}
+	p.clearAttempts(msg.ID)
 
 	// Action'ı modelden değil, skordan deterministik olarak hesapla.
 	// LLM'ler action/score arasında bazen tutarsız oluyor (örn: 8.0 skor + "watch"
@@ -187,9 +263,24 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 		PostedAt:    postedAt,
 		Score:       result,
 	}); err != nil {
-		slog.Error("db upsert failed, skipping ack for retry", "title", title, "error", err)
+		slog.Error("db upsert failed", "title", title, "error", err)
+
+		// Zehirli mesaj koruması: ack'lenmeyen mesaj pending listesinden anında tekrar okunur.
+		// Backoff + deneme sınırı olmadan sonsuz sıcak döngü (LLM kotası + CPU) oluşurdu.
+		attempts := p.bumpAttempts(msg.ID)
+		if attempts >= maxDBRetries {
+			slog.Error("db upsert retries exhausted, moving to failed stream", "id", msg.ID, "attempts", attempts)
+			p.clearAttempts(msg.ID)
+			p.toFailed(ctx, msg)
+			return
+		}
+		select {
+		case <-time.After(time.Duration(attempts) * 2 * time.Second):
+		case <-ctx.Done():
+		}
 		return
 	}
+	p.clearAttempts(msg.ID)
 
 	p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
 
@@ -225,11 +316,18 @@ func (p *Pool) toFailed(ctx context.Context, msg redis.XMessage) {
 		Values: msg.Values,
 	}).Result()
 
-	// Başarısız ilanın dedup hash'ini jobs:seen kümesinden kaldır.
+	// Başarısız ilanın dedup anahtarlarını (hem eski SET hem yeni TTL'li URL/içerik anahtarları) kaldır.
 	// Bu sayede sonraki taramada veya yeniden denemede ilan kalıcı olarak kilitli kalmaz.
 	dedupHash := field(msg.Values, "dedup_hash")
-	if dedupHash != "" && p.cfg.DedupSetKey != "" {
-		_ = p.client.SRem(ctx, p.cfg.DedupSetKey, dedupHash).Err()
+	contentHash := field(msg.Values, "content_hash")
+	if p.cfg.DedupSetKey != "" {
+		if dedupHash != "" {
+			_ = p.client.SRem(ctx, p.cfg.DedupSetKey, dedupHash).Err()
+			_ = p.client.Del(ctx, p.cfg.DedupSetKey+":"+dedupHash).Err()
+		}
+		if contentHash != "" {
+			_ = p.client.Del(ctx, p.cfg.DedupSetKey+":c:"+contentHash).Err()
+		}
 	}
 
 	p.ack(ctx, p.cfg.StreamFiltered, msg.ID)

@@ -3,18 +3,30 @@ package analyzer
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ulasdursun/job-hunter/internal/config"
 )
 
 // PromptBuilder, aday profili ile iş ilanını birleştiren Gemini/Groq prompt'u üretir.
 // Her çağrıda aynı profil kullanılır — bir kez build edilip cache'lenir.
+// Ayrıca kullanıcının Kanban kararlarından (applied/interview vs skipped/rejected)
+// öğrenilen dinamik geri bildirim özeti (feedbackText) çalışma zamanında güncellenebilir.
 type PromptBuilder struct {
-	profileText string
+	profileText  string
+	mu           sync.RWMutex
+	feedbackText string
 }
 
 func NewPromptBuilder(cfg *config.CandidateConfig) *PromptBuilder {
 	return &PromptBuilder{profileText: buildProfile(cfg)}
+}
+
+// SetFeedback, kullanıcının geçmiş başvuru/eleme kararlarından üretilen özeti günceller.
+func (p *PromptBuilder) SetFeedback(feedback string) {
+	p.mu.Lock()
+	p.feedbackText = strings.TrimSpace(feedback)
+	p.mu.Unlock()
 }
 
 // Build, tek bir iş ilanı için tam prompt'u üretir.
@@ -22,12 +34,20 @@ func NewPromptBuilder(cfg *config.CandidateConfig) *PromptBuilder {
 func (p *PromptBuilder) Build(title, company, location, description string) string {
 	desc := truncateUTF8(strings.TrimSpace(description), 4000)
 
+	p.mu.RLock()
+	fb := p.feedbackText
+	p.mu.RUnlock()
+
+	feedbackBlock := ""
+	if fb != "" {
+		feedbackBlock = "\nCANDIDATE HISTORICAL PREFERENCES (Calibrate scoring using his real past decisions):\n" + fb + "\n"
+	}
+
 	return fmt.Sprintf(`You are an elite technical talent partner and hiring advisor evaluating career opportunities for a versatile Software Engineering graduate (Ulaş Dursun).
 Analyze this job posting and return ONLY a valid JSON object. No markdown. No explanation. No extra text.
 
 CANDIDATE PROFILE:
-%s
-
+%s%s
 === BEGIN JOB POSTING ===
 Title: %s
 Company: %s
@@ -36,16 +56,16 @@ Description: %s
 === END JOB POSTING ===
 
 Your task:
-Determine whether this role is a strong career match for the candidate across his 4 core target pillars:
-1. Backend & Systems Software: Go, Java (Spring Boot), Python, Distributed Systems, Concurrency, REST APIs, Microservices.
-2. Cloud, Platform & DevOps / SRE: Docker, Linux (Bash), AWS, CI/CD (GitHub Actions), Prometheus, Grafana.
-3. Data Engineering & Analytics: SQL, Python, PostgreSQL, Data Pipelines, Analytics, Business Intelligence.
-4. Systems & Aerospace Software: Surveillance data decoding, ASTERIX E-ARCO, JSON validation, TCP/UDP sockets, C++/Go.
+Determine whether this role is a strong career match for the candidate across his 4 core target pillars (plus broad 0-2 year Software/Data/Solutions roles):
+1. Backend & Systems Software: Go, Java (Spring Boot), Python, Rust, Distributed Systems, Concurrency, REST APIs, Microservices.
+2. Cloud, Platform & DevOps / SRE: Docker, Linux (Bash), AWS (EC2, S3, IAM, VPC, Certified AI Practitioner), CI/CD (GitHub Actions), Prometheus, Grafana.
+3. Data Engineering, Analytics & ML: SQL, Python, PostgreSQL, Real-time Data Processing, Data Pipelines, Analytics, Business Intelligence, Machine Learning fundamentals (university coursework).
+4. Systems & Aerospace Software: Surveillance data decoding, ASTERIX E-ARCO (ARTAS, SDDS, SASS-C), JSON schema validation, TCP/UDP sockets, C++/Python/Java clients.
 
 Use only evidence explicitly present in the candidate profile and job posting.
 Do not hallucinate skills, experience, or projects.
-Prefer "watch" over "skip" when the role is entry/junior level or an adjacent growth opportunity.
-Prefer "apply" when there is strong alignment with any of the 4 pillars.
+Prefer "watch" over "skip" when the role is entry/junior level (0-2 years) or an adjacent growth opportunity.
+Prefer "apply" when there is strong alignment with any of the 4 pillars at an entry/junior level.
 
 Return this exact JSON structure:
 {
@@ -60,131 +80,109 @@ Return this exact JSON structure:
 
 CRITICAL RULES (MUST OBEY):
 
-1. EXPERIENCE & SCORING MATRIX (STRICT CALIBRATION):
-   - 8.5 - 10.0 (JACKPOT MATCH — Triggers Real-Time Notification):
-     * EXCLUSIVELY for top-tier entry-level alignments: explicitly Junior, New Grad, Associate, or 0-2 years.
-     * Core tech stack aligns 80%%+ with candidate's primary skills (Go, Java/Spring Boot, Python data engineering, Docker/Linux/APIs, or EUROCONTROL/aviation surveillance systems).
-     * No major missing requirements, no visa/location blockers.
-   - 7.0 - 8.4 (STRONG FIT / APPLY):
-     * Entry-level or junior role (0-2 years) with solid fundamentals, but candidate has 1-2 secondary tool gaps (e.g., specific cloud nuances, Kubernetes in production) that can be learned on the job.
-     * Or ~3 years required where candidate's strong project portfolio makes it a viable high-probability application.
-   - 5.0 - 6.9 (WATCH / STRETCH OPPORTUNITY):
-     * 2-4 years required with strong stack match, OR junior roles requiring an adjacent stack transition (e.g. Node.js or C# backend), OR mid-level roles that represent a significant stretch.
+1. EXPERIENCE & SCORING MATRIX (STRICT GRANULAR CALIBRATION — DO NOT CLUSTER AT 6.8):
+   - 8.2 - 9.5 (JACKPOT MATCH — Triggers Instant Telegram Notification):
+     * EXCLUSIVELY for top-tier entry-level alignments: explicitly Junior, New Grad, Graduate, Associate, or 0-2 years.
+     * Core tech stack aligns 80%%+ with candidate's primary skills (Go, Java/Spring Boot, Python backend/data, Docker/Linux/AWS/APIs, or EUROCONTROL/aviation surveillance systems).
+     * No major missing requirements, no explicit visa/language blockers.
+   - 7.4 - 8.1 (STRONG FIT / APPLY — Included in Daily Evening Digest):
+     * Entry-level or junior role (0-2 years) in target cities (Istanbul, Brussels, Amsterdam, Berlin, Munich, London, Zurich, Geneva, or Remote) with solid fundamentals, even if visa sponsorship is not explicitly mentioned or candidate has 1-2 secondary tool gaps (e.g., Kubernetes, Terraform, Kafka) that can be learned on the job.
+     * Or ~2 year role where candidate's strong project portfolio + EUROCONTROL Brussels traineeship makes it a strong application.
+   - 6.8 - 7.3 (HIGH WATCH / VIABLE STRETCH — Eligible for Evening Digest):
+     * RESERVED ONLY FOR: (a) 0-2 year / Junior / Graduate roles requiring an adjacent stack transition (e.g., Full-stack TypeScript/React + Python/Java, or Solutions/BI/Technical Analyst with SQL/Python), OR (b) ~2 year (light mid-level) roles in target cities where primary stack (Java Spring Boot, Go, Python, AWS) aligns strongly.
+     * Any role requiring 3+ years of experience MUST NOT be placed in 6.8-7.3 unless it explicitly welcomes New Grads/Juniors.
+   - 5.8 - 6.5 (MODERATE WATCH — Mid-Level Stretch, Excluded from Evening Digest):
+     * Roles requiring 3-4 years of experience where tech stack overlaps, OR roles in non-target European cities (e.g. Tallinn, Budapest, Warsaw) without remote flexibility, OR roles missing multiple tools.
+     * HARD CAP: If a role requires 3+ years of experience, cap match_score at <= 6.5 (use 5.8, 6.0, 6.2, 6.4, or 6.5).
+   - 5.0 - 5.7 (LOW WATCH):
+     * Heavy stretch (3-4 years + adjacent stack or domain gap).
    - Below 5.0 (SKIP):
-     * Incompatible roles, 4+ years required without match, 5+ years required in general, non-engineering disciplines, gig/labeling work, or unresolvable visa/location barriers.
+     * Incompatible roles, 4+ years required without strong match, 5+ years required in general, security clearance required, non-tech disciplines, gig/labeling work, or explicit visa/language barriers.
+   - ANTI-CLUSTERING RULE: Do NOT lazily assign 6.8 to every "watch" job. Differentiate using the full decimal scale (e.g., 5.4, 5.9, 6.1, 6.4, 6.9, 7.2, 7.6, 8.1, 8.6).
 
-2. NEW GRAD / JUNIOR FLEXIBILITY:
-   - If the job is explicitly for "New Grad", "Junior", "Associate", "Graduate", or "Trainee", prioritize engineering fundamentals over exact syntax or exact years.
-   - Strong fundamentals include: REST, HTTP, APIs, databases, SQL/NoSQL, OOP, Git, Docker, cloud basics, testing, concurrency.
-   - Do not penalize heavily for missing years if the role is clearly entry-level and the candidate shows learning potential plus adjacent stack fit.
+2. BROAD NEW GRAD / 0-2 YEARS SOFT FLEXIBILITY:
+   - A Software Engineering graduate with Python, Java, Go, SQL, C++, Cloud, and Data Pipeline experience can succeed across a wide spectrum of 0-2 year roles (Backend, Data Analyst, Data Engineer, Junior ML/AI, Cloud/DevOps, Solutions/Integration Engineer, Technical Analyst, Graduate Rotational Programs).
+   - If the job is explicitly for "New Grad", "Junior", "Associate", "Graduate", "Trainee", or "0-2 years", prioritize engineering & analytical fundamentals over exact tool names.
 
 2b. TOOL GAP FLEXIBILITY:
-   If the candidate is missing only 1-2 secondary infrastructure/tool requirements
-   (e.g., deep Kubernetes production experience, Terraform, a specific cloud provider nuance)
-   but core fundamentals AND primary tech stack (Go/Java/Python/Rust, databases,
-   concurrency, APIs, containerization basics with Docker) align well:
-   - Do NOT treat this as disqualifying.
-   - Score in the 7.0-8.4 range depending on overall fit.
-   - List the specific gap in missing_skills — do not skip solely because of it.
+   If the candidate is missing only 1-2 secondary infrastructure/tool requirements (e.g., Kubernetes in production, Terraform, Spark/Kafka) but core fundamentals AND primary tech stack align well:
+   - Do NOT treat this as disqualifying. Score in the 7.0-7.9 range (or 8.0+ if explicitly graduate/junior).
+   - List the specific gap in missing_skills.
 
 2c. SOFTWARE ENGINEER / FULLSTACK FLEXIBILITY:
-   If a role is titled "Software Engineer", "Associate Software Engineer", or "Full Stack Developer",
-   and the core workload is fundamentally backend, APIs, databases, or cloud infrastructure (with minor secondary
-   frontend tasks like React/TypeScript):
-   - Do NOT disqualify. Candidate has foundational React/HTML/CSS exposure from capstone IoT project.
-   - Disqualify only if the role is exclusively/primarily frontend UI design (e.g., pure React/Angular/Vue/CSS developer).
+   If a role is titled "Software Engineer", "Associate Software Engineer", or "Full Stack Developer", and the core workload is backend, APIs, data, or cloud (with secondary React/TypeScript tasks):
+   - Do NOT disqualify. Candidate built a React/Firebase real-time dashboard in his Capstone IoT project.
+
+2d. ML / DATA SCIENCE / ANALYTICS NEW-GRAD CHANCE:
+   The candidate is strong in Python, SQL, Real-time Data Processing, Data Pipelines, holds the AWS Certified AI Practitioner (2026) credential, and completed university Machine Learning coursework.
+   If a role is explicitly New Grad / Graduate / Junior / Entry-level / 0-2 years in ML, Data Science, AI, Business Intelligence, or Data Analytics:
+   - Do NOT skip merely because production ML experience or a master's degree is not proven.
+   - Score 6.5-7.8 when Python/SQL/Data fundamentals fit. Add any real gap (e.g. "No production PyTorch/Spark experience") to missing_skills.
+   - Still skip PhD-required / Senior Research Scientist roles.
 
 3. HARD FILTERS:
    - If the role title explicitly matches the "Explicitly Rejected Roles", it is an immediate skip (< 4.0).
-   - If the role is clearly unrelated to any of the 4 target pillars (e.g. sales, marketing, HR, legal, mobile-only), set action to "skip" and keep the score low (< 3.5).
-   - If the posting contains a senior title but the description is junior-sounding, use the stricter interpretation.
+   - If the role is clearly unrelated to technology/engineering/analytics (e.g. sales, marketing, HR, legal, nursing, civil/mechanical engineering), set action to "skip" (< 3.5).
 
 4. ROLE FAMILY & THE 4 TARGET PILLARS:
-   - "primary" for:
-     * Backend Engineering: Backend Developer, Software Engineer, Go/Java/Python Engineer.
-     * Cloud / DevOps / SRE: Platform Engineer, Cloud Engineer, DevOps Engineer, Site Reliability Engineer, Systems Engineer.
-     * Data Engineering & Analytics: Data Engineer, Data Analyst, Data Scientist, Analytics Engineer.
-     * Aerospace & Air Traffic Management Systems: Surveillance data, ATM systems, CNS engineering.
-   - "secondary" for BI Developer, ML Research, Pipeline Developer, or adjacent technical support roles.
+   - "primary" for Backend, Software Engineer, Cloud/DevOps/SRE, Systems/Aerospace (C++/Go/Java/Python).
+   - "secondary" for Data Engineer, Data Analyst, Data Scientist, BI Developer, ML/AI Engineer, Solutions/Integration Analyst.
 
 5. DECISION TIE-BREAKERS:
-   - If the role is junior and the stack is adjacent, prefer "watch" over "skip".
-   - If the role is senior and the stack is close, keep the score low (< 5.0).
-   - If the evidence is mixed, choose the more conservative score.
-   - Do not reward buzzwords without concrete evidence.
+   - If the role is 0-2 years / junior and the stack is adjacent, prefer "watch" or "apply" over "skip".
+   - If the role is senior (5+ years) even with a close stack, keep the score low (< 4.5).
 
 6. DOMAIN SPECIALIZATION CHECK:
-   Do not inflate the score just because a single language matches (e.g., "Rust" matches but the role requires quantitative finance, algorithmic trading, or computer vision). Cap at 6.0 unless it aligns with candidate's actual projects.
+   Do not inflate the score just because a single language matches in a highly specialized senior domain (e.g., senior quantitative trading or embedded firmware requiring 5+ years).
 
 7. UNRELATED FIELD CHECK:
-   If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical) that merely contains the word "engineer" in the title, set match_score below 3.0 and action "skip".
+   If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical), set match_score below 3.0 and action "skip".
 
-8. VISA, CITIZENSHIP & EUROPEAN LOCATION ELIGIBILITY:
-   - The candidate is a Turkish citizen (non-EU national) actively based in Brussels, Belgium (Software Engineering Trainee at EUROCONTROL, Nov 2026 – Apr 2027) with active European residency/presence, and open to Turkey & EU relocation.
-   - TARGET REGIONS: Turkey, Belgium (Brussels), Netherlands (Amsterdam), Germany (Berlin/Munich), Switzerland (Zurich/Geneva), UK (London), or EU/Global Remote.
-
+8. VISA, CITIZENSHIP & EUROPEAN TARGET CITY STRATEGY (BRUSSELS, AMSTERDAM, BERLIN, MUNICH, ZURICH, LONDON):
+   - The candidate is a Turkish citizen with an official EUROCONTROL Traineeship Agreement in Brussels, Belgium (16 Nov 2026 – 30 Apr 2027, NMD/INF/CNS Unit) and is actively preparing for European & Turkish full-time roles.
    - HARD DISQUALIFIERS (STRICT SKIP < 3.5):
-     1. EXPLICIT NO-SPONSORSHIP: If the posting explicitly mandates "EU citizenship required", "Only open to EU/EEA nationals", "No visa sponsorship provided / cannot sponsor", or "Must already hold valid unrestricted local work permit":
-        * Set match_score to 2.0 - 3.0, set action to "skip", and flag "Explicit: No visa sponsorship / EU citizenship required" in red_flags.
-     2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: If the posting explicitly mandates fluent French, German, or Dutch ("Français courant", "Deutsch C1/verhandlungssicher", "Nederlands vereist") as required daily working language and does NOT accept English-only speakers:
-        * Set match_score to 2.0 - 3.5, set action to "skip", and flag "Language barrier: Non-English mandatory" in red_flags.
-     3. US / OVERSEAS ON-SITE: Postings located on-site in US, Canada, Australia requiring local Green Card / US Citizenship without international remote:
-        * Set match_score to 1.5 - 2.5, set action to "skip", and flag "US/Overseas on-site ineligible" in red_flags.
+     1. EXPLICIT NO-SPONSORSHIP: Explicitly mandates "EU/EEA citizenship required", "No visa sponsorship provided", or "Must already hold permanent unrestricted work permit" -> score 2.0-3.0, action "skip".
+     2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: Explicitly mandates fluent French, German, or Dutch ("Français courant", "Deutsch C1", "Nederlands vereist") without accepting English -> score 2.0-3.5, action "skip".
+     3. US / OVERSEAS ON-SITE: On-site in US/Canada/Australia/APAC -> score 1.5-2.5, action "skip".
 
-   - SMART EUROPEAN GRADUATE & TECH OPPORTUNITY RULE (CRITICAL - DO NOT SKIP):
-     * If an on-site or hybrid role in Germany (Berlin/Munich), Netherlands (Amsterdam), Belgium (Brussels), Switzerland, or UK:
-       a) Is titled or framed for "Graduate", "Junior", "Associate", "Entry Level", or "Trainee" (or 0-2 years exp), OR
-       b) Is at a known tech company, global scale-up, or international enterprise (e.g. Unit8, Delivery Hero, Zalando, Adyen, Amazon, Booking, ASML, Datadog, Siemens, N26, etc.), AND
-       c) The primary working language is English, AND it does NOT explicitly forbid sponsorship:
-     * -> DO NOT DISQUALIFY OR SKIP solely because it is on-site in Europe or doesn't explicitly mention relocation!
-     * -> The candidate is already based in Europe (Brussels) during this period.
-     * -> Set action to "watch" (or "apply" if tech fit is 80%%+ and company is known to sponsor).
-     * -> If stack matches candidate's core pillars, score generously in the 6.8 - 7.5 range.
-     * -> In red_flags, simply note: "Requires visa sponsorship for TR candidate, but eligible graduate-track role."
+   - TARGET CITY 0-2 YEAR / GRADUATE OPPORTUNITY RULE (WORTH TRYING — DO NOT PENALIZE SILENCE ON VISA):
+     * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates (especially someone already in Brussels at EUROCONTROL).
+     * Therefore, if an English-speaking role in Belgium (Brussels), Netherlands (Amsterdam/Rotterdam/Eindhoven), Germany (Berlin/Munich), Switzerland, or UK does NOT forbid sponsorship:
+       a) If it is explicitly Junior / Graduate / New Grad / Associate / 0-2 years AND tech fit is strong:
+          -> Score 7.2 - 8.2 and set action to "apply"! Worth trying!
+          -> If the posting does not explicitly confirm sponsorship, note in red_flags: "Visa sponsorship not explicitly stated (0-2 yr target-city role — worth applying)".
+       b) If it is Light Mid-level (~2 years) and does not explicitly confirm sponsorship:
+          -> Score 6.6 - 7.1 ("watch" or borderline "apply" depending on stack overlap).
+       c) If it requires 3-4 years of experience and does not explicitly confirm sponsorship:
+          -> Cap at 5.8 - 6.5 and set action to "watch" (do NOT give 6.8 to 3+ year roles).
 
 9. STEALTH SENIORITY & SCOPE DETECTION:
-   - If a job does not explicitly state a numerical years requirement, but lists expectations such as:
-     * Leading architectural design, system architecture, or tech roadmap
-     * Mentoring mid/senior engineers or direct team leadership
-     * Ownership of company-wide production infrastructure or enterprise strategies
-     * Extensive multi-year track record in high-scale distributed systems in production
-   - This role is implicitly Senior/Lead/Architect. You MUST set match_score below 4.5, set action to "skip", and add "Implicit senior scope / Architectural ownership" to red_flags.
-   - Do NOT let a job pass as junior just because it omitted a numerical year requirement.
+   - If a job omits years of experience but requires leading company-wide architecture, mentoring senior engineers, or owning enterprise roadmaps, treat it as Senior: set match_score below 4.5 and action "skip".
 
 10. GIG WORK, DATA LABELING & NON-ENGINEERING NOISE FILTER:
-   - Postings titled or describing:
-     * "AI Trainer", "AI Data Annotation Specialist", "AI Tutor", "Prompt Evaluation Contractor", "Data Labeler" (e.g. Alignerr, Outlier, Remotasks, Scale AI, Appen)
-     * "IT Support", "Helpdesk", "Desktop Support Technician", "Customer Support Engineer"
-     * Mid/Senior DevOps roles that require 4+ years on-call production infrastructure ownership
-   - These are gig work or IT support, NOT software/data engineering career paths.
-   - You MUST set match_score below 3.5, set action to "skip", and add "Gig work / AI data labeling or IT support role" to red_flags.
+   - "AI Trainer", "Data Annotation/Labeler" (Outlier, Alignerr, Scale AI), or basic "IT Helpdesk/Desktop Support" -> match_score below 3.5, action "skip".
 
 OUTPUT RULES:
 - Return ONLY the JSON object.
-- Use double quotes for all strings.
-- Do not wrap in markdown code fences.
+- Use double quotes for all strings. No markdown fences.
 - Keep reasoning to exactly 2 sentences.
-- skill_overlap and missing_skills must be concise and evidence-based.
-- red_flags must include only real issues from the posting.
-
-IMPORTANT:
-The output must be valid JSON and must match the schema exactly.`,
-		p.profileText, title, company, location, desc,
+- skill_overlap, missing_skills, and red_flags must be concise and evidence-based.`,
+		p.profileText, feedbackBlock, title, company, location, desc,
 	)
 }
 
-// buildProfile, config'den prompt'a eklenecek aday profil metnini oluşturur.
+// buildProfile, config'den ve doğrulanmış CV/EUROCONTROL belgelerinden aday profil metnini oluşturur.
 func buildProfile(cfg *config.CandidateConfig) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Name: %s\n", cfg.Name))
-	sb.WriteString(fmt.Sprintf("Status: %s, Graduation: %d\n", cfg.Status, cfg.GraduationYear))
-	sb.WriteString(fmt.Sprintf("Location: %s (Actively based in Brussels, Belgium for 6 months at EUROCONTROL; open to Turkey & EU/Schengen relocation)\n", cfg.Location))
+	sb.WriteString(fmt.Sprintf("Status: %s, B.Sc. Software Engineering (Bahcesehir University, 2021 – %d)\n", cfg.Status, cfg.GraduationYear))
+	sb.WriteString(fmt.Sprintf("Location & Mobility: %s (Official EUROCONTROL Trainee in Brussels, Belgium from 16 Nov 2026 to 30 Apr 2027; open to Istanbul/Turkey, Belgium, Netherlands, Germany, Switzerland, UK, and EU/Global Remote)\n", cfg.Location))
 	sb.WriteString(fmt.Sprintf("Languages: %s\n", strings.Join(cfg.Skills.Languages, ", ")))
 	sb.WriteString(fmt.Sprintf("Frameworks: %s\n", strings.Join(cfg.Skills.Frameworks, ", ")))
 	sb.WriteString(fmt.Sprintf("Databases: %s\n", strings.Join(cfg.Skills.Databases, ", ")))
-	sb.WriteString(fmt.Sprintf("Infrastructure: %s\n", strings.Join(cfg.Skills.Infra, ", ")))
-	sb.WriteString(fmt.Sprintf("Cloud & Certs: %s\n", strings.Join(cfg.Skills.Cloud, ", ")))
-	sb.WriteString(fmt.Sprintf("Concepts: %s\n", strings.Join(cfg.Skills.Concepts, ", ")))
+	sb.WriteString(fmt.Sprintf("Infrastructure & DevOps: %s\n", strings.Join(cfg.Skills.Infra, ", ")))
+	sb.WriteString("Cloud & Certifications: AWS Certified AI Practitioner (2026), AWS (EC2, S3, IAM, VPC)\n")
+	sb.WriteString(fmt.Sprintf("Core Concepts & Data: %s, Real-time Data Processing, Data Pipelines\n", strings.Join(cfg.Skills.Concepts, ", ")))
 	sb.WriteString(fmt.Sprintf("OS & Tools: %s\n", strings.Join(cfg.Skills.OS, ", ")))
 	sb.WriteString(fmt.Sprintf("Primary roles: %s\n", strings.Join(cfg.TargetRoles.Primary, ", ")))
 	sb.WriteString(fmt.Sprintf("Secondary roles: %s\n", strings.Join(cfg.TargetRoles.Secondary, ", ")))
@@ -192,18 +190,22 @@ func buildProfile(cfg *config.CandidateConfig) string {
 	sb.WriteString(fmt.Sprintf("Acceptable seniority: %s\n", strings.Join(cfg.Seniority.Acceptable, ", ")))
 
 	rejectedStr := strings.Join(cfg.Seniority.Rejected, ", ")
-	sb.WriteString(fmt.Sprintf("Explicitly Rejected Roles: %s (CRITICAL: The candidate must NEVER be matched to these roles, regardless of how well the tech stack aligns.)\n", rejectedStr))
+	sb.WriteString(fmt.Sprintf("Explicitly Rejected Roles: %s (CRITICAL: Never match to these roles regardless of stack alignment.)\n", rejectedStr))
+	if len(cfg.PriorityCompanies) > 0 {
+		sb.WriteString(fmt.Sprintf("Priority Target Companies: %s (If the job is at one of these companies AND is already a valid entry/junior technical match >= 6.5, award a +0.4 priority tie-breaker bonus; NEVER rescue senior or unrelated roles).\n", strings.Join(cfg.PriorityCompanies, ", ")))
+	}
 
-	sb.WriteString("Work Experience:\n")
-	sb.WriteString("- EUROCONTROL (Brussels, Belgium | Nov 2026 – Apr 2027): Software Engineering Trainee (NMD/INF/CNS Unit). Contributing to ASTERIX E-ARCO surveillance data library (C++, Python client, JSON validation, test automation within CI/CD).\n")
-	sb.WriteString("- Sanlab (Istanbul | Aug 2024 – Oct 2024): Software Engineering Internship. Web-based market management system integrating JWT-authenticated Go API with Rust REST API across 12 endpoints (MongoDB, atomic sequence ID generation), TCP/UDP socket communication in Rust, Agile/Scrum.\n")
+	sb.WriteString("Work Experience & Incoming European Assignment:\n")
+	sb.WriteString("- EUROCONTROL (Brussels, Belgium | 16 Nov 2026 – 30 Apr 2027, Official Agreement 46449_TRAI_2026_NMD): Incoming Software Engineering Trainee in the NMD/INF/CNS Unit (Network Management Directorate). Developing, validating, and integrating ASTERIX E-ARCO C++ Core Library components used in operational air traffic management systems (ARTAS, SDDS, SASS-C); building advanced JSON schema validation modules, maintaining Python client interfaces, contributing to Java client & web interfaces, and automating unit/regression tests within CI/CD.\n")
+	sb.WriteString("- Sanlab (Istanbul | Aug 2024 – Oct 2024): Software Engineering Internship. Developed a web-based market management system integrating a JWT-authenticated Go application with a Rust REST API across 12 endpoints (MongoDB with atomic sequence-based ID generation); implemented client-server communication modules in Rust using TCP and UDP sockets; collaborated in a 7-person Agile/Scrum engineering team.\n")
+	sb.WriteString("- Work and Travel USA (Jun 2025 – Sep 2025): Sales & Lifeguard Roles. Handled ~100 daily customer interactions in English while ensuring pool safety for 30-40 guests per shift.\n")
 
-	sb.WriteString("Key Projects:\n")
-	sb.WriteString("- Distributed Job Processing System: Go, Redis worker pool with exponential backoff retries, Prometheus metrics, Docker, CI/CD with GitHub Actions.\n")
-	sb.WriteString("- Order & Inventory Management API: Java 21, Spring Boot, REST API, JWT auth, RBAC, order state machine, pessimistic locking for concurrency safety, Testcontainers integration tests against PostgreSQL.\n")
-	sb.WriteString("- IoT-Based Smart Indoor Plant Control System (Capstone): ESP32 sensor system, React/Firebase real-time dashboard, remote irrigation, >99% successful data delivery, ~500ms latency.\n")
+	sb.WriteString("Key Engineering Projects:\n")
+	sb.WriteString("- Distributed Job Processing System (Go, Redis, PostgreSQL, Docker, Prometheus): Built a concurrent job processing pipeline using a 5-goroutine worker pool and Redis with exponential backoff retries, handling load tests of 500 concurrent submissions; validated 98% of jobs completed in under 100ms via Prometheus and automated CI with GitHub Actions.\n")
+	sb.WriteString("- Order & Inventory Management API (Java 21, Spring Boot, PostgreSQL, Docker): Designed a REST API with JWT authentication, RBAC, and an order lifecycle state machine; secured concurrent stock operations using pessimistic locking and implemented PostgreSQL integration tests via Testcontainers (~75% core domain line coverage).\n")
+	sb.WriteString("- Capstone Project — IoT-Based Smart Indoor Plant Control System (React, Firebase, ESP32): Built a real-time IoT data pipeline and dashboard for sensor telemetry and remote irrigation, achieving >99% data delivery and ~500ms average end-to-end command latency.\n")
 
-	sb.WriteString("Certifications & Languages: AWS Certified AI Practitioner (2026). English: Fluent (C1/C2 professional working proficiency), Turkish: Native, German: Beginner.\n")
+	sb.WriteString("Spoken Languages: English (Fluent C1/C2), Turkish (Native), German (Beginner).\n")
 
 	return sb.String()
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/ulasdursun/job-hunter/internal/analyzer"
@@ -88,7 +89,7 @@ func main() {
 
 	// ── 7b. Dashboard API Server & ATS Tailor Service ─────────────────────────
 	tailorService := analyzer.NewTailorService(&cfg.Gemini)
-	api.StartServer(cfg.Server.DashboardPort, pg.Pool(), tailorService)
+	api.StartServer(ctx, cfg.Server.DashboardPort, pg.Pool(), tailorService)
 	dashboardURL := fmt.Sprintf("http://localhost:%d", cfg.Server.DashboardPort)
 	slog.Info("════════════════════════════════════════")
 	slog.Info("  📊 DASHBOARD READY")
@@ -105,8 +106,26 @@ func main() {
 	// ── 10. Gemini Analyzer ───────────────────────────────────────────────────
 	geminiAnalyzer := analyzer.NewGeminiAnalyzer(&cfg.Gemini, &cfg.Candidate)
 
-	// ── 11. Job Store ─────────────────────────────────────────────────────────
+	// ── 11. Job Store & Kanban Feedback Loop ──────────────────────────────────
 	jobStore := store.NewJobStore(pg.Pool())
+	if fb, err := jobStore.BuildPreferenceSummary(ctx); err == nil && fb != "" {
+		geminiAnalyzer.SetFeedback(fb)
+		slog.Info("loaded candidate feedback loop from kanban history")
+	}
+	go func() {
+		ticker := time.NewTicker(3 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if fb, err := jobStore.BuildPreferenceSummary(ctx); err == nil {
+					geminiAnalyzer.SetFeedback(fb)
+				}
+			}
+		}
+	}()
 
 	// ── 12. Telegram Notifier ─────────────────────────────────────────────────
 	telegramNotifier := notifier.NewTelegram()
@@ -128,10 +147,12 @@ func main() {
 		telegramNotifier,
 		cfg.Notifications.TelegramEnabled,
 	)
+	workerPool.SetPreFilter(cheapFilter)
 	go workerPool.Run(ctx)
 
 	// ── 14. Market Intelligence Scheduler ────────────────────────────────────
 	marketScheduler := intelligence.NewScheduler(pg.Pool(), &cfg.Candidate, telegramNotifier)
+	marketScheduler.SetRedisMonitor(rc.Client(), &cfg.Redis)
 	go marketScheduler.Run(ctx)
 	slog.Info("market intelligence scheduler started")
 

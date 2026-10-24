@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 
 from scraper.models.job import Job
 from scraper.sources.base import BaseSource
+from scraper.sources.filters import is_tech_title
 
 logger = logging.getLogger("scraper.techcareer")
 
@@ -64,16 +65,33 @@ class TechcareerSource(BaseSource):
                 if not title or not slug:
                     continue
 
+                combined_title = f"{title} {item.get('jobTitleEn') or ''}".strip()
+                if not is_tech_title(combined_title):
+                    continue
+
                 owner = item.get("owner") or {}
                 comp_name = owner.get("name") if isinstance(owner, dict) else "Gizli Şirket"
 
-                loc_data = item.get("location") or {}
-                city = loc_data.get("name") if isinstance(loc_data, dict) else ""
+                loc_data = item.get("location")
+                if isinstance(loc_data, str):
+                    city = loc_data.strip()
+                elif isinstance(loc_data, dict):
+                    city = (loc_data.get("name") or "").strip()
+                else:
+                    city = ""
+
                 work_places = item.get("workPlaces") or []
-                wp_text = ", ".join(wp.get("name", "") for wp in work_places if isinstance(wp, dict))
+                wp_parts = []
+                for wp in work_places:
+                    if isinstance(wp, str) and wp.strip():
+                        wp_parts.append(wp.strip())
+                    elif isinstance(wp, dict) and wp.get("name"):
+                        wp_parts.append(str(wp.get("name")).strip())
+                wp_text = ", ".join(wp_parts)
                 loc = f"{city} ({wp_text})" if wp_text and city else (city or wp_text or "Turkey")
 
-                job_url = f"{self.BASE_URL}/jobs/{slug}"
+                job_url = f"{self.BASE_URL}/jobs/detail/{slug}"
+                desc = self._fetch_detail_description(job_url)
 
                 jobs.append(Job(
                     source="techcareer",
@@ -82,7 +100,7 @@ class TechcareerSource(BaseSource):
                     title=title,
                     company=comp_name,
                     location=loc,
-                    description="",  # Go cheap_filter başlık ve şirket bazlı ön elemeyi yapar
+                    description=desc,
                 ))
 
             logger.info("techcareer fetched %d jobs", len(jobs))
@@ -90,3 +108,20 @@ class TechcareerSource(BaseSource):
             logger.error("techcareer fetch error: %s", e)
 
         return jobs
+
+    def _fetch_detail_description(self, job_url: str) -> str:
+        try:
+            r = self.session.get(job_url, timeout=10)
+            if r.status_code != 200:
+                return ""
+            m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', r.text)
+            if not m:
+                return ""
+            data = json.loads(m.group(1))
+            page_props = data.get("props", {}).get("pageProps", {})
+            detail = page_props.get("jobDetail") or page_props.get("initialJobDetail") or {}
+            content = detail.get("content") or {}
+            raw_html = content.get("description", "") if isinstance(content, dict) else ""
+            return clean_html(raw_html)
+        except Exception:
+            return ""
