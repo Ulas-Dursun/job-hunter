@@ -310,9 +310,36 @@
         </div>
 
         <!-- 4b. KANBAN BOARD CONTAINER (İş Takip Panosu) -->
-        <div id="kanban-container" class="hidden overflow-x-auto pb-4">
-            <div class="flex gap-4 min-w-[1300px] items-start" id="kanban-columns">
-                <!-- Dynamic Columns & Cards Rendered by JS -->
+        <div id="kanban-container" class="hidden space-y-3 pb-4">
+            <!-- Kanban Quick City & Score Filter Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-2 bg-dark-surface/80 border border-dark-border rounded-xl p-2.5 text-xs">
+                <div class="flex items-center gap-1.5 flex-wrap" id="kanban-city-pills">
+                    <span class="text-dark-textMuted font-medium mr-1">📍 Konum Filtresi:</span>
+                    <button onclick="setKanbanCity('')" data-kcity="" class="kcity-btn px-2.5 py-1 rounded-lg font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition">🌐 Tümü</button>
+                    <button onclick="setKanbanCity('tr')" data-kcity="tr" class="kcity-btn px-2.5 py-1 rounded-lg font-medium bg-dark-card text-dark-text hover:text-white border border-dark-border transition">🇹🇷 Türkiye</button>
+                    <button onclick="setKanbanCity('be')" data-kcity="be" class="kcity-btn px-2.5 py-1 rounded-lg font-medium bg-dark-card text-dark-text hover:text-white border border-dark-border transition">🇧🇪 Brüksel</button>
+                    <button onclick="setKanbanCity('nl')" data-kcity="nl" class="kcity-btn px-2.5 py-1 rounded-lg font-medium bg-dark-card text-dark-text hover:text-white border border-dark-border transition">🇳🇱 Hollanda</button>
+                    <button onclick="setKanbanCity('de')" data-kcity="de" class="kcity-btn px-2.5 py-1 rounded-lg font-medium bg-dark-card text-dark-text hover:text-white border border-dark-border transition">🇩🇪 Almanya</button>
+                    <button onclick="setKanbanCity('dk')" data-kcity="dk" class="kcity-btn px-2.5 py-1 rounded-lg font-medium bg-dark-card text-dark-text hover:text-white border border-dark-border transition">🇩🇰 Kopenhag</button>
+                    <button onclick="setKanbanCity('remote')" data-kcity="remote" class="kcity-btn px-2.5 py-1 rounded-lg font-medium bg-dark-card text-dark-text hover:text-white border border-dark-border transition">🏠 Remote</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="text" id="kanban-search-input" oninput="handleSearch(this.value)" placeholder="Kanban'da ara (şirket, şehir, Go, Python)..." class="w-56 pl-2.5 pr-2.5 py-1 rounded-lg bg-dark-card border border-dark-border text-xs text-dark-textHeading placeholder-dark-textMuted focus:outline-none focus:border-cyan-400/60">
+                    </div>
+                    <select id="kanban-min-score" onchange="setKanbanMinScore(this.value)" class="px-2.5 py-1 rounded-lg bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/60">
+                        <option value="0">Tüm Skorlar</option>
+                        <option value="6.8">⚡ Skor ≥ 6.8</option>
+                        <option value="7.4">🔥 Skor ≥ 7.4 (Strong)</option>
+                        <option value="8.0">💎 Skor ≥ 8.0 (Jackpot)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto pb-2">
+                <div class="flex gap-4 min-w-[1300px] items-start" id="kanban-columns">
+                    <!-- Dynamic Columns & Cards Rendered by JS -->
+                </div>
             </div>
         </div>
 
@@ -593,6 +620,8 @@
             category: 'all',
             onlyRelevant: true, // Default: hide noise (< 5.0 or skip)
             search: '',
+            kanbanCity: '',
+            kanbanMinScore: 0,
             action: '',
             status: '',
             sort: 'score',
@@ -810,9 +839,12 @@
         function applyFilters(resetPage = true) {
             let list = [...STATE.rawJobs]
 
-            // 0. Only Relevant Filter (Hide noise: < 5.0 or action == skip)
+            // 0. Only Relevant Filter (Hide noise: < 5.0 or action == skip, but preserve user-triaged Kanban cards)
             if (STATE.onlyRelevant) {
-                list = list.filter(j => (j.match_score || 0) >= 5.0 && (j.ai_action || '').toLowerCase() !== 'skip')
+                list = list.filter(j => {
+                    if (STATE.viewMode === 'kanban' && j.status && j.status !== 'new') return true
+                    return (j.match_score || 0) >= 5.0 && (j.ai_action || '').toLowerCase() !== 'skip'
+                })
             }
 
             // 1. Category Filter
@@ -834,15 +866,27 @@
                 list = list.filter(isAtsJob)
             }
 
-            // 2. Search Filter
+            // 2. Search Filter (title, company, location, source, skills, description)
             if (STATE.search.trim()) {
-                const q = STATE.search.toLowerCase()
+                const q = STATE.search.toLowerCase().trim()
                 list = list.filter(j => 
                     (j.title || '').toLowerCase().includes(q) ||
                     (j.company || '').toLowerCase().includes(q) ||
                     (j.location || '').toLowerCase().includes(q) ||
-                    (j.skill_overlap || []).some(s => s.toLowerCase().includes(q))
+                    (j.source || '').toLowerCase().includes(q) ||
+                    (j.skill_overlap || []).some(s => s.toLowerCase().includes(q)) ||
+                    (j.description || '').toLowerCase().includes(q)
                 )
+            }
+
+            // 2b. Kanban City & Min-Score Quick Filters
+            if (STATE.viewMode === 'kanban') {
+                if (STATE.kanbanCity) {
+                    list = list.filter(j => matchesKanbanCity(j, STATE.kanbanCity))
+                }
+                if (STATE.kanbanMinScore > 0) {
+                    list = list.filter(j => (j.match_score || 0) >= STATE.kanbanMinScore)
+                }
             }
 
             // 3. Action Filter
@@ -889,14 +933,14 @@
                 feedCont.classList.add('hidden')
                 kanbanCont.classList.remove('hidden')
                 pagination.classList.add('hidden')
-                renderKanban()
+                applyFilters(false)
             } else {
                 btnFeed.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                 btnKanban.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-dark-text hover:text-white transition"
                 kanbanCont.classList.add('hidden')
                 feedCont.classList.remove('hidden')
                 pagination.classList.remove('hidden')
-                renderJobs()
+                applyFilters(false)
             }
         }
 
@@ -1689,7 +1733,7 @@
                     <h4 class="text-xs font-bold text-dark-textHeading group-hover:text-cyan-300 transition line-clamp-2 leading-tight">${escapeHtml(j.title)}</h4>
                 </div>
 
-                <div class="text-[10px] text-dark-textMuted truncate">${locInfo}</div>
+                <div class="text-[10px] text-dark-textMuted truncate">${escapeHtml(locInfo)}</div>
 
                 <!-- Skill Overlaps -->
                 ${overlapTags.length > 0 ? `
@@ -1878,11 +1922,43 @@
         // ── Search & Filter Controls ──────────────────────────────────────
         let searchTimer = null
         function handleSearch(val) {
+            const topInput = document.getElementById('search-input')
+            const kanbanInput = document.getElementById('kanban-search-input')
+            if (topInput && topInput.value !== val) topInput.value = val
+            if (kanbanInput && kanbanInput.value !== val) kanbanInput.value = val
             clearTimeout(searchTimer)
             searchTimer = setTimeout(() => {
                 STATE.search = val
                 applyFilters()
-            }, 250)
+            }, 200)
+        }
+
+        function matchesKanbanCity(j, code) {
+            const loc = (j.location || '').toLowerCase()
+            if (code === 'tr') return isTurkeyJob(j)
+            if (code === 'be') return loc.includes('brussel') || loc.includes('bruxelles') || loc.includes('belgium') || hasWord(loc, ['be'])
+            if (code === 'nl') return loc.includes('amsterdam') || loc.includes('rotterdam') || loc.includes('eindhoven') || loc.includes('utrecht') || loc.includes('netherlands') || hasWord(loc, ['nl'])
+            if (code === 'de') return loc.includes('berlin') || loc.includes('munich') || loc.includes('münchen') || loc.includes('frankfurt') || loc.includes('hamburg') || loc.includes('germany') || loc.includes('deutschland') || hasWord(loc, ['de'])
+            if (code === 'dk') return loc.includes('copenhagen') || loc.includes('københavn') || loc.includes('kobenhavn') || loc.includes('aarhus') || loc.includes('denmark') || hasWord(loc, ['dk'])
+            if (code === 'remote') return loc.includes('remote')
+            return true
+        }
+
+        function setKanbanCity(cityCode) {
+            STATE.kanbanCity = cityCode
+            document.querySelectorAll('.kcity-btn').forEach(btn => {
+                if (btn.getAttribute('data-kcity') === cityCode) {
+                    btn.className = "kcity-btn px-2.5 py-1 rounded-lg font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition"
+                } else {
+                    btn.className = "kcity-btn px-2.5 py-1 rounded-lg font-medium bg-dark-card text-dark-text hover:text-white border border-dark-border transition"
+                }
+            })
+            applyFilters(false)
+        }
+
+        function setKanbanMinScore(val) {
+            STATE.kanbanMinScore = parseFloat(val) || 0
+            applyFilters(false)
         }
 
         function setAction(val) {
@@ -1903,11 +1979,18 @@
         function resetFilters() {
             STATE.category = 'all'
             STATE.search = ''
+            STATE.kanbanCity = ''
+            STATE.kanbanMinScore = 0
             STATE.action = ''
             STATE.status = ''
             document.getElementById('search-input').value = ''
+            const kSearch = document.getElementById('kanban-search-input')
+            if (kSearch) kSearch.value = ''
+            const kScore = document.getElementById('kanban-min-score')
+            if (kScore) kScore.value = '0'
             document.getElementById('action-filter').value = ''
             document.getElementById('status-filter').value = ''
+            setKanbanCity('')
             setCategory('all')
         }
 
