@@ -8,7 +8,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker)](https://www.docker.com)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat&logo=github-sponsors)](https://github.com/sponsors/Ulas-Dursun)
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/ulasdursun)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/ulasdursun)
 
 **Job Hunter** is a distributed, event-driven job aggregation, scoring, and career-ops platform built with **Go**, **Python**, **Redis Streams**, and **PostgreSQL**. It continuously harvests software, cloud/DevOps, data/AI, and aerospace engineering roles across **Europe and Turkey**, filters out >70% of recruitment noise in microseconds before touching an LLM quota, and provides **preference-aware AI scoring, hallucination-safe resume tailoring, STAR interview preparation, and a full Kanban CRM**.
 
@@ -214,7 +214,7 @@ go test -count=1 ./...
 If **Job Hunter** helps you land interviews, save hours of manual job board filtering, or serves as a reference architecture for your own Go + Python event-driven systems:
 
 * ⭐ **Star this repository** on GitHub to help more engineers discover it!
-* ☕ **[Buy Me a Coffee](https://www.buymeacoffee.com/ulasdursun)** or 💖 **[Sponsor on GitHub](https://github.com/sponsors/Ulas-Dursun)** to support ongoing open-source development.
+* ☕ **[Buy Me a Coffee](https://buymeacoffee.com/ulasdursun)** or 💖 **[Sponsor on GitHub](https://github.com/sponsors/Ulas-Dursun)** to support ongoing open-source development.
 
 ---
 

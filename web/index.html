@@ -629,6 +629,7 @@
             smartrecruiters: { label: 'SmartRecruiters',  badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
             techcareer:      { label: 'techcareer.net',   badge: 'bg-pink-500/15 text-pink-300 border-pink-500/30' },
             coderspace:      { label: 'Coderspace 🚀',    badge: 'bg-orange-500/15 text-orange-300 border-orange-500/30' },
+            kariyer_net:     { label: 'Kariyer.net',      badge: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30' },
             arbeitnow:       { label: 'Arbeitnow EU',     badge: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
             eurocontrol:     { label: 'EUROCONTROL ✈️',   badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40' }
         }
@@ -773,8 +774,8 @@
             const loc = (j.location || '').toLowerCase()
             const src = (j.source || '').toLowerCase()
             const comp = (j.company || '').toLowerCase()
-            return src === 'techcareer' || src === 'coderspace' || 
-                   loc.includes('istanbul') || loc.includes('turkey') || loc.includes('türkiye') || loc.includes('ankara') || loc.includes('izmir') ||
+            return src === 'techcareer' || src === 'coderspace' || src === 'kariyer_net' ||
+                   loc.includes('istanbul') || loc.includes('i̇stanbul') || loc.includes('turkey') || loc.includes('türkiye') || loc.includes('ankara') || loc.includes('izmir') || loc.includes('bursa') || loc.includes('kocaeli') ||
                    comp.includes('peak') || comp.includes('trendyol') || comp.includes('commencis') || comp.includes('iyzico')
         }
 
@@ -783,7 +784,7 @@
             const src = (j.source || '').toLowerCase()
             if (isTurkeyJob(j)) return false
             return src === 'arbeitnow' || src === 'eurocontrol' ||
-                   hasWord(loc, ['brussels', 'brussel', 'bruxelles', 'belgium', 'netherlands', 'amsterdam', 'rotterdam', 'eindhoven', 'utrecht', 'germany', 'deutschland', 'berlin', 'munich', 'münchen', 'hamburg', 'frankfurt', 'switzerland', 'zurich', 'zürich', 'geneva', 'london', 'united kingdom', 'uk', 'austria', 'vienna', 'dublin', 'ireland', 'stockholm', 'warsaw', 'paris', 'cluj', 'europe', 'emea', 'be', 'nl', 'de', 'ch'])
+                   hasWord(loc, ['brussels', 'brussel', 'bruxelles', 'belgium', 'netherlands', 'amsterdam', 'rotterdam', 'eindhoven', 'utrecht', 'germany', 'deutschland', 'berlin', 'munich', 'münchen', 'hamburg', 'frankfurt', 'denmark', 'copenhagen', 'københavn', 'kobenhavn', 'aarhus', 'switzerland', 'zurich', 'zürich', 'geneva', 'london', 'united kingdom', 'uk', 'austria', 'vienna', 'dublin', 'ireland', 'stockholm', 'warsaw', 'paris', 'cluj', 'europe', 'emea', 'be', 'nl', 'de', 'dk', 'ch'])
         }
         function isAtsJob(j) {
             const src = (j.source || '').toLowerCase()
@@ -1047,10 +1048,11 @@
         function formatLocationBadge(loc) {
             if (!loc) return '🌐 Belirtilmemiş'
             const l = loc.toLowerCase()
-            if (l.includes('istanbul') || l.includes('turkey') || l.includes('türkiye') || l.includes('ankara') || l.includes('izmir') || l.includes('hatay')) return `🇹🇷 ${loc}`
+            if (l.includes('istanbul') || l.includes('i̇stanbul') || l.includes('turkey') || l.includes('türkiye') || l.includes('ankara') || l.includes('izmir') || l.includes('bursa') || l.includes('kocaeli') || l.includes('hatay')) return `🇹🇷 ${loc}`
             if (l.includes('brussel') || l.includes('bruxelles') || l.includes('belgium') || hasWord(l, ['be'])) return `🇧🇪 ${loc}`
             if (l.includes('amsterdam') || l.includes('rotterdam') || l.includes('eindhoven') || l.includes('utrecht') || l.includes('netherlands') || hasWord(l, ['nl'])) return `🇳🇱 ${loc}`
             if (l.includes('berlin') || l.includes('munich') || l.includes('münchen') || l.includes('frankfurt') || l.includes('hamburg') || l.includes('germany') || l.includes('deutschland') || hasWord(l, ['de'])) return `🇩🇪 ${loc}`
+            if (l.includes('copenhagen') || l.includes('københavn') || l.includes('kobenhavn') || l.includes('aarhus') || l.includes('denmark') || hasWord(l, ['dk'])) return `🇩🇰 ${loc}`
             if (l.includes('zurich') || l.includes('zürich') || l.includes('geneva') || l.includes('zug') || l.includes('switzerland') || hasWord(l, ['ch'])) return `🇨🇭 ${loc}`
             if (l.includes('london') || l.includes('united kingdom') || hasWord(l, ['uk', 'gb'])) return `🇬🇧 ${loc}`
             if (l.includes('paris') || l.includes('france')) return `🇫🇷 ${loc}`

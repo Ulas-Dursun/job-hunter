@@ -5,11 +5,12 @@ python-jobspy anti-bot bypass dahil, aktif olarak maintain edilen
 bir scraping kütüphanesidir. LinkedIn ve Indeed'i handle eder.
 """
 
+import hashlib
 import logging
-import time
 import random
-from datetime import datetime, timezone, timedelta
+import time
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 from jobspy import scrape_jobs
 
@@ -20,6 +21,31 @@ logger = logging.getLogger(__name__)
 
 # Go tarafındaki prompt (truncateUTF8 = 4000 rune) ve Job.to_dict() (4000) ile uyumlu.
 MAX_DESCRIPTION_CHARS = 4000
+
+_INDEED_COUNTRY_MAP: list[tuple[tuple[str, ...], str]] = [
+    (("turkey", "türkiye", "istanbul", "ankara", "izmir", "bursa", "kocaeli"), "Turkey"),
+    (("belgium", "brussels", "bruxelles", "brüksel", "antwerp", "ghent"), "Belgium"),
+    (("netherlands", "amsterdam", "rotterdam", "eindhoven", "utrecht", "hollanda"), "Netherlands"),
+    (("germany", "deutschland", "berlin", "munich", "münchen", "frankfurt", "hamburg", "almanya"), "Germany"),
+    (("denmark", "copenhagen", "københavn", "kobenhavn", "aarhus", "odense", "danimarka"), "Denmark"),
+    (("switzerland", "zurich", "zürich", "geneva", "genève", "basel", "bern", "isviçre"), "Switzerland"),
+    (("united kingdom", "uk", "england", "scotland", "london", "manchester", "edinburgh", "cambridge"), "UK"),
+    (("sweden", "stockholm", "gothenburg", "malmö", "isveç"), "Sweden"),
+    (("austria", "vienna", "wien", "graz", "avusturya"), "Austria"),
+    (("ireland", "dublin", "cork", "irlanda"), "Ireland"),
+    (("france", "paris", "lyon", "toulouse", "fransa"), "France"),
+    (("poland", "warsaw", "krakow", "wroclaw", "polonya"), "Poland"),
+    (("spain", "madrid", "barcelona", "ispanya"), "Spain"),
+]
+
+
+def resolve_indeed_country(location: str, default: str = "Turkey") -> str:
+    """Hedef şehir/ülke metnini python-jobspy Country enum karşılığına eşler."""
+    loc_lower = (location or "").lower()
+    for markers, country_name in _INDEED_COUNTRY_MAP:
+        if any(m in loc_lower for m in markers):
+            return country_name
+    return default
 
 
 class JobSpySource(BaseSource):
@@ -36,11 +62,14 @@ class JobSpySource(BaseSource):
         target_locations = self._locations if self._locations else [location]
 
         for loc in target_locations:
-            is_tr = any(w in loc.lower() for w in ["turkey", "türkiye", "istanbul", "ankara", "izmir"])
+            is_tr = resolve_indeed_country(loc, self._country_indeed) == "Turkey"
 
             for keyword in keywords:
-                # Yurt dışı (örn: Brüksel) aranırken Türkçe anahtar kelimeleri atlayarak API limitlerini koru
-                if not is_tr and any(tw in keyword.lower() for tw in ["yazılım", "mühendis", "geliştirici", "yeni mezun", "genç yetenek", "uzman"]):
+                # Yurt dışı (örn: Brüksel, Kopenhag) aranırken Türkçe anahtar kelimeleri atlayarak API limitlerini koru
+                if not is_tr and any(
+                    tw in keyword.lower()
+                    for tw in ["yazılım", "mühendis", "geliştirici", "yeni mezun", "genç yetenek", "uzman", "programı"]
+                ):
                     continue
 
                 logger.info("fetching jobspy  keyword=%r  location=%r", keyword, loc)
@@ -61,19 +90,9 @@ class JobSpySource(BaseSource):
         return all_jobs
 
     def _fetch_keyword(self, keyword: str, location: str) -> list[Job]:
-        # Lokasyona göre Indeed ülke kodunu belirle
-        loc_lower = (location or "").lower()
-        if any(w in loc_lower for w in ["belgium", "brussels", "bruxelles", "brüksel"]):
-            country = "Belgium"
-        elif any(w in loc_lower for w in ["germany", "berlin", "munich", "almanya"]):
-            country = "Germany"
-        elif any(w in loc_lower for w in ["netherlands", "amsterdam", "hollanda"]):
-            country = "Netherlands"
-        else:
-            country = self._country_indeed
+        country = resolve_indeed_country(location, self._country_indeed)
 
         try:
-            # scrape_jobs pandas DataFrame döndürür
             df = scrape_jobs(
                 site_name=["linkedin", "indeed"],
                 search_term=keyword,
@@ -81,15 +100,15 @@ class JobSpySource(BaseSource):
                 results_wanted=self._results_per_keyword,
                 hours_old=self._max_age_days * 24,
                 country_indeed=country,
-                linkedin_fetch_description=True,  # 🟢 LinkedIn tam ilan açıklamasını çek
-                verbose=0,  # Log spam'ı kapat
+                linkedin_fetch_description=True,
+                verbose=0,
             )
         except Exception as exc:
-            logger.warning("scrape_jobs failed  keyword=%r  error=%s", keyword, exc)
+            logger.warning("scrape_jobs failed  keyword=%r  location=%r  error=%s", keyword, location, exc)
             return []
 
         if df is None or df.empty:
-            logger.debug("empty dataframe  keyword=%r", keyword)
+            logger.debug("empty dataframe  keyword=%r  location=%r", keyword, location)
             return []
 
         jobs = []
@@ -102,7 +121,6 @@ class JobSpySource(BaseSource):
 
     def _row_to_job(self, row) -> Optional[Job]:
         """DataFrame row'unu Job nesnesine dönüştürür."""
-
         title   = str(row.get("title") or "").strip()
         company = str(row.get("company") or "").strip()
         url     = str(row.get("job_url") or "").strip()
@@ -111,12 +129,10 @@ class JobSpySource(BaseSource):
         if not title or not url or url == "nan":
             return None
 
-        # external_id: jobspy'ın ürettiği id varsa onu kullan (örn: in-xxx, li-xxx)
         raw_id = str(row.get("id") or "").strip()
         if raw_id and raw_id != "nan":
             external_id = raw_id
         else:
-            from urllib.parse import urlparse, parse_qs
             parsed = urlparse(url)
             qs = parse_qs(parsed.query)
             jk = qs.get("jk", [None])[0] or qs.get("vjk", [None])[0]
@@ -129,20 +145,16 @@ class JobSpySource(BaseSource):
                 external_id = url.rstrip("/").split("/")[-1] or url
 
         if len(external_id) > 200:
-            import hashlib
             external_id = hashlib.sha256(url.encode()).hexdigest()[:20]
 
-        # Konum
         location = str(row.get("location") or "İstanbul").strip()
         if location == "nan":
             location = "İstanbul"
 
-        # Açıklama
         description = str(row.get("description") or "").strip()
         if description == "nan":
             description = ""
 
-        # Yayınlanma tarihi
         posted_at = None
         date_posted = row.get("date_posted")
         if date_posted and str(date_posted) != "nan":

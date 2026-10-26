@@ -14,7 +14,7 @@ candidate:
   status: "new_grad"
   graduation_year: 2026
   education: "B.Sc. in Software / Computer Engineering (2021 – 2026) | Coursework: Distributed Systems, Machine Learning, Database Systems"
-  mobility_note: "Open to Istanbul/Turkey, Brussels, Amsterdam, Berlin, Munich, London, Zurich, and EU/Global Remote"
+  mobility_note: "Open to Istanbul/Turkey, Brussels, Amsterdam, Berlin, Munich, Copenhagen, London, Zurich, and EU/Global Remote"
   spoken_languages: "English (Fluent C1/C2), Turkish (Native)"
   links: "linkedin.com/in/your-handle • github.com/your-username"
 
@@ -95,6 +95,7 @@ candidate:
     - "intern"
     - "internship"
     - "stajyer"
+    - "stajyeri"
     - "staj"
     - "working student"
     - "werkstudent"
@@ -251,6 +252,7 @@ candidate:
     - "Wolt"
     - "Deliveroo"
     - "Delivery Hero"
+    - "Trustpilot"
     - "CERN"
 
 scoring:
@@ -296,6 +298,8 @@ sources:
         token: "monzo"
       - name: "Canonical"
         token: "canonical"
+      - name: "Trustpilot"
+        token: "trustpilot"
     smartrecruiters:
       - name: "Frequentis"
         company_id: "frequentis"
@@ -333,6 +337,7 @@ sources:
       - "Amsterdam, Netherlands"
       - "Berlin, Germany"
       - "Munich, Germany"
+      - "Copenhagen, Denmark"
     keywords:
       - "backend engineer"
       - "software engineer"

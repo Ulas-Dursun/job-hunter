@@ -24,7 +24,7 @@ type CheapFilter struct {
 }
 
 var defaultBlacklistKeywords = []string{
-	"stage", "team leader", "müdür", "müdürü", "yöneticisi", "ürün yöneticisi",
+	"stage", "stajyeri", "stajı", "team leader", "müdür", "müdürü", "yöneticisi", "ürün yöneticisi",
 	"product manager", "project manager", "scrum master", "account management",
 	"customer success", "fincrime", "financial crime", "risk analyst", "operational risk",
 	"credit risk", "deal intelligence", "cost analyst", "strategic finance",
@@ -294,7 +294,7 @@ func countTechTerms(descLower string) int {
 
 func isInternshipKeyword(kw string) bool {
 	switch strings.ToLower(kw) {
-	case "intern", "internship", "stajyer", "staj", "working student", "werkstudent", "part-time intern", "long-term intern",
+	case "intern", "internship", "stajyer", "stajyeri", "staj", "stajı", "working student", "werkstudent", "part-time intern", "long-term intern",
 		"praktikum", "praktikant", "praktikantin", "stagiair", "stagiaire", "stage":
 		return true
 	default:

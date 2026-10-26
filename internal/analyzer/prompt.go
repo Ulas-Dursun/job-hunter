@@ -94,7 +94,7 @@ CRITICAL RULES (MUST OBEY):
      * Core tech stack aligns 80%%+ with candidate's primary skills (Go, Java/Spring Boot, Python backend/data, Docker/Linux/AWS/APIs, or EUROCONTROL/aviation surveillance systems).
      * No major missing requirements, no explicit visa/language blockers.
    - 7.4 - 8.1 (STRONG FIT / APPLY — Included in Daily Evening Digest):
-     * Entry-level or junior role (0-2 years) in target cities (Istanbul, Brussels, Amsterdam, Berlin, Munich, London, Zurich, Geneva, or Remote) with solid fundamentals, even if visa sponsorship is not explicitly mentioned or candidate has 1-2 secondary tool gaps (e.g., Kubernetes, Terraform, Kafka) that can be learned on the job.
+     * Entry-level or junior role (0-2 years) in target cities (Istanbul, Brussels, Amsterdam, Berlin, Munich, Copenhagen, London, Zurich, Geneva, or Remote) with solid fundamentals, even if visa sponsorship is not explicitly mentioned or candidate has 1-2 secondary tool gaps (e.g., Kubernetes, Terraform, Kafka) that can be learned on the job.
      * Or ~2 year role where candidate's strong project portfolio + EUROCONTROL Brussels traineeship makes it a strong application.
    - 6.8 - 7.3 (HIGH WATCH / VIABLE STRETCH — Eligible for Evening Digest):
      * RESERVED ONLY FOR: (a) 0-2 year / Junior / Graduate roles requiring an adjacent stack transition (e.g., Full-stack TypeScript/React + Python/Java, or Solutions/BI/Technical Analyst with SQL/Python), OR (b) ~2 year (light mid-level) roles in target cities where primary stack (Java Spring Boot, Go, Python, AWS) aligns strongly.
@@ -146,16 +146,16 @@ CRITICAL RULES (MUST OBEY):
 7. UNRELATED FIELD CHECK:
    If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical), set match_score below 3.0 and action "skip".
 
-8. VISA, CITIZENSHIP & EUROPEAN TARGET CITY STRATEGY (BRUSSELS, AMSTERDAM, BERLIN, MUNICH, ZURICH, LONDON):
+8. VISA, CITIZENSHIP & EUROPEAN TARGET CITY STRATEGY (BRUSSELS, AMSTERDAM, BERLIN, MUNICH, COPENHAGEN, ZURICH, LONDON):
    - The candidate is a Turkish citizen with an official EUROCONTROL Traineeship Agreement in Brussels, Belgium (16 Nov 2026 – 30 Apr 2027, NMD/INF/CNS Unit) and is actively preparing for European & Turkish full-time roles.
    - HARD DISQUALIFIERS (STRICT SKIP < 3.5):
      1. EXPLICIT NO-SPONSORSHIP: Explicitly mandates "EU/EEA citizenship required", "No visa sponsorship provided", or "Must already hold permanent unrestricted work permit" -> score 2.0-3.0, action "skip".
-     2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: Explicitly mandates fluent French, German, or Dutch ("Français courant", "Deutsch C1", "Nederlands vereist") without accepting English -> score 2.0-3.5, action "skip".
+     2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: Explicitly mandates fluent French, German, Dutch, or Danish ("Français courant", "Deutsch C1", "Nederlands vereist", "flydende dansk") without accepting English -> score 2.0-3.5, action "skip".
      3. US / OVERSEAS ON-SITE: On-site in US/Canada/Australia/APAC -> score 1.5-2.5, action "skip".
 
    - TARGET CITY 0-2 YEAR / GRADUATE OPPORTUNITY RULE (WORTH TRYING — DO NOT PENALIZE SILENCE ON VISA):
      * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates (especially someone already in Brussels at EUROCONTROL).
-     * Therefore, if an English-speaking role in Belgium (Brussels), Netherlands (Amsterdam/Rotterdam/Eindhoven), Germany (Berlin/Munich), Switzerland, or UK does NOT forbid sponsorship:
+     * Therefore, if an English-speaking role in Belgium (Brussels), Netherlands (Amsterdam/Rotterdam/Eindhoven), Germany (Berlin/Munich), Denmark (Copenhagen), Switzerland, or UK does NOT forbid sponsorship:
        a) If it is explicitly Junior / Graduate / New Grad / Associate / 0-2 years AND tech fit is strong:
           -> Score 7.2 - 8.2 and set action to "apply"! Worth trying!
           -> If the posting does not explicitly confirm sponsorship, note in red_flags: "Visa sponsorship not explicitly stated (0-2 yr target-city role — worth applying)".

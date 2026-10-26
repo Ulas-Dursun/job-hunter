@@ -51,7 +51,7 @@ EU_TR_INDICATORS = [
     "spain", "madrid", "barcelona", "malaga", "valencia", "portugal", "lisbon", "porto",
     "italy", "milan", "rome", "ireland", "dublin",
     "sweden", "stockholm", "gothenburg", "finland", "helsinki", "espoo",
-    "denmark", "copenhagen", "norway", "oslo", "estonia", "tallinn",
+    "denmark", "copenhagen", "københavn", "kobenhavn", "aarhus", "odense", "danimarka", "norway", "oslo", "estonia", "tallinn",
     "hungary", "budapest", "czech", "prague", "bulgaria", "sofia", "greece", "athens",
     "emea", "europe", "european union"
 ]

@@ -3,20 +3,23 @@ KariyerNetSource — Kariyer.net Güncel Nuxt.js Scraper'ı.
 
 Kariyer.net'in güncel SEO kategori sayfalarını (/is-ilanlari/yazilim-muhendisi,
 /yazilim-gelistirme-uzmani, /devops-muhendisi, /veri-analisti, /veri-bilimci)
-tarar; kart başlıklarını (_should_drop_title) ile henüz liste aşamasında süzerek
+tarar; kart başlıklarını (_should_drop_kariyer_title) ile henüz liste aşamasında süzerek
 yalnızca aday profiliyle uyumlu ilanların detay sayfasını (.job-detail-qualifications) çeker.
 """
 
+import json
 import logging
 import re
 import time
-from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from scraper.models.job import Job
 from scraper.sources.base import BaseSource
+from scraper.sources.filters import is_rejected_title
 
 logger = logging.getLogger("scraper.kariyer")
 
@@ -30,26 +33,28 @@ _DEFAULT_SLUGS = [
     "veri-bilimci",
 ]
 
-_REJECT_TITLE_KEYWORDS = [
-    "senior", "sr.", "sr ", "kıdemli", "kidemli", "başmühendis", "baş mühendis",
-    "lead", "takım lideri", "ekip lideri", "manager", "müdür", "yönetici",
-    "director", "direktör", "architect", "mimar", "principal", "staff", "head of",
-    "stajyer", "staj", "intern", "internship",
-    ".net", "c#", "php", "laravel", "wordpress", "drupal", "cobol", "abap", "sap ",
-    "ios ", "android ", "flutter", "react native", "unity", "unreal",
-    "qa ", "test uzman", "yazılım test", "manuel test",
-    "satış", "sales", "pazarlama", "marketing", "muhasebe", "insan kaynakları",
-    "destek uzman", "helpdesk", "çağrı merkezi", "grafik", "ui/ux",
-    "elektrik", "mekanik", "inşaat", "makine mühendis", "endüstri mühendis",
-    "disabled candidate", "engelli",
+# Go CheapFilter ve scraper/sources/filters.py ile tam uyumlu ek Kariyer.net gürültü kelimeleri:
+_KARIYER_EXTRA_REJECT = [
+    ".net", "c#", "php", "laravel", "symfony", "wordpress", "drupal", "cobol", "abap",
+    "flutter", "react native", "unity", "unreal", "ios developer", "android developer",
+    "yazılım test", "manuel test", "test uzman", "qa ",
+    "muhasebe", "insan kaynakları", "destek uzman", "helpdesk", "çağrı merkezi",
+    "grafik", "ui/ux", "elektrik", "mekanik", "inşaat", "makine mühendis", "endüstri mühendis",
+    "disabled candidate", "engelli", "başmühendis", "baş mühendis",
 ]
 
 
 def _should_drop_kariyer_title(title: str) -> bool:
-    low = title.lower().strip()
-    if not low:
+    """
+    Başlığı önce ortak kelime-sınırlı is_rejected_title() ile, ardından Kariyer.net'e özgü
+    stack/alan kara listesiyle kontrol eder. Go CheapFilter ile %100 uyumludur.
+    """
+    if not title or not title.strip():
         return True
-    for bad in _REJECT_TITLE_KEYWORDS:
+    if is_rejected_title(title):
+        return True
+    low = title.lower().strip()
+    for bad in _KARIYER_EXTRA_REJECT:
         if bad in low:
             return True
     return False
@@ -71,6 +76,15 @@ class KariyerNetSource(BaseSource):
             ),
             "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         })
+        retry_strategy = Retry(
+            total=2,
+            backoff_factor=0.6,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["GET"],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     def fetch(self, keywords: list[str], location: str) -> list[Job]:
         jobs: list[Job] = []
@@ -78,15 +92,34 @@ class KariyerNetSource(BaseSource):
         details_fetched = 0
 
         for slug in self.slugs:
+            if details_fetched >= self.max_details_per_cycle:
+                break
+
             list_url = f"{_BASE_URL}/is-ilanlari/{slug}"
             try:
                 resp = self.session.get(list_url, timeout=12)
+                if resp.status_code in (429, 403):
+                    logger.warning(
+                        "kariyer_net rate-limited or blocked (status=%d) on slug=%s — backing off",
+                        resp.status_code, slug,
+                    )
+                    time.sleep(2.0)
+                    continue
                 if resp.status_code != 200:
                     logger.warning("kariyer_net non-200 status=%d url=%s", resp.status_code, list_url)
                     continue
 
                 soup = BeautifulSoup(resp.text, "html.parser")
                 cards = soup.select("a.k-ad-card")
+                if not cards:
+                    # Nuxt DOM sınıfı değişirse yedek seçicileri dene
+                    cards = soup.select('a[data-test="ad-card-item"], a[href*="/is-ilani/"]')
+                if not cards:
+                    logger.warning(
+                        "kariyer_net DOM selector returned 0 cards for slug=%s — page structure may have changed",
+                        slug,
+                    )
+                    continue
 
                 for card in cards:
                     href = (card.get("href") or "").strip()
@@ -98,9 +131,9 @@ class KariyerNetSource(BaseSource):
                         continue
                     seen_ids.add(ext_id)
 
-                    title_el = card.select_one(".k-ad-card-title")
-                    comp_el = card.select_one(".subtitle")
-                    loc_el = card.select_one(".location")
+                    title_el = card.select_one('.k-ad-card-title, [data-test="ad-card-title"]')
+                    comp_el = card.select_one('.subtitle, [data-test="subtitle"]')
+                    loc_el = card.select_one('.location, [data-test="location"]')
 
                     title = " ".join(title_el.get_text(" ", strip=True).split()) if title_el else ""
                     company = " ".join(comp_el.get_text(" ", strip=True).split()) if comp_el else "Kariyer.net İşveren"
@@ -140,19 +173,45 @@ class KariyerNetSource(BaseSource):
     def _fetch_detail_description(self, url: str) -> str:
         try:
             resp = self.session.get(url, timeout=10)
-            if resp.status_code != 200:
+            if resp.status_code in (429, 403):
+                logger.warning("kariyer_net detail rate-limited/blocked status=%d url=%s", resp.status_code, url)
                 return ""
+            if resp.status_code != 200:
+                logger.debug("kariyer_net detail non-200 status=%d url=%s", resp.status_code, url)
+                return ""
+
             soup = BeautifulSoup(resp.text, "html.parser")
             node = (
                 soup.select_one(".job-detail-qualifications")
                 or soup.select_one(".job-detail-content")
                 or soup.select_one(".job-sub-detail")
+                or soup.select_one('[data-test="qualifications"]')
+                or soup.select_one(".aligment-container")
             )
-            if not node:
-                return ""
-            text = " ".join(node.get_text(" ", strip=True).split())
-            return text[:4000]
-        except Exception:
+            if node:
+                text = " ".join(node.get_text(" ", strip=True).split())
+                if len(text) >= 40:
+                    return text[:4000]
+
+            # Yedek: schema.org JobPosting JSON-LD
+            for ld in soup.find_all("script", {"type": "application/ld+json"}):
+                if not ld.string:
+                    continue
+                try:
+                    obj = json.loads(ld.string)
+                    if isinstance(obj, dict) and obj.get("@type") == "JobPosting":
+                        desc = obj.get("description", "")
+                        if desc:
+                            clean = " ".join(BeautifulSoup(desc, "html.parser").get_text(" ", strip=True).split())
+                            if clean:
+                                return clean[:4000]
+                except Exception:
+                    continue
+
+            logger.debug("kariyer_net detail description selector matched empty for url=%s", url)
+            return ""
+        except Exception as exc:
+            logger.debug("kariyer_net detail fetch error url=%s: %s", url, exc)
             return ""
 
     @staticmethod

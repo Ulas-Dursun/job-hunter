@@ -13,11 +13,11 @@ const maxAllowedMinYears = 4
 
 var (
 	// "5 years of experience", "4+ yrs ... experience", "3-5 years experience" (alt sınır alınır)
-	reYearsThenExp = regexp.MustCompile(`(\d{1,2})\s*\+?\s*(?:[-–]\s*\d{1,2}\s*)?(?:years?|yrs?|jahre[n]?|jaar|yıl|ans)\b.{0,40}?(?:experience|erfahrung|ervaring|deneyim|expérience)`)
+	reYearsThenExp = regexp.MustCompile(`(\d{1,2})\s*\+?\s*(?:[-–]\s*\d{1,2}\s*)?(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b.{0,40}?(?:experience|erfahrung|ervaring|deneyim|expérience|erfaring)`)
 	// "experience of 4+ years", "Berufserfahrung von mindestens 5 Jahren"
-	reExpThenYears = regexp.MustCompile(`(?:experience|erfahrung|ervaring|deneyim|expérience)\D{0,30}(\d{1,2})\s*\+?\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans)\b`)
+	reExpThenYears = regexp.MustCompile(`(?:experience|erfahrung|ervaring|deneyim|expérience|erfaring)\D{0,30}(\d{1,2})\s*\+?\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b`)
 	// "at least 5 years", "minimum of 6 years", "mindestens 4 Jahre", "en az 5 yıl"
-	reMinYears = regexp.MustCompile(`(?:at least|minimum(?: of)?|min\.|mindestens|en az|minstens|au moins)\s*(\d{1,2})\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans)\b`)
+	reMinYears = regexp.MustCompile(`(?:at least|minimum(?: of)?|min\.|mindestens|en az|minstens|au moins|mindst)\s*(\d{1,2})\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b`)
 )
 
 // companyClaimPrefixes: sayının hemen öncesinde geçerse ifade şirket tanıtımıdır ("over 20 years of experience"),
@@ -64,6 +64,7 @@ var languageBarrierPatterns = []string{
 	"sehr gute deutschkenntnisse", "gute deutschkenntnisse", "deutsch c1", "deutsch c2", "muttersprache deutsch",
 	"vloeiend nederlands", "nederlands vereist", "goede beheersing van het nederlands",
 	"uitstekende beheersing van het nederlands", "français courant", "maîtrise du français",
+	"fluent danish", "fluent in danish", "danish fluent", "native danish", "flydende dansk", "dansk i skrift og tale",
 }
 
 // languageSoftWords: bariyer ifadesinin yakınında geçerse dil şartı "artı/tercih" sayılır ve ilan elenmez.
@@ -121,6 +122,7 @@ var (
 	stopDE = toSet("und", "der", "die", "das", "wir", "mit", "für", "sie", "ein", "eine", "den", "im", "von", "zu", "auf", "ist", "sind", "werden", "du", "deine", "bei", "unser", "unsere", "dich", "uns", "oder", "als")
 	stopNL = toSet("het", "een", "wij", "voor", "met", "van", "je", "jij", "ons", "bij", "zijn", "naar", "ook", "jouw", "wat", "dat", "worden", "onze", "kun")
 	stopFR = toSet("les", "des", "nous", "vous", "pour", "avec", "une", "est", "dans", "sur", "que", "du", "au", "aux", "votre", "notre", "vos", "nos")
+	stopDA = toSet("og", "det", "til", "med", "på", "vi", "du", "som", "har", "kan", "skal", "din", "vores", "hos", "eller", "fra", "vil")
 )
 
 func toSet(words ...string) map[string]struct{} {
@@ -135,10 +137,11 @@ func toSet(words ...string) map[string]struct{} {
 var englishFriendlyPhrases = []string{
 	"english-speaking", "english speaking", "working language is english", "company language is english",
 	"dutch is not required", "dutch not required", "no dutch required", "german is not required",
-	"german not required", "no german required", "arbeitssprache ist englisch", "voertaal is engels",
+	"german not required", "no german required", "danish is not required", "danish not required", "no danish required",
+	"arbeitssprache ist englisch", "voertaal is engels",
 }
 
-// nonEnglishPosting, ilan metni ağırlıklı olarak Almanca/Felemenkçe/Fransızca yazılmışsa (dil kodu) döndürür.
+// nonEnglishPosting, ilan metni ağırlıklı olarak Almanca/Felemenkçe/Fransızca/Danca yazılmışsa (dil kodu) döndürür.
 // İki dilli ilanlarda İngilizce stop-word sayısı da yüksek olacağından oran koşulu yanlış pozitifi önler.
 func nonEnglishPosting(descLower string) (string, bool) {
 	for _, ok := range englishFriendlyPhrases {
@@ -150,7 +153,7 @@ func nonEnglishPosting(descLower string) (string, bool) {
 	if len(words) < 60 {
 		return "", false
 	}
-	var en, de, nl, fr int
+	var en, de, nl, fr, da int
 	for _, w := range words {
 		if _, ok := stopEN[w]; ok {
 			en++
@@ -164,6 +167,9 @@ func nonEnglishPosting(descLower string) (string, bool) {
 		if _, ok := stopFR[w]; ok {
 			fr++
 		}
+		if _, ok := stopDA[w]; ok {
+			da++
+		}
 	}
 	switch {
 	case de >= 12 && de > 2*en:
@@ -172,6 +178,8 @@ func nonEnglishPosting(descLower string) (string, bool) {
 		return "nl", true
 	case fr >= 12 && fr > 2*en:
 		return "fr", true
+	case da >= 10 && da > 2*en:
+		return "da", true
 	}
 	return "", false
 }

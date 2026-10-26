@@ -279,6 +279,7 @@ func TestCheapFilter_LanguageBarrier(t *testing.T) {
 		"Fluent German (C1) is required for daily communication with customers.",
 		"Sie bringen sehr gute Deutschkenntnisse mit.",
 		"Vloeiend Nederlands is vereist voor deze rol.",
+		"Vi forventer at du taler flydende dansk i hverdagen.",
 	} {
 		if r := f.Check("Software Engineer", "Acme", d); !r.Rejected {
 			t.Errorf("%q dil bariyeri olarak elenmeliydi", d)
@@ -307,5 +308,9 @@ func TestCheapFilter_NonEnglishPosting(t *testing.T) {
 	friendly := nl + " Dutch is not required, we are an English-speaking team."
 	if r := f.Check("Software Engineer", "Acme", friendly); r.Rejected {
 		t.Errorf("İngilizce-dostu ilan elenmemeli: %s", r.Reason)
+	}
+	da := strings.Repeat("Vi søger en dygtig udvikler til vores team med fokus på kvalitet og samarbejde hos os. ", 8)
+	if r := f.Check("Software Engineer", "Acme", da); !r.Rejected {
+		t.Error("Danca ilan elenmeliydi")
 	}
 }
