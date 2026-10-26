@@ -35,15 +35,15 @@ candidate:
     - "Real-Time Telemetry & Analytics Pipeline (Python, React, IoT): Built an end-to-end sensor ingestion pipeline and live dashboard achieving >99% delivery reliability and ~500ms command latency."
 
   skills:
-    languages:  ["Go", "Java", "Python", "Rust", "SQL", "C++ (Working Knowledge)"]
-    frameworks: ["Spring Boot"]
-    databases:  ["PostgreSQL", "MongoDB", "Redis"]
-    os:         ["Linux (Bash/Shell Scripting)"]
-    infra:      ["Docker", "Docker Compose", "CI/CD (GitHub Actions)", "Prometheus", "Grafana"]
-    cloud:      ["AWS Certified AI Practitioner", "AWS (EC2, S3, IAM, VPC)"]
+    languages:  ["Go", "Java", "Python", "Rust", "SQL", "C++"]
+    frameworks: ["Spring Boot", "React"]
+    databases:  ["PostgreSQL", "MongoDB", "Redis", "Firebase"]
+    os:         ["Linux", "Bash"]
+    infra:      ["Docker", "Docker Compose", "CI/CD", "GitHub Actions", "Prometheus", "Grafana", "ESP32"]
+    cloud:      ["AWS", "EC2", "S3", "IAM", "VPC", "AWS Certified AI Practitioner"]
     concepts:   ["REST API", "JWT", "Concurrency", "Worker Pool",
                  "Distributed Systems", "TCP/UDP", "Microservices", "Testcontainers",
-                 "Machine Learning (coursework)"]
+                 "Machine Learning"]
 
   target_roles:
     primary:
@@ -55,6 +55,10 @@ candidate:
       - "Golang Developer"
       - "Java Developer"
       - "Python Developer"
+      - "Rust Developer"
+      - "Distributed Systems Engineer"
+      - "AI Engineer"
+      - "Solutions Engineer"
       - "Platform Engineer"
       - "Cloud Engineer"
       - "DevOps Engineer"
@@ -340,14 +344,19 @@ sources:
       - "Copenhagen, Denmark"
     keywords:
       - "backend engineer"
+      - "junior backend engineer"
       - "software engineer"
       - "go developer"
+      - "junior go developer"
       - "java spring boot developer"
       - "python developer"
       - "devops engineer"
       - "cloud engineer"
+      - "junior cloud engineer"
       - "platform engineer"
+      - "associate platform engineer"
       - "site reliability engineer"
+      - "junior ai engineer"
       - "graduate software engineer"
       - "junior software developer"
       - "new grad software engineer"

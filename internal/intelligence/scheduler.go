@@ -47,6 +47,7 @@ func NewScheduler(
 	allSkills = append(allSkills, cfg.Skills.Languages...)
 	allSkills = append(allSkills, cfg.Skills.Frameworks...)
 	allSkills = append(allSkills, cfg.Skills.Databases...)
+	allSkills = append(allSkills, cfg.Skills.OS...)
 	allSkills = append(allSkills, cfg.Skills.Infra...)
 	allSkills = append(allSkills, cfg.Skills.Cloud...)
 	allSkills = append(allSkills, cfg.Skills.Concepts...)

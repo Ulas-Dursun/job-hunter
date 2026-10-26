@@ -127,3 +127,29 @@ func TestSanitizeTailoredAssets_FiltersUnownedTech(t *testing.T) {
 		t.Errorf("expected unowned ATS keyword 'Kubernetes' to be marked as gap, got %v", res.ATSKeywords)
 	}
 }
+
+func TestPromptBuilder_ChainOfThoughtOrderAndBonus(t *testing.T) {
+	pb := NewPromptBuilder(nil)
+	prompt := pb.Build("Junior Backend Engineer", "Adyen", "Amsterdam", "Go, Redis Streams, Concurrency, AWS")
+
+	idxReasoning := strings.Index(prompt, `"reasoning":`)
+	idxOverlap := strings.Index(prompt, `"skill_overlap":`)
+	idxMissing := strings.Index(prompt, `"missing_skills":`)
+	idxFlags := strings.Index(prompt, `"red_flags":`)
+	idxScore := strings.Index(prompt, `"match_score":`)
+	idxAction := strings.Index(prompt, `"action":`)
+
+	if idxReasoning == -1 || idxOverlap == -1 || idxMissing == -1 || idxFlags == -1 || idxScore == -1 || idxAction == -1 {
+		t.Fatalf("missing expected JSON keys in prompt schema")
+	}
+	if !(idxReasoning < idxOverlap && idxOverlap < idxMissing && idxMissing < idxFlags && idxFlags < idxScore && idxScore < idxAction) {
+		t.Errorf("expected CoT JSON field order (reasoning -> overlap -> missing -> red_flags -> match_score -> action), got indices: reasoning=%d overlap=%d missing=%d flags=%d score=%d action=%d",
+			idxReasoning, idxOverlap, idxMissing, idxFlags, idxScore, idxAction)
+	}
+	if !strings.Contains(prompt, "STRONG ARCHITECTURAL & AI PRACTITIONER BONUS (+0.4 to +0.5)") {
+		t.Errorf("expected Strong Architectural & AI Practitioner bonus rule in prompt")
+	}
+	if !strings.Contains(prompt, "8.0 - 9.5 (JACKPOT MATCH") {
+		t.Errorf("expected 8.0 threshold alignment in prompt")
+	}
+}

@@ -24,7 +24,7 @@ type CheapFilter struct {
 }
 
 var defaultBlacklistKeywords = []string{
-	"stage", "stajyeri", "stajı", "team leader", "müdür", "müdürü", "yöneticisi", "ürün yöneticisi",
+	"offre de stage", "stagiaire", "stagiair", "stajyeri", "stajı", "team leader", "müdür", "müdürü", "yöneticisi", "ürün yöneticisi",
 	"product manager", "project manager", "scrum master", "account management",
 	"customer success", "fincrime", "financial crime", "risk analyst", "operational risk",
 	"credit risk", "deal intelligence", "cost analyst", "strategic finance",
@@ -168,26 +168,6 @@ func (f *CheapFilter) Check(title, company, description string, source ...string
 		}
 	}
 
-	// Deneyim yılı pattern'leri — 5+ yıl isteyen ilanlar new grad için uygun değil.
-	// 4+ yıl sınırı bilinçli: 4-5 yıl isteyen bazı ilanlar hâlâ match olabilir,
-	// AI bu kararı verecek. 5+ kesin red flag.
-	yearPatterns := []string{
-		"minimum 5 yıl", "minimum 6 yıl", "minimum 7 yıl",
-		"minimum 8 yıl", "minimum 10 yıl",
-		"minimum 5 years", "minimum 6 years", "minimum 7 years",
-		"minimum 8 years", "minimum 10 years",
-		"en az 5 yıl", "en az 6 yıl", "en az 7 yıl", "en az 10 yıl",
-		"5+ years", "6+ years", "7+ years", "8+ years", "10+ years",
-		"5 years of experience", "6 years of experience",
-		"7 years of experience", "10 years of experience",
-		"at least 5 years", "at least 6 years", "at least 7 years",
-	}
-	for _, pattern := range yearPatterns {
-		if strings.Contains(descLower, pattern) {
-			return FilterResult{Rejected: true, Reason: "exp_req:" + pattern}
-		}
-	}
-
 	// ── Katman 4: Deterministik dil / kıdem kapıları (AI kotası koruma) ─────────
 	// Tüm açıklama taranır (gereksinimler sıklıkla 2500. karakterden sonra gelir).
 	fullLower := strings.ToLower(description)
@@ -295,7 +275,7 @@ func countTechTerms(descLower string) int {
 func isInternshipKeyword(kw string) bool {
 	switch strings.ToLower(kw) {
 	case "intern", "internship", "stajyer", "stajyeri", "staj", "stajı", "working student", "werkstudent", "part-time intern", "long-term intern",
-		"praktikum", "praktikant", "praktikantin", "stagiair", "stagiaire", "stage":
+		"praktikum", "praktikant", "praktikantin", "stagiair", "stagiaire", "offre de stage":
 		return true
 	default:
 		return false

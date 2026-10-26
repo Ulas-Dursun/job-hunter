@@ -14,13 +14,14 @@ from scraper.sources.ats_source import is_allowed_location
 class TestFilters(unittest.TestCase):
     def test_passes_tech_and_data_roles(self):
         for t in ["Backend Developer", "Junior Data Analyst", "Business Intelligence Analyst",
-                  "Machine Learning Engineer (Graduate)", "Veri Analisti", "Yazılım Uzmanı", "Yazılım Uzman Yardımcısı"]:
+                  "Machine Learning Engineer (Graduate)", "Veri Analisti", "Yazılım Uzmanı", "Yazılım Uzman Yardımcısı",
+                  "Early Stage Startup - Backend Engineer", "Seed Stage AI Engineer", "Multi-Stage Pipeline Engineer"]:
             self.assertTrue(is_tech_title(t, "Python SQL"), t)
 
     def test_rejects_corporate_noise(self):
         for t in ["Operational Risk Analyst", "FinCrime Analyst", "Deal Intelligence Analyst",
-                  "Product Cost Analyst", "Stage: Software Developer", "Veri Merkezleri İşletme Müdürü",
-                  "Senior Backend Engineer", "Ürün Yöneticisi"]:
+                  "Product Cost Analyst", "Offre de stage: Software Developer", "Stagiaire Software Developer",
+                  "Veri Merkezleri İşletme Müdürü", "Senior Backend Engineer", "Ürün Yöneticisi"]:
             self.assertFalse(is_tech_title(t, "cloud data company"), t)
 
     def test_soft_entry_gate_needs_real_tech_terms(self):
@@ -58,6 +59,23 @@ class TestFilters(unittest.TestCase):
         self.assertTrue(tpl["sources"]["kariyer_net"]["enabled"])
         self.assertTrue(tpl["sources"]["coderspace"]["enabled"])
 
+        for kw in [
+            "junior backend engineer",
+            "junior cloud engineer",
+            "junior go developer",
+            "junior ai engineer",
+            "graduate software engineer",
+            "associate platform engineer",
+        ]:
+            self.assertIn(kw, tpl["sources"]["jobspy"]["keywords"])
+
+        for role in ["AI Engineer", "Distributed Systems Engineer", "Solutions Engineer", "Rust Developer"]:
+            self.assertIn(role, tpl["candidate"]["target_roles"]["primary"])
+
+        all_tpl_skills = sum(tpl["candidate"]["skills"].values(), [])
+        for sk in ["AWS", "EC2", "S3", "GitHub Actions", "React", "ESP32"]:
+            self.assertIn(sk, all_tpl_skills)
+
         local_path = root / "config.local.yaml"
         if local_path.exists():
             with open(local_path, encoding="utf-8") as f:
@@ -66,6 +84,20 @@ class TestFilters(unittest.TestCase):
             self.assertEqual(set(tpl["candidate"].keys()), set(loc["candidate"].keys()))
             self.assertEqual(set(tpl["sources"].keys()), set(loc["sources"].keys()))
             self.assertIn("Copenhagen, Denmark", loc["sources"]["jobspy"]["locations"])
+            for kw in [
+                "junior backend engineer",
+                "junior cloud engineer",
+                "junior go developer",
+                "junior ai engineer",
+                "graduate software engineer",
+                "associate platform engineer",
+            ]:
+                self.assertIn(kw, loc["sources"]["jobspy"]["keywords"])
+            for role in ["AI Engineer", "Distributed Systems Engineer", "Solutions Engineer", "Rust Developer"]:
+                self.assertIn(role, loc["candidate"]["target_roles"]["primary"])
+            all_loc_skills = sum(loc["candidate"]["skills"].values(), [])
+            for sk in ["AWS", "EC2", "S3", "GitHub Actions", "React", "ESP32"]:
+                self.assertIn(sk, all_loc_skills)
 
 
 if __name__ == "__main__":

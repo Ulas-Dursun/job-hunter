@@ -61,7 +61,7 @@ REJECT_TITLE_KEYWORDS = [
     "takım lideri", "ekip lideri", "team lead", "tech lead", "engineering manager", "müdür", "müdürü", "yöneticisi",
     "ürün yöneticisi", "product manager", "project manager", "scrum master", "delivery manager",
     "intern", "internship", "stajyer", "stajyeri", "staj", "stajı", "working student", "werkstudent",
-    "praktikum", "praktikant", "praktikantin", "stagiair", "stagiaire", "stage", "ausbildung",
+    "praktikum", "praktikant", "praktikantin", "stagiair", "stagiaire", "offre de stage", "ausbildung",
     "qa engineer", "test engineer", "ios developer", "android developer",
     "sales", "satış", "account executive", "account management", "account manager",
     "customer success", "customer support", "recruiter", "talent acquisition", "human resources",

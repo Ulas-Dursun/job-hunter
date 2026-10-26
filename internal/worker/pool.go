@@ -198,9 +198,9 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 		return
 	}
 
-	// Aynı şirket+başlık daha önce düşük puan aldıysa (çok şehirli kopya ilan) AI'ya gitme.
-	if twin, err := p.jobStore.HasLowScoreTwin(ctx, company, title); err == nil && twin {
-		slog.Debug("worker skipped low-score twin", "title", title, "company", company)
+	// Aynı şirket+başlık aynı ülke/lokasyon kapsamında daha önce düşük puan aldıysa AI'ya gitme.
+	if twin, err := p.jobStore.HasLowScoreTwin(ctx, company, title, location); err == nil && twin {
+		slog.Debug("worker skipped low-score twin", "title", title, "company", company, "location", location)
 		p.metrics.JobsCheapFiltered.Inc()
 		p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
 		return

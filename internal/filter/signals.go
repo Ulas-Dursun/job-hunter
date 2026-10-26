@@ -20,38 +20,53 @@ var (
 	reMinYears = regexp.MustCompile(`(?:at least|minimum(?: of)?|min\.|mindestens|en az|minstens|au moins|mindst)\s*(\d{1,2})\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b`)
 )
 
-// companyClaimPrefixes: sayının hemen öncesinde geçerse ifade şirket tanıtımıdır ("over 20 years of experience"),
-// adaydan istenen şart değildir.
-var companyClaimPrefixes = []string{"over ", "more than ", "nearly ", "almost ", "meer dan ", "plus de ", "mehr als ", "über ", "since ", "for "}
+// companyClaimPrefixes: sayının öncesindeki bağlamda geçerse ifade şirket/ekip tanıtımıdır
+// ("over 20 years of experience", "our team has 10 years of experience", "work with seniors having 5+ years"),
+// adaydan istenen asgari şart değildir.
+var companyClaimPrefixes = []string{
+	"over ", "more than ", "nearly ", "almost ", "meer dan ", "plus de ", "mehr als ", "über ", "since ", "for ",
+	"our team", "the team", "team has", "team with", "team of", "we have", "we bring", "company has", "company with",
+	"with seniors", "senior engineers", "seniors having", "seniors with", "mentors with", "colleagues with",
+	"leaders with", "experts with", "combined ", "collective ", "founded ", "established ", "backed by",
+}
 
-// minYearsRequired, açıklamada geçen deneyim şartlarının en yükseğini (alt sınır olarak) döndürür; yoksa 0.
-// 13+ yıl ve "over/more than N years" kalıpları şirket tanıtımı sayılıp yok sayılır.
+// minYearsRequired, açıklamada adaydan istenen asgari deneyim şartlarının en küçüğünü (alt sınır olarak) döndürür; yoksa 0.
+// Örneğin ilanda hem Junior ("1-2 years") hem Mid ("4-6 years") kademesi geçiyorsa veya ekip kıdemi ("seniors with 5+ years")
+// anlatılıyorsa, en küçük geçerli aday şartını (1) baz alır. 13+ yıl ve şirket/ekip tanıtımı kalıpları yok sayılır.
 func minYearsRequired(descLower string) int {
-	best := 0
+	minFound := 0
+	found := false
 	for _, re := range []*regexp.Regexp{reYearsThenExp, reExpThenYears, reMinYears} {
 		for _, loc := range re.FindAllStringSubmatchIndex(descLower, -1) {
 			n, err := strconv.Atoi(descLower[loc[2]:loc[3]])
-			if err != nil || n > 12 || n <= best {
+			if err != nil || n < 0 || n > 12 {
 				continue
 			}
-			from := loc[2] - 12
+			from := loc[0] - 55
 			if from < 0 {
 				from = 0
 			}
-			prefix := descLower[from:loc[2]]
+			contextBefore := descLower[from:loc[2]]
 			claim := false
 			for _, p := range companyClaimPrefixes {
-				if strings.HasSuffix(prefix, p) {
+				if strings.Contains(contextBefore, p) {
 					claim = true
 					break
 				}
 			}
-			if !claim {
-				best = n
+			if claim {
+				continue
+			}
+			if !found || n < minFound {
+				minFound = n
+				found = true
 			}
 		}
 	}
-	return best
+	if !found {
+		return 0
+	}
+	return minFound
 }
 
 // languageBarrierPatterns: aday İngilizce (C1/C2) + Türkçe (ana dil) + Almanca (başlangıç) bilir.
@@ -68,9 +83,12 @@ var languageBarrierPatterns = []string{
 }
 
 // languageSoftWords: bariyer ifadesinin yakınında geçerse dil şartı "artı/tercih" sayılır ve ilan elenmez.
+// Not: "english/englisch/engels/anglais" burada YER ALMAZ — çünkü "Fluent German and English required"
+// gibi çift dilli zorunlu ilanlarda "english" kelimesi bariyeri yanlışlıkla devre dışı bırakır.
 var languageSoftWords = []string{
 	"plus", "advantage", "nice to have", "nice-to-have", "preferred", "desirable", "bonus", "beneficial",
-	"von vorteil", "wünschenswert", "vorteilhaft", "english", "englisch", "engels", "anglais",
+	"optional", "not required", "nicht erforderlich", "niet vereist",
+	"von vorteil", "wünschenswert", "vorteilhaft",
 }
 
 // hasLanguageBarrier, Almanca/Felemenkçe/Fransızca zorunluluğu bildiren bir ifade bulursa (ifade) döndürür.

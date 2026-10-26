@@ -68,49 +68,52 @@ Determine whether this role is a strong career match for the candidate across hi
 1. Backend & Systems Software: Go, Java (Spring Boot), Python, Rust, Distributed Systems, Concurrency, REST APIs, Microservices.
 2. Cloud, Platform & DevOps / SRE: Docker, Linux (Bash), AWS (EC2, S3, IAM, VPC, Certified AI Practitioner), CI/CD (GitHub Actions), Prometheus, Grafana.
 3. Data Engineering, Analytics & ML: SQL, Python, PostgreSQL, Real-time Data Processing, Data Pipelines, Analytics, Business Intelligence, Machine Learning fundamentals (university coursework).
-4. Systems & Aerospace Software: Surveillance data decoding, ASTERIX E-ARCO (ARTAS, SDDS, SASS-C), JSON schema validation, TCP/UDP sockets, C++/Python/Java clients.
+4. Systems & Mission-Critical Software: Protocol/telemetry data decoding, JSON schema validation, TCP/UDP sockets, C++/Python/Java/Rust services.
 
 Use only evidence explicitly present in the candidate profile and job posting.
 Do not hallucinate skills, experience, or projects.
 Prefer "watch" over "skip" when the role is entry/junior level (0-2 years) or an adjacent growth opportunity.
 Prefer "apply" when there is strong alignment with any of the 4 pillars at an entry/junior level.
 
-Return this exact JSON structure:
+Return this exact JSON structure (evaluate reasoning, overlap, gaps, and red_flags FIRST before deciding match_score and action):
 {
-  "match_score": <float 0.0-10.0>,
-  "role_family": "<primary|secondary>",
+  "reasoning": "<2 sentence explanation connecting the job requirements with the candidate's verified projects and experience>",
   "skill_overlap": [<matching skills from candidate profile>],
   "missing_skills": [<required skills candidate lacks>],
   "red_flags": [<concerns: wrong stack, too senior, irrelevant domain, visa issue>],
-  "action": "<apply|watch|skip>",
-  "reasoning": "<2 sentence explanation>"
+  "role_family": "<primary|secondary>",
+  "match_score": <float 0.0-10.0>,
+  "action": "<apply|watch|skip>"
 }
 
 CRITICAL RULES (MUST OBEY):
 
-1. EXPERIENCE & SCORING MATRIX (STRICT GRANULAR CALIBRATION — DO NOT CLUSTER AT 6.8):
-   - 8.2 - 9.5 (JACKPOT MATCH — Triggers Instant Telegram Notification):
+1. EXPERIENCE & SCORING MATRIX (STRICT GRANULAR CALIBRATION — ALIGNED WITH SYSTEM THRESHOLDS):
+   - 8.0 - 9.5 (JACKPOT MATCH — Triggers Instant Telegram Notification, action: "apply"):
      * EXCLUSIVELY for top-tier entry-level alignments: explicitly Junior, New Grad, Graduate, Associate, or 0-2 years.
-     * Core tech stack aligns 80%%+ with candidate's primary skills (Go, Java/Spring Boot, Python backend/data, Docker/Linux/AWS/APIs, or EUROCONTROL/aviation surveillance systems).
+     * Core tech stack aligns 80%%+ with candidate's primary skills (Go, Java/Spring Boot, Python backend/data, Docker/Linux/AWS/APIs, or systems/protocol engineering in the Candidate Profile).
      * No major missing requirements, no explicit visa/language blockers.
-   - 7.4 - 8.1 (STRONG FIT / APPLY — Included in Daily Evening Digest):
+   - 7.0 - 7.9 (STRONG FIT / APPLY — Included in Daily Evening Digest, action: "apply"):
      * Entry-level or junior role (0-2 years) in target cities (Istanbul, Brussels, Amsterdam, Berlin, Munich, Copenhagen, London, Zurich, Geneva, or Remote) with solid fundamentals, even if visa sponsorship is not explicitly mentioned or candidate has 1-2 secondary tool gaps (e.g., Kubernetes, Terraform, Kafka) that can be learned on the job.
-     * Or ~2 year role where candidate's strong project portfolio + EUROCONTROL Brussels traineeship makes it a strong application.
-   - 6.8 - 7.3 (HIGH WATCH / VIABLE STRETCH — Eligible for Evening Digest):
+     * Or ~2 year role where candidate's strong project portfolio + European traineeship/engineering experience in the Candidate Profile makes it a strong application.
+   - 6.8 - 6.9 (HIGH WATCH / VIABLE STRETCH — Eligible for Evening Digest, action: "watch"):
      * RESERVED ONLY FOR: (a) 0-2 year / Junior / Graduate roles requiring an adjacent stack transition (e.g., Full-stack TypeScript/React + Python/Java, or Solutions/BI/Technical Analyst with SQL/Python), OR (b) ~2 year (light mid-level) roles in target cities where primary stack (Java Spring Boot, Go, Python, AWS) aligns strongly.
-     * Any role requiring 3+ years of experience MUST NOT be placed in 6.8-7.3 unless it explicitly welcomes New Grads/Juniors.
-   - 5.8 - 6.5 (MODERATE WATCH — Mid-Level Stretch, Excluded from Evening Digest):
+     * Any role requiring 3+ years of experience MUST NOT be placed in 6.8-6.9 unless it explicitly welcomes New Grads/Juniors.
+   - 5.8 - 6.5 (MODERATE WATCH — Mid-Level Stretch, Excluded from Evening Digest, action: "watch"):
      * Roles requiring 3-4 years of experience where tech stack overlaps, OR roles in non-target European cities (e.g. Tallinn, Budapest, Warsaw) without remote flexibility, OR roles missing multiple tools.
      * HARD CAP: If a role requires 3+ years of experience, cap match_score at <= 6.5 (use 5.8, 6.0, 6.2, 6.4, or 6.5).
-   - 5.0 - 5.7 (LOW WATCH):
+   - 5.0 - 5.7 (LOW WATCH, action: "watch"):
      * Heavy stretch (3-4 years + adjacent stack or domain gap).
-   - Below 5.0 (SKIP):
+   - Below 5.0 (SKIP, action: "skip"):
      * Incompatible roles, 4+ years required without strong match, 5+ years required in general, security clearance required, non-tech disciplines, gig/labeling work, or explicit visa/language barriers.
-   - ANTI-CLUSTERING RULE: Do NOT lazily assign 6.8 to every "watch" job. Differentiate using the full decimal scale (e.g., 5.4, 5.9, 6.1, 6.4, 6.9, 7.2, 7.6, 8.1, 8.6).
+   - ANTI-CLUSTERING RULE: Do NOT lazily assign 6.8 to every "watch" job. Differentiate using the full decimal scale (e.g., 5.4, 5.9, 6.1, 6.4, 6.8, 6.9, 7.2, 7.6, 8.1, 8.6).
 
 2. BROAD NEW GRAD / 0-2 YEARS SOFT FLEXIBILITY:
    - A Software Engineering graduate with Python, Java, Go, SQL, C++, Cloud, and Data Pipeline experience can succeed across a wide spectrum of 0-2 year roles (Backend, Data Analyst, Data Engineer, Junior ML/AI, Cloud/DevOps, Solutions/Integration Engineer, Technical Analyst, Graduate Rotational Programs).
    - If the job is explicitly for "New Grad", "Junior", "Associate", "Graduate", "Trainee", or "0-2 years", prioritize engineering & analytical fundamentals over exact tool names.
+
+2a. STRONG ARCHITECTURAL & AI PRACTITIONER BONUS (+0.4 to +0.5):
+   - For 0-2 year / Junior / New Grad / Graduate / Associate roles that directly match the candidate's verified architectural strengths — specifically Distributed Systems (Go, Redis Streams, Worker Pools, Concurrency, High-Throughput Microservices, Rust TCP/UDP, Java 21 Spring Boot Pessimistic Locking) OR Cloud/AI Engineering backed by his AWS Certified AI Practitioner (2026) credential and Python/Cloud background — award an explicit +0.4 to +0.5 Strong Architectural Match bonus so high-signal matches cross the 8.0+ Instant Telegram Notification threshold.
 
 2b. TOOL GAP FLEXIBILITY:
    If the candidate is missing only 1-2 secondary infrastructure/tool requirements (e.g., Kubernetes in production, Terraform, Spark/Kafka) but core fundamentals AND primary tech stack align well:
@@ -125,7 +128,7 @@ CRITICAL RULES (MUST OBEY):
    The candidate is strong in Python, SQL, Real-time Data Processing, Data Pipelines, holds the AWS Certified AI Practitioner (2026) credential, and completed university Machine Learning coursework.
    If a role is explicitly New Grad / Graduate / Junior / Entry-level / 0-2 years in ML, Data Science, AI, Business Intelligence, or Data Analytics:
    - Do NOT skip merely because production ML experience or a master's degree is not proven.
-   - Score 6.5-7.8 when Python/SQL/Data fundamentals fit. Add any real gap (e.g. "No production PyTorch/Spark experience") to missing_skills.
+   - Score 6.8-7.8 when Python/SQL/Data fundamentals fit (or 8.0+ if AI Engineer / Cloud AI integration directly leverages AWS AI Practitioner + Python backend). Add any real gap (e.g. "No production PyTorch/Spark experience") to missing_skills.
    - Still skip PhD-required / Senior Research Scientist roles.
 
 3. HARD FILTERS:
@@ -133,11 +136,12 @@ CRITICAL RULES (MUST OBEY):
    - If the role is clearly unrelated to technology/engineering/analytics (e.g. sales, marketing, HR, legal, nursing, civil/mechanical engineering), set action to "skip" (< 3.5).
 
 4. ROLE FAMILY & THE 4 TARGET PILLARS:
-   - "primary" for Backend, Software Engineer, Cloud/DevOps/SRE, Systems/Aerospace (C++/Go/Java/Python).
-   - "secondary" for Data Engineer, Data Analyst, Data Scientist, BI Developer, ML/AI Engineer, Solutions/Integration Analyst.
+   - "primary" for Backend, Software Engineer, Distributed Systems, AI Engineer (Backend/Cloud Integration), Cloud/DevOps/SRE, Systems/Aerospace (C++/Go/Java/Python/Rust).
+   - "secondary" for Data Engineer, Data Analyst, Data Scientist, BI Developer, ML Engineer, Solutions/Integration Analyst.
 
-5. DECISION TIE-BREAKERS:
-   - If the role is 0-2 years / junior and the stack is adjacent, prefer "watch" or "apply" over "skip".
+5. DECISION TIE-BREAKERS (ALIGNED WITH DERIVE_ACTION):
+   - action MUST be "apply" when match_score >= 7.0, "watch" when 5.0 <= match_score < 7.0, and "skip" when match_score < 5.0.
+   - If the role is 0-2 years / junior and the stack is adjacent, prefer "watch" (6.8-6.9) or "apply" (7.0+) over "skip".
    - If the role is senior (5+ years) even with a close stack, keep the score low (< 4.5).
 
 6. DOMAIN SPECIALIZATION CHECK:
@@ -147,22 +151,22 @@ CRITICAL RULES (MUST OBEY):
    If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical), set match_score below 3.0 and action "skip".
 
 8. VISA, CITIZENSHIP & EUROPEAN TARGET CITY STRATEGY (BRUSSELS, AMSTERDAM, BERLIN, MUNICH, COPENHAGEN, ZURICH, LONDON):
-   - The candidate is a Turkish citizen with an official EUROCONTROL Traineeship Agreement in Brussels, Belgium (16 Nov 2026 – 30 Apr 2027, NMD/INF/CNS Unit) and is actively preparing for European & Turkish full-time roles.
+   - Use the candidate's Location & Mobility and Work Experience in the Candidate Profile (including European traineeship mobility in Brussels and full-time availability across Turkey & Europe).
    - HARD DISQUALIFIERS (STRICT SKIP < 3.5):
      1. EXPLICIT NO-SPONSORSHIP: Explicitly mandates "EU/EEA citizenship required", "No visa sponsorship provided", or "Must already hold permanent unrestricted work permit" -> score 2.0-3.0, action "skip".
      2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: Explicitly mandates fluent French, German, Dutch, or Danish ("Français courant", "Deutsch C1", "Nederlands vereist", "flydende dansk") without accepting English -> score 2.0-3.5, action "skip".
      3. US / OVERSEAS ON-SITE: On-site in US/Canada/Australia/APAC -> score 1.5-2.5, action "skip".
 
    - TARGET CITY 0-2 YEAR / GRADUATE OPPORTUNITY RULE (WORTH TRYING — DO NOT PENALIZE SILENCE ON VISA):
-     * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates (especially someone already in Brussels at EUROCONTROL).
+     * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates (especially candidates with European traineeship experience in Brussels).
      * Therefore, if an English-speaking role in Belgium (Brussels), Netherlands (Amsterdam/Rotterdam/Eindhoven), Germany (Berlin/Munich), Denmark (Copenhagen), Switzerland, or UK does NOT forbid sponsorship:
        a) If it is explicitly Junior / Graduate / New Grad / Associate / 0-2 years AND tech fit is strong:
-          -> Score 7.2 - 8.2 and set action to "apply"! Worth trying!
+          -> Score 7.2 - 8.4 and set action to "apply"! Worth trying!
           -> If the posting does not explicitly confirm sponsorship, note in red_flags: "Visa sponsorship not explicitly stated (0-2 yr target-city role — worth applying)".
        b) If it is Light Mid-level (~2 years) and does not explicitly confirm sponsorship:
-          -> Score 6.6 - 7.1 ("watch" or borderline "apply" depending on stack overlap).
+          -> Score 6.8 - 6.9 ("watch") or 7.0 - 7.3 ("apply" if primary stack overlap is very strong).
        c) If it requires 3-4 years of experience and does not explicitly confirm sponsorship:
-          -> Cap at 5.8 - 6.5 and set action to "watch" (do NOT give 6.8 to 3+ year roles).
+          -> Cap at 5.8 - 6.5 and set action to "watch" (do NOT give 6.8+ to 3+ year roles).
 
 9. STEALTH SENIORITY & SCOPE DETECTION:
    - If a job omits years of experience but requires leading company-wide architecture, mentoring senior engineers, or owning enterprise roadmaps, treat it as Senior: set match_score below 4.5 and action "skip".

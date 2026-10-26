@@ -228,12 +228,25 @@ func TestCheapFilter_RejectsCorporateNoiseAndStage(t *testing.T) {
 		"FinCrime Analyst",
 		"Deal Intelligence Analyst",
 		"Product Cost Analyst",
-		"Stage: Software Developer",
+		"Offre de stage: Software Developer",
+		"Stagiaire Software Developer",
+		"Stagiair Backend Engineer",
 		"Veri Merkezleri İşletme Müdürü",
 		"Technical Account Management Team Leader France",
 	} {
 		if r := f.Check(title, "Acme", "We are a fast-growing cloud company."); !r.Rejected {
 			t.Errorf("%q elenmeliydi ama geçti", title)
+		}
+	}
+
+	// "Stage" kelimesi İngilizce startup / pipeline bağlamında geçtiğinde ELENMEMELİ:
+	for _, title := range []string{
+		"Early Stage Startup - Backend Engineer",
+		"Seed Stage AI Engineer",
+		"Multi-Stage Data Pipeline Engineer",
+	} {
+		if r := f.Check(title, "Acme", "Building distributed systems in Go and Python."); r.Rejected {
+			t.Errorf("%q geçmeliydi, haksız yere elendi: %s", title, r.Reason)
 		}
 	}
 }
@@ -271,14 +284,27 @@ func TestCheapFilter_RejectsFourPlusYears(t *testing.T) {
 	if r := f.Check("Junior Backend Developer", "Acme", "4+ years of experience preferred"); r.Rejected {
 		t.Errorf("junior başlık yıl kapısına takılmamalı: %s", r.Reason)
 	}
+	// İlanda hem 1-2 yıl hem üst kademe / ekip kıdemi geçiyorsa en küçük yıl (1) baz alınmalı ve geçmeli.
+	for _, d := range []string{
+		"We are looking for 1-2 years of experience in Go. You will work with seniors having 5+ years of experience.",
+		"Our team has 10 years of experience building cloud systems. Minimum 2 years of experience required.",
+		"1-3 years of experience for Junior track, or 5+ years of experience for Senior track.",
+	} {
+		if r := f.Check("Backend Developer", "Acme", d); r.Rejected {
+			t.Errorf("en küçük deneyim yılı / ekip kıdemi içeren ilan geçmeliydi, red: %s (%q)", r.Reason, d)
+		}
+	}
 }
 
 func TestCheapFilter_LanguageBarrier(t *testing.T) {
 	f := testFilter()
 	for _, d := range []string{
 		"Fluent German (C1) is required for daily communication with customers.",
+		"Fluent German and English required for this position.",
+		"Fließend Deutsch und Englisch in Wort und Schrift.",
 		"Sie bringen sehr gute Deutschkenntnisse mit.",
 		"Vloeiend Nederlands is vereist voor deze rol.",
+		"Vloeiend Nederlands en Engels vereist.",
 		"Vi forventer at du taler flydende dansk i hverdagen.",
 	} {
 		if r := f.Check("Software Engineer", "Acme", d); !r.Rejected {
