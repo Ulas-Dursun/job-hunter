@@ -132,7 +132,7 @@ func New() *Metrics {
 // /metrics → Prometheus scraper buradan okur
 // /health  → basit liveness check
 func StartServer(port int) {
-	addr := fmt.Sprintf(":%d", port)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	go func() {
 		mux := http.NewServeMux()

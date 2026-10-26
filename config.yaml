@@ -25,14 +25,14 @@ candidate:
 
   # Factual work / internship bullets used for scoring, cover letters, and STAR interview prep
   experience:
-    - "Software Engineering Intern | Example Tech Co. (2025): Built RESTful microservices and concurrent background workers in Go and Python, reducing API p95 latency below 100ms across 12 endpoints."
-    - "Incoming Systems / Cloud Engineering Trainee (2026): Contributing to core C++/Python/Java data validation libraries and automated CI/CD regression suites."
+    - "Junior Software Engineer | Example Tech (2025): Built RESTful microservices and background workers in Go and Python, improving API response times and service reliability."
+    - "Software Engineering Intern | Acme Cloud Corp. (2024): Contributed to backend data validation modules, REST API endpoints, and automated CI/CD test suites."
 
   # Key engineering projects with concrete metrics (never hallucinated by the AI Tailor Engine)
   projects:
-    - "Distributed Job Processing System (Go, Redis, PostgreSQL, Docker, Prometheus): Engineered a concurrent worker pool with exponential backoff retries, processing 500+ concurrent submissions with 98% completing under 100ms."
-    - "Order & Inventory Management API (Java 21, Spring Boot, PostgreSQL, Testcontainers): Designed a JWT-authenticated REST API with RBAC, pessimistic locking for concurrent stock updates, and ~75% integration test coverage."
-    - "Real-Time Telemetry & Analytics Pipeline (Python, React, IoT): Built an end-to-end sensor ingestion pipeline and live dashboard achieving >99% delivery reliability and ~500ms command latency."
+    - "Distributed Task Queue Service (Go, Redis, PostgreSQL, Docker): Built a concurrent worker pool with retry logic and Prometheus metrics for asynchronous background jobs."
+    - "E-Commerce Backend API (Java, Spring Boot, PostgreSQL, Docker): Designed a JWT-authenticated REST API with role-based access control and integration tests."
+    - "Real-Time Analytics Dashboard (Python, React, SQL): Created a data ingestion pipeline and web dashboard for visualizing application telemetry."
 
   skills:
     languages:  ["Go", "Java", "Python", "Rust", "SQL", "C++"]
