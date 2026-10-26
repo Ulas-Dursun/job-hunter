@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Bu compose sadece infrastructure servislerini çalıştırır.
 # Go orchestrator ve Python scraper terminalde ayrıca çalıştırılır.
 # Bu, geliştirme sırasında hot-reload ve debug'ı kolaylaştırır.

@@ -99,7 +99,12 @@ func (s *JobStore) Upsert(ctx context.Context, rec JobRecord) error {
 			updated_at     = NOW()
 		WHERE jobs.match_score IS NULL
 	`,
-		rec.Source, rec.ExternalID, rec.URL, rec.Title, rec.Company, rec.Location,
+		truncateRunes(rec.Source, 50),
+		truncateRunes(rec.ExternalID, 255),
+		rec.URL,
+		truncateRunes(rec.Title, 255),
+		truncateRunes(rec.Company, 255),
+		truncateRunes(rec.Location, 255),
 		rec.Description, postedAt,
 		matchScore, skillOverlap, missingSkills, redFlags,
 		aiAction, aiReasoning, roleFamily,
@@ -234,4 +239,33 @@ func (s *JobStore) HasLowScoreTwin(ctx context.Context, company, title string) (
 		  AND scraped_at > NOW() - INTERVAL '30 days'
 	`, company, title).Scan(&n)
 	return n > 0, err
+}
+
+// AlreadyScored, aynı (source, external_id) veya son 30 günde aynı (company, title, location)
+// kaydının veritabanında zaten puanlanmış olarak bulunup bulunmadığını kontrol eder.
+// Redis TTL süresi dolduğunda veya farklı günlerde tekrar scrape edildiğinde mükerrer LLM harcamasını engeller.
+func (s *JobStore) AlreadyScored(ctx context.Context, source, externalID, company, title, location string) (bool, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM jobs
+		WHERE match_score IS NOT NULL
+		  AND (
+		      (source = $1 AND external_id = $2)
+		      OR (
+		          lower(company) = lower($3)
+		          AND lower(title) = lower($4)
+		          AND lower(COALESCE(location, '')) = lower($5)
+		          AND scraped_at > NOW() - INTERVAL '30 days'
+		      )
+		  )
+	`, truncateRunes(source, 50), truncateRunes(externalID, 255), company, title, location).Scan(&n)
+	return n > 0, err
+}
+
+func truncateRunes(s string, maxRunes int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= maxRunes {
+		return string(r)
+	}
+	return string(r[:maxRunes])
 }

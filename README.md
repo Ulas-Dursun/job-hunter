@@ -1,5 +1,6 @@
 # 🎯 Job Hunter — Autonomous Event-Driven AI Career & Job Intelligence Platform
 
+[![CI](https://github.com/Ulas-Dursun/job-hunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Ulas-Dursun/job-hunter/actions/workflows/ci.yml)
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![Python Version](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python)](https://python.org)
 [![Redis](https://img.shields.io/badge/Redis-Streams%207-DC382D?style=flat&logo=redis)](https://redis.io)

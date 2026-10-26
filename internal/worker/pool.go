@@ -171,6 +171,15 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 	url := field(msg.Values, "url")
 	postedAt := field(msg.Values, "posted_at")
 
+	// ── Poison Pill (Bozuk Payload) Koruması ──────────────────────────────────
+	// Zorunlu alanları eksik bir mesaj gelirse LLM kotası harcamadan ve panic almadan DLQ'ya taşı ve ACK et.
+	if title == "" || company == "" || source == "" || externalID == "" || url == "" {
+		slog.Warn("worker dropping malformed poison-pill message",
+			"id", msg.ID, "source", source, "external_id", externalID, "title", title, "company", company)
+		p.toFailed(ctx, msg)
+		return
+	}
+
 	// ── Ön filtre (kuyrukta bekleyen eski ilanlar için) ───────────────────────
 	// jobs:filtered'a eski/gevşek kurallarla girmiş ilanlar AI kotası harcamadan elenir.
 	if p.preFilter != nil {
@@ -180,6 +189,13 @@ func (p *Pool) processJob(ctx context.Context, msg redis.XMessage, workerID int)
 			p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
 			return
 		}
+	}
+
+	// Aynı ilan (source+external_id veya son 30 günde aynı company+title+location) DB'de zaten puanlandıysa LLM kotası harcama.
+	if exists, err := p.jobStore.AlreadyScored(ctx, source, externalID, company, title, location); err == nil && exists {
+		slog.Debug("worker skipped already-scored job in db", "title", title, "company", company)
+		p.ack(ctx, p.cfg.StreamFiltered, msg.ID)
+		return
 	}
 
 	// Aynı şirket+başlık daha önce düşük puan aldıysa (çok şehirli kopya ilan) AI'ya gitme.

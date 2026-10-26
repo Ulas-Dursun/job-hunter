@@ -45,9 +45,45 @@ func NewPostgresPool(ctx context.Context, dsn string) (*PostgresPool, error) {
 	return &PostgresPool{pool: pool}, nil
 }
 
-// ensureSchema, sonradan eklenen kolonların mevcut veritabanında eksik olmamasını sağlar.
+// ensureSchema, hem sıfır kurulumda (docker-entrypoint-initdb.d çalışmamış harici DB'ler dahil)
+// ana jobs tablosunun hem de sonradan eklenen AI Tailor/Interview kolonlarının varlığını idempotent olarak garanti eder.
 func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
+		CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+		CREATE TABLE IF NOT EXISTS jobs (
+			id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+			source          VARCHAR(50)  NOT NULL,
+			external_id     VARCHAR(255) NOT NULL,
+			url             TEXT         NOT NULL,
+			title           VARCHAR(255) NOT NULL,
+			company         VARCHAR(255) NOT NULL,
+			location        VARCHAR(255),
+			description     TEXT,
+			posted_at       TIMESTAMPTZ,
+			scraped_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+			match_score     NUMERIC(4,2),
+			skill_overlap   TEXT[]       DEFAULT '{}',
+			missing_skills  TEXT[]       DEFAULT '{}',
+			red_flags       TEXT[]       DEFAULT '{}',
+			ai_action       VARCHAR(20),
+			ai_reasoning    TEXT,
+			role_family     VARCHAR(20),
+			status          VARCHAR(30)  NOT NULL DEFAULT 'new',
+			is_duplicate    BOOLEAN      NOT NULL DEFAULT FALSE,
+			notified_at     TIMESTAMPTZ,
+			created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+			updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+			UNIQUE (source, external_id)
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs (match_score DESC NULLS LAST);
+		CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status);
+		CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs (company);
+		CREATE INDEX IF NOT EXISTS idx_jobs_scraped_at ON jobs (scraped_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_jobs_source ON jobs (source);
+		CREATE INDEX IF NOT EXISTS idx_jobs_role_family ON jobs (role_family);
+
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cover_letter TEXT;
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS tailored_cv JSONB;
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS interview_prep JSONB;
