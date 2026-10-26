@@ -13,13 +13,21 @@ import (
 // Ayrıca kullanıcının Kanban kararlarından (applied/interview vs skipped/rejected)
 // öğrenilen dinamik geri bildirim özeti (feedbackText) çalışma zamanında güncellenebilir.
 type PromptBuilder struct {
-	profileText  string
-	mu           sync.RWMutex
-	feedbackText string
+	candidateName string
+	profileText   string
+	mu            sync.RWMutex
+	feedbackText  string
 }
 
 func NewPromptBuilder(cfg *config.CandidateConfig) *PromptBuilder {
-	return &PromptBuilder{profileText: buildProfile(cfg)}
+	name := "the candidate"
+	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
+		name = strings.TrimSpace(cfg.Name)
+	}
+	return &PromptBuilder{
+		candidateName: name,
+		profileText:   buildProfile(cfg),
+	}
 }
 
 // SetFeedback, kullanıcının geçmiş başvuru/eleme kararlarından üretilen özeti günceller.
@@ -43,7 +51,7 @@ func (p *PromptBuilder) Build(title, company, location, description string) stri
 		feedbackBlock = "\nCANDIDATE HISTORICAL PREFERENCES (Calibrate scoring using his real past decisions):\n" + fb + "\n"
 	}
 
-	return fmt.Sprintf(`You are an elite technical talent partner and hiring advisor evaluating career opportunities for a versatile Software Engineering graduate (Ulaş Dursun).
+	return fmt.Sprintf(`You are an elite technical talent partner and hiring advisor evaluating career opportunities for a versatile Software Engineering candidate (%s).
 Analyze this job posting and return ONLY a valid JSON object. No markdown. No explanation. No extra text.
 
 CANDIDATE PROFILE:
@@ -167,21 +175,37 @@ OUTPUT RULES:
 - Use double quotes for all strings. No markdown fences.
 - Keep reasoning to exactly 2 sentences.
 - skill_overlap, missing_skills, and red_flags must be concise and evidence-based.`,
-		p.profileText, feedbackBlock, title, company, location, desc,
+		p.candidateName, p.profileText, feedbackBlock, title, company, location, desc,
 	)
 }
 
-// buildProfile, config'den ve doğrulanmış CV/EUROCONTROL belgelerinden aday profil metnini oluşturur.
+// buildProfile, config'den aday profil metnini oluşturur.
 func buildProfile(cfg *config.CandidateConfig) string {
+	if cfg == nil {
+		return "Candidate Profile: Software Engineer (0-2 years experience)\n"
+	}
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Name: %s\n", cfg.Name))
-	sb.WriteString(fmt.Sprintf("Status: %s, B.Sc. Software Engineering (Bahcesehir University, 2021 – %d)\n", cfg.Status, cfg.GraduationYear))
-	sb.WriteString(fmt.Sprintf("Location & Mobility: %s (Official EUROCONTROL Trainee in Brussels, Belgium from 16 Nov 2026 to 30 Apr 2027; open to Istanbul/Turkey, Belgium, Netherlands, Germany, Switzerland, UK, and EU/Global Remote)\n", cfg.Location))
+
+	edu := strings.TrimSpace(cfg.Education)
+	if edu == "" {
+		edu = fmt.Sprintf("B.Sc. Software Engineering (Graduation: %d)", cfg.GraduationYear)
+	}
+	sb.WriteString(fmt.Sprintf("Status: %s, %s\n", cfg.Status, edu))
+
+	mobility := strings.TrimSpace(cfg.MobilityNote)
+	if mobility == "" {
+		mobility = "open to local, European, and remote engineering roles"
+	}
+	sb.WriteString(fmt.Sprintf("Location & Mobility: %s (%s)\n", cfg.Location, mobility))
+
 	sb.WriteString(fmt.Sprintf("Languages: %s\n", strings.Join(cfg.Skills.Languages, ", ")))
 	sb.WriteString(fmt.Sprintf("Frameworks: %s\n", strings.Join(cfg.Skills.Frameworks, ", ")))
 	sb.WriteString(fmt.Sprintf("Databases: %s\n", strings.Join(cfg.Skills.Databases, ", ")))
 	sb.WriteString(fmt.Sprintf("Infrastructure & DevOps: %s\n", strings.Join(cfg.Skills.Infra, ", ")))
-	sb.WriteString("Cloud & Certifications: AWS Certified AI Practitioner (2026), AWS (EC2, S3, IAM, VPC)\n")
+	if len(cfg.Skills.Cloud) > 0 {
+		sb.WriteString(fmt.Sprintf("Cloud & Certifications: %s\n", strings.Join(cfg.Skills.Cloud, ", ")))
+	}
 	sb.WriteString(fmt.Sprintf("Core Concepts & Data: %s, Real-time Data Processing, Data Pipelines\n", strings.Join(cfg.Skills.Concepts, ", ")))
 	sb.WriteString(fmt.Sprintf("OS & Tools: %s\n", strings.Join(cfg.Skills.OS, ", ")))
 	sb.WriteString(fmt.Sprintf("Primary roles: %s\n", strings.Join(cfg.TargetRoles.Primary, ", ")))
@@ -195,17 +219,25 @@ func buildProfile(cfg *config.CandidateConfig) string {
 		sb.WriteString(fmt.Sprintf("Priority Target Companies: %s (If the job is at one of these companies AND is already a valid entry/junior technical match >= 6.5, award a +0.4 priority tie-breaker bonus; NEVER rescue senior or unrelated roles).\n", strings.Join(cfg.PriorityCompanies, ", ")))
 	}
 
-	sb.WriteString("Work Experience & Incoming European Assignment:\n")
-	sb.WriteString("- EUROCONTROL (Brussels, Belgium | 16 Nov 2026 – 30 Apr 2027, Official Agreement 46449_TRAI_2026_NMD): Incoming Software Engineering Trainee in the NMD/INF/CNS Unit (Network Management Directorate). Developing, validating, and integrating ASTERIX E-ARCO C++ Core Library components used in operational air traffic management systems (ARTAS, SDDS, SASS-C); building advanced JSON schema validation modules, maintaining Python client interfaces, contributing to Java client & web interfaces, and automating unit/regression tests within CI/CD.\n")
-	sb.WriteString("- Sanlab (Istanbul | Aug 2024 – Oct 2024): Software Engineering Internship. Developed a web-based market management system integrating a JWT-authenticated Go application with a Rust REST API across 12 endpoints (MongoDB with atomic sequence-based ID generation); implemented client-server communication modules in Rust using TCP and UDP sockets; collaborated in a 7-person Agile/Scrum engineering team.\n")
-	sb.WriteString("- Work and Travel USA (Jun 2025 – Sep 2025): Sales & Lifeguard Roles. Handled ~100 daily customer interactions in English while ensuring pool safety for 30-40 guests per shift.\n")
+	if len(cfg.Experience) > 0 {
+		sb.WriteString("Work Experience & Incoming Assignments:\n")
+		for _, exp := range cfg.Experience {
+			sb.WriteString(fmt.Sprintf("- %s\n", strings.TrimSpace(exp)))
+		}
+	}
 
-	sb.WriteString("Key Engineering Projects:\n")
-	sb.WriteString("- Distributed Job Processing System (Go, Redis, PostgreSQL, Docker, Prometheus): Built a concurrent job processing pipeline using a 5-goroutine worker pool and Redis with exponential backoff retries, handling load tests of 500 concurrent submissions; validated 98% of jobs completed in under 100ms via Prometheus and automated CI with GitHub Actions.\n")
-	sb.WriteString("- Order & Inventory Management API (Java 21, Spring Boot, PostgreSQL, Docker): Designed a REST API with JWT authentication, RBAC, and an order lifecycle state machine; secured concurrent stock operations using pessimistic locking and implemented PostgreSQL integration tests via Testcontainers (~75% core domain line coverage).\n")
-	sb.WriteString("- Capstone Project — IoT-Based Smart Indoor Plant Control System (React, Firebase, ESP32): Built a real-time IoT data pipeline and dashboard for sensor telemetry and remote irrigation, achieving >99% data delivery and ~500ms average end-to-end command latency.\n")
+	if len(cfg.Projects) > 0 {
+		sb.WriteString("Key Engineering Projects:\n")
+		for _, proj := range cfg.Projects {
+			sb.WriteString(fmt.Sprintf("- %s\n", strings.TrimSpace(proj)))
+		}
+	}
 
-	sb.WriteString("Spoken Languages: English (Fluent C1/C2), Turkish (Native), German (Beginner).\n")
+	spoken := strings.TrimSpace(cfg.SpokenLanguages)
+	if spoken == "" {
+		spoken = "English (Fluent C1/C2)"
+	}
+	sb.WriteString(fmt.Sprintf("Spoken Languages: %s\n", spoken))
 
 	return sb.String()
 }

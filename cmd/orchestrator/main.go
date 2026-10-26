@@ -88,7 +88,7 @@ func main() {
 	metrics.StartServer(cfg.Server.MetricsPort)
 
 	// ── 7b. Dashboard API Server & ATS Tailor Service ─────────────────────────
-	tailorService := analyzer.NewTailorService(&cfg.Gemini)
+	tailorService := analyzer.NewTailorService(&cfg.Gemini, &cfg.Candidate)
 	api.StartServer(ctx, cfg.Server.DashboardPort, pg.Pool(), tailorService)
 	dashboardURL := fmt.Sprintf("http://localhost:%d", cfg.Server.DashboardPort)
 	slog.Info("════════════════════════════════════════")
@@ -169,15 +169,6 @@ func main() {
 
 func countEnabledSources(cfg *config.Config) int {
 	count := 0
-	if cfg.Sources.KariyerNet.Enabled {
-		count++
-	}
-	if cfg.Sources.LinkedInRSS.Enabled {
-		count++
-	}
-	if cfg.Sources.Indeed.Enabled {
-		count++
-	}
 	if cfg.Sources.JobSpy.Enabled {
 		count++
 	}
@@ -188,6 +179,9 @@ func countEnabledSources(cfg *config.Config) int {
 		count++
 	}
 	if cfg.Sources.Techcareer.Enabled {
+		count++
+	}
+	if cfg.Sources.Coderspace.Enabled {
 		count++
 	}
 	if cfg.Sources.Arbeitnow.Enabled {

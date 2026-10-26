@@ -28,6 +28,13 @@ type CandidateConfig struct {
 	Location          string          `yaml:"location"`
 	Status            string          `yaml:"status"`
 	GraduationYear    int             `yaml:"graduation_year"`
+	Education         string          `yaml:"education"`
+	MobilityNote      string          `yaml:"mobility_note"`
+	SpokenLanguages   string          `yaml:"spoken_languages"`
+	Links             string          `yaml:"links"`
+	SummaryVariants   []string        `yaml:"summary_variants"`
+	Experience        []string        `yaml:"experience"`
+	Projects          []string        `yaml:"projects"`
 	Skills            SkillsConfig    `yaml:"skills"`
 	TargetRoles       TargetRoles     `yaml:"target_roles"`
 	Seniority         SeniorityConfig `yaml:"seniority"`
@@ -64,13 +71,11 @@ type ScoringConfig struct {
 }
 
 type SourcesConfig struct {
-	KariyerNet  SourceConfig `yaml:"kariyer_net"`
-	LinkedInRSS SourceConfig `yaml:"linkedin_rss"`
-	Indeed      SourceConfig `yaml:"indeed"`
 	JobSpy      SourceConfig `yaml:"jobspy"`
 	ATS         SourceConfig `yaml:"ats"`
 	Eurocontrol SourceConfig `yaml:"eurocontrol"`
 	Techcareer  SourceConfig `yaml:"techcareer"`
+	Coderspace  SourceConfig `yaml:"coderspace"`
 	Arbeitnow   SourceConfig `yaml:"arbeitnow"`
 }
 
@@ -97,9 +102,14 @@ type ServerConfig struct {
 	DashboardPort int `yaml:"dashboard_port"` // YENİ
 }
 
-// Load, config.yaml dosyasını okuyup parse eder ve doğrular.
+// Load, config.yaml dosyasını (varsa yerel config.local.yaml override dosyasını) okuyup parse eder ve doğrular.
 // Sadece startup'ta bir kez çağrılır.
 func Load(path string) (*Config, error) {
+	if path == "config.yaml" {
+		if _, err := os.Stat("config.local.yaml"); err == nil {
+			path = "config.local.yaml"
+		}
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file %q: %w", path, err)

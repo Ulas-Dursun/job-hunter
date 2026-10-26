@@ -2,10 +2,15 @@
 .env
 .env.*
 !.env.example
+config.local.yaml
 *.pem
 *.key
 *.p12
 *.pfx
+
+# Local AI Agent Rules & Skills
+AGENTS.md
+.agents/
 
 # Go
 bin/

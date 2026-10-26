@@ -141,7 +141,7 @@
                                 Canlı Radar
                             </span>
                         </div>
-                        <p class="text-xs text-dark-textMuted">Ulaş Dursun · Backend, Cloud & Data</p>
+                        <p class="text-xs text-dark-textMuted">Autonomous Career Intelligence · Backend, Cloud & Data</p>
                     </div>
                 </div>
 
@@ -449,7 +449,7 @@
 
                         <div>
                             <div class="font-semibold text-emerald-400 text-[11px] mb-1 flex items-center gap-1">
-                                <span>⚡</span> Sanlab İş Deneyimi Maddeleri (İlana Göre Vurgulandı)
+                                <span>⚡</span> İş Deneyimi Maddeleri (İlana Göre Vurgulandı)
                             </div>
                             <ul id="tailor-cv-experience" class="list-disc list-inside space-y-1.5 p-3 rounded-lg bg-black/30 border border-dark-border text-xs text-slate-200 select-all leading-normal"></ul>
                         </div>
@@ -1517,7 +1517,7 @@
                     textToCopy = currentTailorData.cover_letter || ''
                 } else if (activeTailorTab === 'cv') {
                     textToCopy = `TARGETED PROFESSIONAL SUMMARY:\n${currentTailorData.tailored_summary || ''}\n\n` +
-                                 `EXPERIENCE BULLETS (Sanlab):\n${(currentTailorData.tailored_experience_bullets || []).map(b => '• ' + b).join('\n')}\n\n` +
+                                 `EXPERIENCE BULLETS:\n${(currentTailorData.tailored_experience_bullets || []).map(b => '• ' + b).join('\n')}\n\n` +
                                  `KEY PROJECT BULLETS:\n${(currentTailorData.tailored_project_bullets || []).map(b => '• ' + b).join('\n')}`
                 } else {
                     textToCopy = `ATS KEYWORDS:\n${(currentTailorData.ats_keywords || []).join(', ')}\n\n` +

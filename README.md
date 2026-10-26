@@ -7,6 +7,7 @@
 [![AI Engine](https://img.shields.io/badge/Multi--LLM-Gemini%20%2B%20Groq%20Failover-4285F4?style=flat&logo=google)](https://ai.google.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker)](https://www.docker.com)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat&logo=github-sponsors)](https://github.com/sponsors/Ulas-Dursun)
 
 **Job Hunter** is a distributed, event-driven job aggregation, scoring, and career-ops platform built with **Go**, **Python**, **Redis Streams**, and **PostgreSQL**. It continuously harvests software, cloud/DevOps, data/AI, and aerospace engineering roles across **Europe and Turkey**, filters out >70% of recruitment noise in microseconds before touching an LLM quota, and provides **preference-aware AI scoring, hallucination-safe resume tailoring, STAR interview preparation, and a full Kanban CRM**.
 
@@ -20,7 +21,7 @@ flowchart TD
         A1["LinkedIn & Indeed (JobSpy)"]
         A2["European Tech Hub Feed (Arbeitnow)"]
         A3["Direct Company ATS (Greenhouse & SmartRecruiters)"]
-        A4["Regional Tech Portals (Techcareer.net)"]
+        A4["Regional Tech & Grad Portals (Techcareer & Coderspace)"]
         A5["Atomic Redis Dedup (URL 30d + Content Hash 14d)"]
     end
 
@@ -112,9 +113,11 @@ flowchart TD
 git clone https://github.com/Ulas-Dursun/job-hunter.git
 cd job-hunter
 cp .env.example .env
+cp config.yaml config.local.yaml
 ```
 
-Edit `.env` with your API keys (multiple comma-separated keys are supported for automatic failover):
+* **Customize Your Candidate Profile**: Edit `config.local.yaml` (git-ignored for privacy) or `config.yaml` with your `name`, `education`, `experience`, `projects`, `skills`, `target_roles`, and `locations`. Both the Go orchestrator and Python scraper automatically prefer `config.local.yaml` when present, keeping your personal CV details private.
+* **Set Your API Keys**: Edit `.env` with your API keys (multiple comma-separated keys are supported for automatic failover):
 ```env
 AI_PROVIDER=gemini
 GEMINI_API_KEY=your_primary_key,your_backup_key
@@ -196,12 +199,21 @@ go test -count=1 ./...
 ├── scraper/
 │   ├── models/                 # Normalized Job schema (URL & cross-source content hashing)
 │   ├── publisher/              # Atomic Redis Streams producer with TTL deduplication
-│   ├── sources/                # JobSpy (LinkedIn/Indeed), Greenhouse, SmartRecruiters, Arbeitnow, Techcareer
+│   ├── sources/                # JobSpy (LinkedIn/Indeed), Greenhouse, SmartRecruiters, Arbeitnow, Techcareer, Coderspace
 │   └── tests/                  # Python unit test suite
 ├── web/index.html              # Single-page Tailwind CSS dashboard, Kanban CRM & AI Tailor modal
-├── config.yaml                 # Candidate profile, target hubs, ATS watchlist & scoring thresholds
+├── config.yaml                 # Plug-and-play candidate profile template, ATS watchlist & scoring thresholds
 └── docker-compose.yml          # PostgreSQL 16, Redis 7, Prometheus & Grafana stack
 ```
+
+---
+
+## 💖 Support & Sponsorship
+
+If **Job Hunter** helps you land interviews, save hours of manual job board filtering, or serves as a reference architecture for your own Go + Python event-driven systems:
+
+* ⭐ **Star this repository** on GitHub to help more engineers discover it!
+* 💖 **[Sponsor on GitHub](https://github.com/sponsors/Ulas-Dursun)** to support ongoing open-source development.
 
 ---
 

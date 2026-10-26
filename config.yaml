@@ -1,14 +1,38 @@
 # ─────────────────────────────────────────────────────────────────
-# Job Hunter — Aday ve Sistem Konfigürasyonu
-# Bu dosya hem Go orchestrator hem Python scraper tarafından okunur.
-# Gizli bilgiler (API key, şifre) buraya yazılmaz — .env'e gider.
+# Job Hunter — Candidate & System Configuration Template
+# Shared by both the Go Orchestrator and the Python Scraper service.
+#
+# 💡 TIP FOR PRIVATE PROFILES:
+# Copy this file to `config.local.yaml` (which is git-ignored) and put
+# your real resume details there. Both Go and Python automatically load
+# `config.local.yaml` when present!
 # ─────────────────────────────────────────────────────────────────
 
 candidate:
-  name: "Ulaş Dursun"
+  name: "Your Name"
   location: "Istanbul"
   status: "new_grad"
   graduation_year: 2026
+  education: "B.Sc. in Software / Computer Engineering (2021 – 2026) | Coursework: Distributed Systems, Machine Learning, Database Systems"
+  mobility_note: "Open to Istanbul/Turkey, Brussels, Amsterdam, Berlin, Munich, London, Zurich, and EU/Global Remote"
+  spoken_languages: "English (Fluent C1/C2), Turkish (Native)"
+  links: "linkedin.com/in/your-handle • github.com/your-username"
+
+  # Used by the AI Tailor Engine to adapt your CV summary to Backend/Cloud vs. Data/ML roles
+  summary_variants:
+    - "Backend & Cloud Variant: Software Engineer focused on backend systems and cloud-native development using Go, Java, Python, PostgreSQL, Redis, and Docker."
+    - "Data & Distributed Systems Variant: Software Engineer experienced in data-intensive pipelines, event-driven processing, and analytical systems using Python, SQL, PostgreSQL, and Docker."
+
+  # Factual work / internship bullets used for scoring, cover letters, and STAR interview prep
+  experience:
+    - "Software Engineering Intern | Example Tech Co. (2025): Built RESTful microservices and concurrent background workers in Go and Python, reducing API p95 latency below 100ms across 12 endpoints."
+    - "Incoming Systems / Cloud Engineering Trainee (2026): Contributing to core C++/Python/Java data validation libraries and automated CI/CD regression suites."
+
+  # Key engineering projects with concrete metrics (never hallucinated by the AI Tailor Engine)
+  projects:
+    - "Distributed Job Processing System (Go, Redis, PostgreSQL, Docker, Prometheus): Engineered a concurrent worker pool with exponential backoff retries, processing 500+ concurrent submissions with 98% completing under 100ms."
+    - "Order & Inventory Management API (Java 21, Spring Boot, PostgreSQL, Testcontainers): Designed a JWT-authenticated REST API with RBAC, pessimistic locking for concurrent stock updates, and ~75% integration test coverage."
+    - "Real-Time Telemetry & Analytics Pipeline (Python, React, IoT): Built an end-to-end sensor ingestion pipeline and live dashboard achieving >99% delivery reliability and ~500ms command latency."
 
   skills:
     languages:  ["Go", "Java", "Python", "Rust", "SQL", "C++ (Working Knowledge)"]
@@ -16,7 +40,7 @@ candidate:
     databases:  ["PostgreSQL", "MongoDB", "Redis"]
     os:         ["Linux (Bash/Shell Scripting)"]
     infra:      ["Docker", "Docker Compose", "CI/CD (GitHub Actions)", "Prometheus", "Grafana"]
-    cloud:      ["AWS (Certified AI Practitioner)"]
+    cloud:      ["AWS Certified AI Practitioner", "AWS (EC2, S3, IAM, VPC)"]
     concepts:   ["REST API", "JWT", "Concurrency", "Worker Pool",
                  "Distributed Systems", "TCP/UDP", "Microservices", "Testcontainers",
                  "Machine Learning (coursework)"]
@@ -155,7 +179,7 @@ candidate:
     - "Geomatics"
 
   priority_companies:
-    # ── Havacılık Devleri (TR + EU) ───────────
+    # ── Aviation & Defense Tech (TR + EU) ─────
     - "EUROCONTROL"
     - "skeyes"
     - "Turkish Technology"
@@ -170,7 +194,7 @@ candidate:
     - "Indra"
     - "SITA"
 
-    # ── Banka İştirakleri & IT Outsourcing ────
+    # ── Banking & Enterprise Tech ─────────────
     - "Softtech"
     - "Akbank Teknoloji"
     - "Garanti BBVA Teknoloji"
@@ -185,7 +209,7 @@ candidate:
     - "BilgeAdam Teknoloji"
     - "OBSS"
 
-    # ── Tech & E-Ticaret ──────────────────────
+    # ── Consumer Tech, Gaming & Fintech ───────
     - "Trendyol"
     - "Getir"
     - "Insider"
@@ -214,7 +238,7 @@ candidate:
     - "Otomobilen"
     - "PayTR"
 
-    # ── Avrupa & Cloud-Native Teknoloji Devleri ─
+    # ── European & Cloud-Native Tech Leaders ──
     - "Adyen"
     - "Wise"
     - "Grafana Labs"
@@ -232,18 +256,9 @@ candidate:
 scoring:
   telegram_threshold_primary:   8.0
   telegram_threshold_secondary: 8.0
-  save_threshold:               0.0 # Tüm puanlanan ilanlar DB'ye kaydedilir
+  save_threshold:               0.0
 
 sources:
-  kariyer_net:
-    enabled: false
-
-  linkedin_rss:
-    enabled: false
-
-  indeed:
-    enabled: false
-
   ats:
     enabled: true
     greenhouse:
@@ -281,8 +296,6 @@ sources:
         token: "monzo"
       - name: "Canonical"
         token: "canonical"
-    # Lever: Trendyol/Commencis/Iyzico/Peak Games slug'ları 404 döndürdüğü için kaldırıldı (Ekim 2026 doğrulaması).
-    # Geçerli bir slug bulunursa şu formatta eklenebilir:  lever: [{name: "X", slug: "x"}]
     smartrecruiters:
       - name: "Frequentis"
         company_id: "frequentis"
@@ -294,7 +307,7 @@ sources:
         company_id: "CERN"
 
   eurocontrol:
-    enabled: false # Aday EUROCONTROL traineeship kabulü aldığı için devre dışı bırakıldı
+    enabled: false
 
   techcareer:
     enabled: true
@@ -307,7 +320,7 @@ sources:
 
   jobspy:
     enabled: true
-    poll_interval_minutes: 240   # LinkedIn ban riskini azaltmak için seyrek tarama
+    poll_interval_minutes: 240
     max_age_days: 3
     results_per_keyword: 20
     location: "Istanbul, Turkey"
@@ -317,36 +330,30 @@ sources:
       - "Amsterdam, Netherlands"
       - "Berlin, Germany"
       - "Munich, Germany"
-    # Anahtar kelimeler bilinçli olarak az tutuldu: LinkedIn/Indeed benzer başlıklar için aynı ilanları döndürür.
-    # Giriş seviyesi + ML/Data kelimeleri eklendi (aday Python + ML ders geçmişine sahip).
     keywords:
-      # ── Backend / Software ────────────────────
       - "backend engineer"
       - "software engineer"
       - "go developer"
       - "java spring boot developer"
       - "python developer"
-      # ── Cloud / DevOps ────────────────────────
       - "devops engineer"
       - "cloud engineer"
       - "platform engineer"
       - "site reliability engineer"
-      # ── Giriş seviyesi sinyalleri ─────────────
       - "graduate software engineer"
       - "junior software developer"
       - "new grad software engineer"
       - "entry level software engineer"
       - "trainee software engineer"
-      # ── Data / ML (junior) ────────────────────
       - "data engineer"
       - "junior data analyst"
       - "junior data scientist"
       - "junior machine learning engineer"
-      # ── Türkçe (yalnızca TR lokasyonunda aranır) ─
       - "yeni mezun yazılım mühendisi"
       - "yazılım mühendisi"
       - "genç yetenek"
       - "mt programı"
+
 redis:
   stream_raw:      "jobs:raw"
   stream_filtered: "jobs:filtered"

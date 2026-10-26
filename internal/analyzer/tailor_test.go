@@ -59,7 +59,7 @@ func TestParseInterviewResult(t *testing.T) {
 		"behavioral_questions": [
 			{
 				"question": "Tell me about a time you collaborated in an Agile team.",
-				"star_story_guide": "Sanlab 7 kişilik Scrum ekibindeki Go/Rust entegrasyonunu anlat."
+				"star_story_guide": "7 kişilik Scrum ekibindeki Go/Rust servis entegrasyonunu anlat."
 			}
 		],
 		"questions_to_ask": [

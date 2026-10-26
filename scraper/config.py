@@ -1,7 +1,7 @@
 """
 Config loader — Python scraper için.
 
-Go ve Python aynı config.yaml'ı okur.
+Go ve Python aynı config.yaml'ı (varsa yerel config.local.yaml dosyasını) okur.
 Python yalnızca 'candidate' ve 'sources' bölümlerini kullanır.
 Secrets (.env) ayrı yüklenir.
 """
@@ -14,6 +14,8 @@ import yaml
 
 
 def load_config(path: str = "config.yaml") -> dict[str, Any]:
+    if path == "config.yaml" and Path("config.local.yaml").exists():
+        path = "config.local.yaml"
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(
