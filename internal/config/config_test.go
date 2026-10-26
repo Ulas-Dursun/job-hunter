@@ -3,20 +3,42 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ulasdursun/job-hunter/internal/config"
 )
 
-func TestLoadTemplateConfig(t *testing.T) {
+func TestTemplateProfileGuardRejectsDefaultYourName(t *testing.T) {
 	templatePath := filepath.Join("..", "..", "config.yaml")
-	cfg, err := config.Load(templatePath)
+	_, err := config.Load(templatePath)
+	if err == nil {
+		t.Fatalf("expected error when loading default template profile 'Your Name', got nil")
+	}
+	if !strings.Contains(err.Error(), config.TemplateProfileErrorMsg) {
+		t.Errorf("expected error to contain %q, got %q", config.TemplateProfileErrorMsg, err.Error())
+	}
+}
+
+func TestLoadTemplateConfigWithRealCandidateName(t *testing.T) {
+	templateBytes, err := os.ReadFile(filepath.Join("..", "..", "config.yaml"))
 	if err != nil {
-		t.Fatalf("failed to load template config.yaml: %v", err)
+		t.Fatalf("failed to read template config.yaml: %v", err)
 	}
 
-	if cfg.Candidate.Name == "" {
-		t.Errorf("expected non-empty candidate.name in template config")
+	customized := strings.Replace(string(templateBytes), `name: "Your Name"`, `name: "Real Candidate"`, 1)
+	tmpFile := filepath.Join(t.TempDir(), "config.custom.yaml")
+	if err := os.WriteFile(tmpFile, []byte(customized), 0600); err != nil {
+		t.Fatalf("failed to write customized config: %v", err)
+	}
+
+	cfg, err := config.Load(tmpFile)
+	if err != nil {
+		t.Fatalf("failed to load customized template config: %v", err)
+	}
+
+	if cfg.Candidate.Name != "Real Candidate" {
+		t.Errorf("expected candidate.name 'Real Candidate', got %q", cfg.Candidate.Name)
 	}
 	if !cfg.Sources.KariyerNet.Enabled {
 		t.Errorf("expected sources.kariyer_net.enabled to be true in template config")
@@ -49,19 +71,15 @@ func TestLoadLocalOverrideAndFallback(t *testing.T) {
 		t.Fatalf("chdir tmpDir: %v", err)
 	}
 
-	// 1. Sadece config.yaml varken fallback olarak config.yaml okunmalı
+	// 1. Sadece şablon config.yaml ("Your Name") varken ve config.local.yaml yokken şablon profil kalkanı devreye girmeli
 	if err := os.WriteFile("config.yaml", templateBytes, 0600); err != nil {
 		t.Fatalf("write config.yaml: %v", err)
 	}
-	cfgFallback, err := config.Load("config.yaml")
-	if err != nil {
-		t.Fatalf("Load fallback failed: %v", err)
-	}
-	if cfgFallback.Candidate.Name != "Your Name" {
-		t.Errorf("expected fallback candidate name 'Your Name', got %q", cfgFallback.Candidate.Name)
+	if _, err := config.Load("config.yaml"); err == nil || !strings.Contains(err.Error(), config.TemplateProfileErrorMsg) {
+		t.Fatalf("expected template profile guard error when config.local.yaml is missing, got: %v", err)
 	}
 
-	// 2. config.local.yaml eklendiğinde otomatik olarak config.local.yaml öncelikli okunmalı
+	// 2. config.local.yaml eklendiğinde otomatik olarak config.local.yaml öncelikli okunmalı ve geçmeli
 	localBytes := []byte("candidate:\n  name: \"Local Override User\"\n  target_roles:\n    primary: [\"Backend Engineer\"]\nscoring:\n  telegram_threshold_primary: 8.0\nredis:\n  stream_raw: \"jobs:raw\"\nserver:\n  metrics_port: 9091\n")
 	if err := os.WriteFile("config.local.yaml", localBytes, 0600); err != nil {
 		t.Fatalf("write config.local.yaml: %v", err)

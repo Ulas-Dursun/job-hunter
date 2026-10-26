@@ -1,12 +1,17 @@
 package config
 
 import (
+	"flag"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+const TemplateProfileErrorMsg = "HATA: Varsayılan şablon profil ('Your Name') tespit edildi. Lütfen 'config.local.yaml' dosyanızı oluşturup gerçek profil bilgilerinizi girin."
 
 // Config, uygulamanın tüm konfigürasyonunu tutar.
 // config.yaml'dan bir kez yüklenir, startup'ta tüm servislere pointer olarak geçilir.
@@ -128,11 +133,17 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// validate, zorunlu alanların dolu olduğunu kontrol eder.
-// Hatalı config ile sistem başlatılmaz — fail fast prensibi.
+// validate, zorunlu alanların dolu olduğunu ve şablon profil ("Your Name") kullanılmadığını kontrol eder.
+// Hatalı veya şablon config ile sistem başlatılmaz — fail fast prensibi.
 func (c *Config) validate() error {
-	if c.Candidate.Name == "" {
+	if strings.TrimSpace(c.Candidate.Name) == "" {
 		return fmt.Errorf("candidate.name is required")
+	}
+	if strings.EqualFold(strings.TrimSpace(c.Candidate.Name), "Your Name") {
+		if flag.Lookup("test.v") == nil {
+			log.Fatalf(TemplateProfileErrorMsg)
+		}
+		return fmt.Errorf("%s", TemplateProfileErrorMsg)
 	}
 	if len(c.Candidate.TargetRoles.Primary) == 0 {
 		return fmt.Errorf("candidate.target_roles.primary must have at least one entry")

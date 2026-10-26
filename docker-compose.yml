@@ -13,7 +13,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-jobhunter}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobhunter}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Migration dosyaları ilk container başlatmada otomatik çalışır
@@ -29,7 +29,7 @@ services:
     container_name: jobhunter_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     # appendonly: restart sonrası veri kaybını önler
@@ -45,7 +45,7 @@ services:
     container_name: jobhunter_prometheus
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -61,7 +61,7 @@ services:
     container_name: jobhunter_grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER:     admin
       GF_SECURITY_ADMIN_PASSWORD: admin
