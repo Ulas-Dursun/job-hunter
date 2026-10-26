@@ -10,19 +10,26 @@ Write-Host "══════════════════════�
 Write-Host "  JOB HUNTER — UÇTAN UCA BATCH & ORCHESTRATOR     " -ForegroundColor Cyan
 Write-Host "══════════════════════════════════════════════════" -ForegroundColor Cyan
 
-# 0. Şablon profil / config.local.yaml kontrolü
-if (-not (Test-Path ".\config.local.yaml")) {
-    $cfgContent = Get-Content ".\config.yaml" -Raw -ErrorAction SilentlyContinue
-    if ($cfgContent -match 'name:\s*"Your Name"') {
-        Write-Host "`n[!] HATA: Varsayılan şablon profil ('Your Name') tespit edildi. Lütfen 'config.local.yaml' dosyanızı oluşturup gerçek profil bilgilerinizi girin." -ForegroundColor Red
-        Write-Host "    Örnek: Copy-Item config.yaml config.local.yaml`n" -ForegroundColor Yellow
-        exit 1
-    }
+# 0. Şablon profil / aktif konfigürasyon kontrolü
+$activeConfig = if (Test-Path ".\config.local.yaml") { ".\config.local.yaml" } else { ".\config.yaml" }
+if (-not (Test-Path $activeConfig)) {
+    Write-Host "`n[!] HATA: Konfigürasyon dosyası ($activeConfig) bulunamadı." -ForegroundColor Red
+    exit 1
+}
+$cfgContent = Get-Content $activeConfig -Raw -ErrorAction Stop
+if ($cfgContent -match 'name:\s*["'']?Your Name["'']?') {
+    Write-Host "`n[!] HATA: Varsayılan şablon profil ('Your Name') tespit edildi ($activeConfig). Lütfen 'config.local.yaml' dosyanızı oluşturup gerçek profil bilgilerinizi girin." -ForegroundColor Red
+    Write-Host "    Örnek: Copy-Item config.yaml config.local.yaml`n" -ForegroundColor Yellow
+    exit 1
 }
 
 # 1. Altyapı kontrolü (PostgreSQL & Redis)
 Write-Host "`n→ [1/3] PostgreSQL ve Redis başlatılıyor/kontrol ediliyor..." -ForegroundColor Cyan
 docker compose up -d postgres redis
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n[!] HATA: Docker servisleri (postgres/redis) başlatılamadı." -ForegroundColor Red
+    exit 1
+}
 
 # 2. Go Orchestrator kontrolü ve arka planda başlatma
 $dashboardUrl = "http://127.0.0.1:8080/api/stats"
@@ -46,7 +53,7 @@ if ($orchestratorRunning) {
     }
     go build -o .\bin\orchestrator.exe .\cmd\orchestrator
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "[!] Go Orchestrator derlenemedi!" -ForegroundColor Red
+        Write-Host "[!] HATA: Go Orchestrator derlenemedi!" -ForegroundColor Red
         exit 1
     }
 
@@ -68,7 +75,8 @@ if ($orchestratorRunning) {
     if ($ready) {
         Write-Host "✓ Go Orchestrator arka planda başlatıldı ve hazır!" -ForegroundColor Green
     } else {
-        Write-Host "⚠ Go Orchestrator başlatıldı ancak henüz yanıt vermedi; logları kontrol edin." -ForegroundColor Yellow
+        Write-Host "`n[!] HATA: Go Orchestrator zamanında ayağa kalkamadı. Scraper başlatılmıyor." -ForegroundColor Red
+        exit 1
     }
 }
 
@@ -79,6 +87,11 @@ if (Test-Path ".\.venv\Scripts\python.exe") {
     .\.venv\Scripts\python.exe -m scraper.main --once
 } else {
     python -m scraper.main --once
+}
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n[!] HATA: Python Scraper hata koduyla ($LASTEXITCODE) sonlandı." -ForegroundColor Red
+    exit $LASTEXITCODE
 }
 
 Write-Host "`n✓ Tarama tamamlandı!" -ForegroundColor Green
