@@ -169,6 +169,9 @@ func main() {
 
 func countEnabledSources(cfg *config.Config) int {
 	count := 0
+	if cfg.Sources.KariyerNet.Enabled {
+		count++
+	}
 	if cfg.Sources.JobSpy.Enabled {
 		count++
 	}

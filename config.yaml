@@ -315,6 +315,9 @@ sources:
   coderspace:
     enabled: true
 
+  kariyer_net:
+    enabled: true
+
   arbeitnow:
     enabled: true
 

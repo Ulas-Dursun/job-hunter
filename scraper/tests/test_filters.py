@@ -1,9 +1,10 @@
-﻿"""scraper.sources.filters için stdlib unittest (ek bağımlılık gerekmez):
+"""scraper.sources.filters için stdlib unittest (ek bağımlılık gerekmez):
 python -m unittest discover -s scraper/tests -t .
 """
 import unittest
 
 from scraper.sources.filters import is_rejected_title, is_tech_title
+from scraper.sources.kariyer_source import _should_drop_kariyer_title
 
 
 class TestFilters(unittest.TestCase):
@@ -25,6 +26,12 @@ class TestFilters(unittest.TestCase):
 
     def test_empty_title_rejected(self):
         self.assertTrue(is_rejected_title(""))
+
+    def test_kariyer_title_filter(self):
+        self.assertFalse(_should_drop_kariyer_title("Yazılım Mühendisi"))
+        self.assertFalse(_should_drop_kariyer_title("Veri Analisti"))
+        self.assertTrue(_should_drop_kariyer_title("Kıdemli .Net Geliştirici"))
+        self.assertTrue(_should_drop_kariyer_title("Yazılım Stajyeri"))
 
 
 if __name__ == "__main__":

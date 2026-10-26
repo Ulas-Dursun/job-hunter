@@ -22,7 +22,7 @@ flowchart TD
         A1["LinkedIn & Indeed (JobSpy)"]
         A2["European Tech Hub Feed (Arbeitnow)"]
         A3["Direct Company ATS (Greenhouse & SmartRecruiters)"]
-        A4["Regional Tech & Grad Portals (Techcareer & Coderspace)"]
+        A4["Regional Portals (Kariyer.net, Techcareer, Coderspace)"]
         A5["Atomic Redis Dedup (URL 30d + Content Hash 14d)"]
     end
 
@@ -200,7 +200,7 @@ go test -count=1 ./...
 ├── scraper/
 │   ├── models/                 # Normalized Job schema (URL & cross-source content hashing)
 │   ├── publisher/              # Atomic Redis Streams producer with TTL deduplication
-│   ├── sources/                # JobSpy (LinkedIn/Indeed), Greenhouse, SmartRecruiters, Arbeitnow, Techcareer, Coderspace
+│   ├── sources/                # JobSpy, Greenhouse, SmartRecruiters, Arbeitnow, Kariyer.net, Techcareer, Coderspace
 │   └── tests/                  # Python unit test suite
 ├── web/index.html              # Single-page Tailwind CSS dashboard, Kanban CRM & AI Tailor modal
 ├── config.yaml                 # Plug-and-play candidate profile template, ATS watchlist & scoring thresholds

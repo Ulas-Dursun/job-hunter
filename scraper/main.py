@@ -1,12 +1,12 @@
 """
-Scraper Service — Entry Point
+Scraper Service — Multi-Source Ingestion Entry Point.
 
-Step 1B: KariyerNetSource aktif, ilk gerçek ilanlar çekiliyor.
+Aktif kaynakları (JobSpy, ATS, Arbeitnow, Kariyer.net, Techcareer, Coderspace, Eurocontrol)
+okur ve Redis Streams (jobs:raw) kuyruğuna atomik tekilleştirme ile yazar.
 """
 
 import argparse
 import logging
-import os
 import time
 
 import redis
@@ -19,6 +19,7 @@ from scraper.sources.ats_source import ATSSource
 from scraper.sources.eurocontrol_source import EurocontrolSource
 from scraper.sources.techcareer_source import TechcareerSource
 from scraper.sources.coderspace_source import CoderspaceSource
+from scraper.sources.kariyer_source import KariyerNetSource
 from scraper.sources.arbeitnow_source import ArbeitnowSource
 
 logging.basicConfig(
@@ -91,7 +92,7 @@ def main() -> None:
     sources = []
     if cfg["sources"].get("ats", {}).get("enabled", False):
         sources.append(ATSSource(cfg["sources"]["ats"]))
-        logger.info("ats source enabled (greenhouse + lever + smartrecruiters)")
+        logger.info("ats source enabled (greenhouse + smartrecruiters)")
 
     if cfg["sources"].get("eurocontrol", {}).get("enabled", False):
         sources.append(EurocontrolSource(cfg["sources"]["eurocontrol"]))
@@ -104,6 +105,10 @@ def main() -> None:
     if cfg["sources"].get("coderspace", {}).get("enabled", False):
         sources.append(CoderspaceSource(cfg["sources"]["coderspace"]))
         logger.info("coderspace source enabled (coderspace.io talent programs)")
+
+    if cfg["sources"].get("kariyer_net", {}).get("enabled", False):
+        sources.append(KariyerNetSource(cfg["sources"]["kariyer_net"]))
+        logger.info("kariyer_net source enabled (kariyer.net nuxt categories)")
 
     if cfg["sources"].get("arbeitnow", {}).get("enabled", False):
         sources.append(ArbeitnowSource(cfg["sources"]["arbeitnow"]))

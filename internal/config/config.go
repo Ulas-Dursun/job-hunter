@@ -71,6 +71,7 @@ type ScoringConfig struct {
 }
 
 type SourcesConfig struct {
+	KariyerNet  SourceConfig `yaml:"kariyer_net"`
 	JobSpy      SourceConfig `yaml:"jobspy"`
 	ATS         SourceConfig `yaml:"ats"`
 	Eurocontrol SourceConfig `yaml:"eurocontrol"`
