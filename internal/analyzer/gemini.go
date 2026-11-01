@@ -46,7 +46,8 @@ func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConf
 		}
 	}
 
-	client := NewLLMClient(cfgModel, 35*time.Second)
+	limiter := SharedRateLimiter(rpm)
+	client := NewLLMClient(cfgModel, 35*time.Second, rpm)
 	if client.EndpointsCount() == 0 {
 		slog.Warn("ai analyzer: ne GEMINI_API_KEY ne de GROQ_API_KEY ortamda bulunamadı!")
 	} else {
@@ -56,9 +57,6 @@ func NewGeminiAnalyzer(cfg *config.GeminiConfig, candidate *config.CandidateConf
 			"rpm", rpm,
 		)
 	}
-
-	interval := time.Duration(60000/rpm) * time.Millisecond
-	limiter := rate.NewLimiter(rate.Every(interval), 1)
 
 	return &GeminiAnalyzer{
 		client:  client,
@@ -85,12 +83,8 @@ func (g *GeminiAnalyzer) Analyze(
 		return nil, fmt.Errorf("no AI API keys configured (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
 	}
 
-	if err := g.limiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("rate limiter: %w", err)
-	}
-
 	prompt := g.builder.Build(title, company, location, description)
-	rawText, err := g.client.Generate(ctx, prompt, g.maxTok)
+	rawText, err := g.client.Generate(ctx, prompt, g.maxTok, 0.10)
 	if err != nil {
 		return nil, err
 	}

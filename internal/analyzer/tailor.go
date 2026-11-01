@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ulasdursun/job-hunter/internal/config"
 )
@@ -26,12 +28,17 @@ type TailorService struct {
 	client        *LLMClient
 	candidateName string
 	masterProfile string
+	unownedTech   []string
 }
 
 func NewTailorService(cfg *config.GeminiConfig, candidates ...*config.CandidateConfig) *TailorService {
 	var cfgModel string
+	rpm := 30
 	if cfg != nil {
 		cfgModel = cfg.Model
+		if cfg.RateLimitRPM > 0 {
+			rpm = cfg.RateLimitRPM
+		}
 	}
 	var candidate *config.CandidateConfig
 	if len(candidates) > 0 {
@@ -41,10 +48,21 @@ func NewTailorService(cfg *config.GeminiConfig, candidates ...*config.CandidateC
 	if candidate != nil && strings.TrimSpace(candidate.Name) != "" {
 		name = strings.TrimSpace(candidate.Name)
 	}
+	unowned := defaultUnownedTech
+	if candidate != nil && len(candidate.UnownedTech) > 0 {
+		unowned = make([]string, 0, len(candidate.UnownedTech))
+		for _, item := range candidate.UnownedTech {
+			trimmed := strings.ToLower(strings.TrimSpace(item))
+			if trimmed != "" {
+				unowned = append(unowned, trimmed)
+			}
+		}
+	}
 	return &TailorService{
-		client:        NewLLMClient(cfgModel, 45*time.Second),
+		client:        NewLLMClient(cfgModel, 45*time.Second, rpm),
 		candidateName: name,
 		masterProfile: buildMasterProfile(candidate),
+		unownedTech:   unowned,
 	}
 }
 
@@ -118,11 +136,11 @@ func (s *TailorService) GenerateTailoredAssets(
 	title, company, location, description string,
 ) (*TailoredAssets, error) {
 	prompt := s.buildPrompt(title, company, location, description)
-	rawText, err := s.client.Generate(ctx, prompt, 3500)
+	rawText, err := s.client.Generate(ctx, prompt, 3500, 0.25)
 	if err != nil {
 		return nil, err
 	}
-	return parseTailoredResult(rawText)
+	return parseTailoredResult(rawText, s.unownedTech...)
 }
 
 func (s *TailorService) buildPrompt(title, company, location, description string) string {
@@ -180,7 +198,7 @@ Respond with a strict, valid JSON object without markdown formatting, backticks,
 }`, s.candidateName, company, title, s.candidateName, company, s.masterProfile, title, company, location, desc)
 }
 
-func parseTailoredResult(text string) (*TailoredAssets, error) {
+func parseTailoredResult(text string, customUnowned ...string) (*TailoredAssets, error) {
 	start := strings.Index(text, "{")
 	end := strings.LastIndex(text, "}")
 	if start == -1 || end == -1 || end < start {
@@ -206,32 +224,86 @@ func parseTailoredResult(text string) (*TailoredAssets, error) {
 		result.ATSKeywords = []string{}
 	}
 
-	sanitizeTailoredAssets(&result)
+	unowned := defaultUnownedTech
+	if len(customUnowned) > 0 {
+		unowned = customUnowned
+	}
+	sanitizeTailoredAssets(&result, unowned)
 	return &result, nil
 }
 
-// unownedTech, adayın profilinde kesinlikle bulunmayan teknolojilerdir;
+// defaultUnownedTech, candidate.unowned_tech belirtilmediğinde kullanılan varsayılan listedir;
 // LLM yanlışlıkla skills_highlight içine koyarsa elenir, ats_keywords içinde ise gap olarak işaretlenir.
-var unownedTech = []string{
+var defaultUnownedTech = []string{
 	"c#", ".net", "asp.net", "php", "laravel", "symfony", "ruby", "rails",
 	"swift", "objective-c", "kotlin", "angular", "vue.js", "cobol", "sap",
 	"kubernetes", "terraform", "ansible", "kafka", "spark", "hadoop", "pytorch", "tensorflow",
 }
 
-func isUnownedSkill(s string) bool {
+func isUnownedSkill(s string, unownedList ...string) bool {
 	low := strings.ToLower(strings.TrimSpace(s))
-	for _, bad := range unownedTech {
-		if low == bad || strings.Contains(low, bad) {
+	if low == "" {
+		return false
+	}
+	list := defaultUnownedTech
+	if len(unownedList) > 0 {
+		list = unownedList
+	}
+	for _, bad := range list {
+		b := strings.ToLower(strings.TrimSpace(bad))
+		if b != "" && containsTechToken(low, b) {
 			return true
 		}
 	}
 	return false
 }
 
-func sanitizeTailoredAssets(res *TailoredAssets) {
+// containsTechToken checks if tech appears as a standalone token/word in s,
+// avoiding false positives like "sap" in "shape"/"encapsulate" or "spark" in "sparked".
+func containsTechToken(s, tech string) bool {
+	if s == tech {
+		return true
+	}
+	start := 0
+	for {
+		idx := strings.Index(s[start:], tech)
+		if idx == -1 {
+			return false
+		}
+		actual := start + idx
+		end := actual + len(tech)
+
+		beforeOk := true
+		if actual > 0 {
+			r, _ := utf8.DecodeLastRuneInString(s[:actual])
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				beforeOk = false
+			}
+		}
+
+		afterOk := true
+		if end < len(s) {
+			r, _ := utf8.DecodeRuneInString(s[end:])
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				afterOk = false
+			}
+		}
+
+		if beforeOk && afterOk {
+			return true
+		}
+		start = actual + 1
+		if start >= len(s) {
+			break
+		}
+	}
+	return false
+}
+
+func sanitizeTailoredAssets(res *TailoredAssets, unownedList []string) {
 	kept := make([]string, 0, len(res.SkillsHighlight))
 	for _, sk := range res.SkillsHighlight {
-		if !isUnownedSkill(sk) {
+		if !isUnownedSkill(sk, unownedList...) {
 			kept = append(kept, sk)
 		}
 	}
@@ -239,7 +311,7 @@ func sanitizeTailoredAssets(res *TailoredAssets) {
 
 	for i, kw := range res.ATSKeywords {
 		low := strings.ToLower(kw)
-		if isUnownedSkill(kw) && !strings.Contains(low, "gap") && !strings.Contains(low, "eksik") {
+		if isUnownedSkill(kw, unownedList...) && !strings.Contains(low, "gap") && !strings.Contains(low, "eksik") {
 			res.ATSKeywords[i] = kw + " (gap — do not claim on CV)"
 		}
 	}

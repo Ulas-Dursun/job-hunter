@@ -72,17 +72,19 @@ func minYearsRequired(descLower string) int {
 // languageBarrierPatterns: aday İngilizce (C1/C2) + Türkçe (ana dil) + Almanca (başlangıç) bilir.
 // Almanca/Felemenkçe/Fransızca'yı zorunlu kılan ifadeler (aşağıdaki yumuşatıcı kelimeler yoksa) red sebebidir.
 var languageBarrierPatterns = []string{
-	"fluent german", "fluent in german", "german fluent", "fluent dutch", "fluent in dutch", "dutch fluent",
-	"fluent french", "fluent in french", "french fluent", "native german", "german native", "native dutch",
-	"native french", "german (c1", "german c1", "german c2", "german (c2", "dutch (c1", "dutch c1",
+	"fluent german", "fluent in german", "german fluent", "german required", "german is required",
+	"fluent dutch", "fluent in dutch", "dutch fluent", "dutch speaking", "dutch required", "dutch is required",
+	"fluent french", "fluent in french", "french fluent", "french required", "french is required",
+	"native german", "german native", "native dutch", "native french",
+	"german (c1", "german c1", "german c2", "german (c2", "dutch (c1", "dutch c1",
 	"verhandlungssicher", "fließend deutsch", "fliessend deutsch", "fließende deutschkenntnisse",
-	"sehr gute deutschkenntnisse", "gute deutschkenntnisse", "deutsch c1", "deutsch c2", "muttersprache deutsch",
+	"sehr gute deutschkenntnisse", "gute deutschkenntnisse", "deutschkenntnisse", "deutsch c1", "deutsch c2", "muttersprache deutsch",
 	"vloeiend nederlands", "nederlands vereist", "goede beheersing van het nederlands",
 	"uitstekende beheersing van het nederlands", "français courant", "maîtrise du français",
 	"fluent danish", "fluent in danish", "danish fluent", "native danish", "flydende dansk", "dansk i skrift og tale",
 }
 
-// languageSoftWords: bariyer ifadesinin yakınında geçerse dil şartı "artı/tercih" sayılır ve ilan elenmez.
+// languageSoftWords: bariyer ifadesiyle AYNI CÜMLE içinde geçerse dil şartı "artı/tercih" sayılır ve ilan elenmez.
 // Not: "english/englisch/engels/anglais" burada YER ALMAZ — çünkü "Fluent German and English required"
 // gibi çift dilli zorunlu ilanlarda "english" kelimesi bariyeri yanlışlıkla devre dışı bırakır.
 var languageSoftWords = []string{
@@ -92,6 +94,8 @@ var languageSoftWords = []string{
 }
 
 // hasLanguageBarrier, Almanca/Felemenkçe/Fransızca zorunluluğu bildiren bir ifade bulursa (ifade) döndürür.
+// Yumuşatıcı kelimeler yalnızca eşleşmenin bulunduğu cümle/satır sınırları içinde aranır; böylece
+// sonraki cümledeki "salary plus bonus" gibi ifadeler dil bariyerini yanlışlıkla iptal etmez.
 func hasLanguageBarrier(descLower string) (string, bool) {
 	for _, p := range languageBarrierPatterns {
 		from := 0
@@ -101,25 +105,10 @@ func hasLanguageBarrier(descLower string) (string, bool) {
 				break
 			}
 			idx := from + i
-			lo := idx - 60
-			if lo < 0 {
-				lo = 0
-			}
-			hi := idx + len(p) + 80
-			if hi > len(descLower) {
-				hi = len(descLower)
-			}
-			// Rune sınırlarına hizala (UTF-8 ortasından kesme).
-			for lo > 0 && lo < len(descLower) && !isRuneStart(descLower[lo]) {
-				lo--
-			}
-			for hi < len(descLower) && !isRuneStart(descLower[hi]) {
-				hi++
-			}
-			window := descLower[lo:hi]
+			window := extractSentenceWindow(descLower, idx, idx+len(p))
 			soft := false
 			for _, w := range languageSoftWords {
-				if strings.Contains(window, w) {
+				if containsSoftWord(window, w) {
 					soft = true
 					break
 				}
@@ -131,6 +120,50 @@ func hasLanguageBarrier(descLower string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// extractSentenceWindow returns the single sentence/line containing [matchStart, matchEnd],
+// bounded by sentence delimiters ('.', ';', '!', '?', '\n') and capped at [-60, +80] bytes.
+func extractSentenceWindow(s string, matchStart, matchEnd int) string {
+	lo := matchStart - 60
+	if lo < 0 {
+		lo = 0
+	}
+	for lo > 0 && lo < len(s) && !isRuneStart(s[lo]) {
+		lo--
+	}
+	for j := matchStart - 1; j >= lo; j-- {
+		if isSentenceBreak(s[j]) {
+			lo = j + 1
+			break
+		}
+	}
+
+	hi := matchEnd + 80
+	if hi > len(s) {
+		hi = len(s)
+	}
+	for hi < len(s) && !isRuneStart(s[hi]) {
+		hi++
+	}
+	for j := matchEnd; j < hi; j++ {
+		if isSentenceBreak(s[j]) {
+			hi = j
+			break
+		}
+	}
+	return s[lo:hi]
+}
+
+func isSentenceBreak(b byte) bool {
+	return b == '.' || b == ';' || b == '!' || b == '?' || b == '\n' || b == '\r'
+}
+
+func containsSoftWord(window, word string) bool {
+	if strings.Contains(word, " ") || strings.Contains(word, "-") {
+		return strings.Contains(window, word)
+	}
+	return containsWord(window, word)
 }
 
 func isRuneStart(b byte) bool { return b&0xC0 != 0x80 }

@@ -189,22 +189,24 @@ go test -count=1 ./...
 ```text
 ├── cmd/orchestrator/           # Go entrypoint (Redis consumer, worker pool, HTTP server, schedulers)
 ├── internal/
-│   ├── analyzer/               # Multi-key Gemini/Groq failover, scoring rubric, Tailor & Interview Prep
+│   ├── analyzer/               # Multi-key AI client (client.go), scoring (gemini.go, prompt.go), Tailor (tailor.go) & Interview Prep (interview.go)
 │   ├── api/                    # Hardened REST API handlers, repository, and localhost security guard
-│   ├── config/                 # YAML + .env configuration loader
+│   ├── config/                 # YAML + .env configuration loader with template profile guard
 │   ├── consumer/               # Redis Streams consumer group reader (jobs:raw -> jobs:filtered)
-│   ├── filter/                 # Tier-1 CheapFilter + language/seniority/experience signal detectors
-│   ├── intelligence/           # Weekly market analytics, 20:00 Evening Digest & Queue Health Monitor
+│   ├── filter/                 # Tier-1 CheapFilter (cheap_filter.go) + language/seniority/experience signal detectors (signals.go)
+│   ├── intelligence/           # Weekly market analytics (analyzer.go, report.go), 20:00 Evening Digest (digest.go) & Queue Health Monitor (health.go)
 │   ├── metrics/                # Prometheus operational metrics
 │   ├── notifier/               # Telegram HTML notification client
-│   ├── store/                  # PostgreSQL store, Kanban preference builder & 14d retention cleaner
-│   └── worker/                 # Concurrent scoring worker pool with transient retry & twin suppression
+│   ├── store/                  # PostgreSQL store (job_store.go), location/poisoning scope (location.go) & 14d retention cleaner (postgres.go)
+│   └── worker/                 # Concurrent worker pool with XAUTOCLAIM (pool.go) & retry/DLQ processor pipeline (processor.go)
 ├── scraper/
 │   ├── models/                 # Normalized Job schema (URL & cross-source content hashing)
 │   ├── publisher/              # Atomic Redis Streams producer with TTL deduplication
-│   ├── sources/                # JobSpy, Greenhouse, SmartRecruiters, Arbeitnow, Kariyer.net, Techcareer, Coderspace
+│   ├── sources/                # JobSpy, Greenhouse, SmartRecruiters, Arbeitnow, EUROCONTROL, Kariyer.net, Techcareer, Coderspace
 │   └── tests/                  # Python unit test suite
-├── web/index.html              # Single-page Tailwind CSS dashboard, Kanban CRM & AI Tailor modal
+├── web/
+│   ├── index.html              # Single-page Tailwind CSS dashboard, Kanban CRM & AI Tailor/Interview modals
+│   └── app.js                  # Modular frontend state, Kanban drag-and-drop, filter & API client logic
 ├── config.yaml                 # Plug-and-play candidate profile template, ATS watchlist & scoring thresholds
 └── docker-compose.yml          # PostgreSQL 16, Redis 7, Prometheus & Grafana stack
 ```

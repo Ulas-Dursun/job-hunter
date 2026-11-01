@@ -83,6 +83,45 @@ candidate:
 
   work_preference: ["hybrid", "remote", "on-site"]
 
+  target_locations:
+    - "Istanbul"
+    - "Brussels"
+    - "Amsterdam"
+    - "Berlin"
+    - "Munich"
+    - "Copenhagen"
+    - "London"
+    - "Zurich"
+    - "Geneva"
+    - "Remote"
+
+  architectural_bonus_note: "Distributed Systems (Go, Redis Streams, Worker Pools, Concurrency, Microservices) or Cloud/AI Engineering backed by cloud certifications and Python/SQL data pipelines"
+
+  unowned_tech:
+    - "C#"
+    - ".NET"
+    - "ASP.NET"
+    - "PHP"
+    - "Laravel"
+    - "Symfony"
+    - "Ruby"
+    - "Rails"
+    - "Swift"
+    - "Objective-C"
+    - "Kotlin"
+    - "Angular"
+    - "Vue.js"
+    - "COBOL"
+    - "SAP"
+    - "Kubernetes"
+    - "Terraform"
+    - "Ansible"
+    - "Kafka"
+    - "Spark"
+    - "Hadoop"
+    - "PyTorch"
+    - "TensorFlow"
+
   blacklist_keywords:
     - ".NET"
     - "C#"

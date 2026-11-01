@@ -306,6 +306,10 @@ func TestCheapFilter_LanguageBarrier(t *testing.T) {
 		"Vloeiend Nederlands is vereist voor deze rol.",
 		"Vloeiend Nederlands en Engels vereist.",
 		"Vi forventer at du taler flydende dansk i hverdagen.",
+		"German required. Competitive salary plus annual bonus.",
+		"Dutch speaking engineer needed for our local team.",
+		"French required for client-facing meetings.",
+		"Gute Deutschkenntnisse erforderlich. Moderne Hardware plus Bonus.",
 	} {
 		if r := f.Check("Software Engineer", "Acme", d); !r.Rejected {
 			t.Errorf("%q dil bariyeri olarak elenmeliydi", d)
@@ -314,6 +318,7 @@ func TestCheapFilter_LanguageBarrier(t *testing.T) {
 	for _, d := range []string{
 		"German is a plus but not required. We work in English.",
 		"Deutschkenntnisse von Vorteil, Arbeitssprache Englisch.",
+		"Dutch speaking is a nice to have, working language is English.",
 	} {
 		if r := f.Check("Software Engineer", "Acme", d); r.Rejected {
 			t.Errorf("%q yumuşak dil şartı, elenmemeli: %s", d, r.Reason)

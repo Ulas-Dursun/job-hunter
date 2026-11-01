@@ -29,23 +29,26 @@ type NotificationsConfig struct {
 	TelegramEnabled bool `yaml:"telegram_enabled"`
 }
 type CandidateConfig struct {
-	Name              string          `yaml:"name"`
-	Location          string          `yaml:"location"`
-	Status            string          `yaml:"status"`
-	GraduationYear    int             `yaml:"graduation_year"`
-	Education         string          `yaml:"education"`
-	MobilityNote      string          `yaml:"mobility_note"`
-	SpokenLanguages   string          `yaml:"spoken_languages"`
-	Links             string          `yaml:"links"`
-	SummaryVariants   []string        `yaml:"summary_variants"`
-	Experience        []string        `yaml:"experience"`
-	Projects          []string        `yaml:"projects"`
-	Skills            SkillsConfig    `yaml:"skills"`
-	TargetRoles       TargetRoles     `yaml:"target_roles"`
-	Seniority         SeniorityConfig `yaml:"seniority"`
-	WorkPreference    []string        `yaml:"work_preference"`
-	BlacklistKeywords []string        `yaml:"blacklist_keywords"`
-	PriorityCompanies []string        `yaml:"priority_companies"`
+	Name                   string          `yaml:"name"`
+	Location               string          `yaml:"location"`
+	Status                 string          `yaml:"status"`
+	GraduationYear         int             `yaml:"graduation_year"`
+	Education              string          `yaml:"education"`
+	MobilityNote           string          `yaml:"mobility_note"`
+	SpokenLanguages        string          `yaml:"spoken_languages"`
+	Links                  string          `yaml:"links"`
+	SummaryVariants        []string        `yaml:"summary_variants"`
+	Experience             []string        `yaml:"experience"`
+	Projects               []string        `yaml:"projects"`
+	Skills                 SkillsConfig    `yaml:"skills"`
+	TargetRoles            TargetRoles     `yaml:"target_roles"`
+	Seniority              SeniorityConfig `yaml:"seniority"`
+	WorkPreference         []string        `yaml:"work_preference"`
+	TargetLocations        []string        `yaml:"target_locations"`
+	ArchitecturalBonusNote string          `yaml:"architectural_bonus_note"`
+	UnownedTech            []string        `yaml:"unowned_tech"`
+	BlacklistKeywords      []string        `yaml:"blacklist_keywords"`
+	PriorityCompanies      []string        `yaml:"priority_companies"`
 }
 
 type SkillsConfig struct {

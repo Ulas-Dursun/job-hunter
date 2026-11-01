@@ -126,6 +126,17 @@ func TestSanitizeTailoredAssets_FiltersUnownedTech(t *testing.T) {
 	if !foundMarked {
 		t.Errorf("expected unowned ATS keyword 'Kubernetes' to be marked as gap, got %v", res.ATSKeywords)
 	}
+
+	// Word-boundary check: "Encapsulation" or "Sparked" must NOT be falsely flagged as "sap" or "spark"
+	if isUnownedSkill("Encapsulation & OOP") {
+		t.Errorf("'Encapsulation & OOP' should not match 'sap'")
+	}
+	if isUnownedSkill("Sparked API latency improvements") {
+		t.Errorf("'Sparked API latency improvements' should not match 'spark'")
+	}
+	if !isUnownedSkill("Apache Spark") || !isUnownedSkill("SAP ERP") || !isUnownedSkill("C# / .NET") {
+		t.Errorf("expected 'Apache Spark', 'SAP ERP', and 'C# / .NET' to be detected as unowned")
+	}
 }
 
 func TestPromptBuilder_ChainOfThoughtOrderAndBonus(t *testing.T) {

@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 type Provider string
@@ -132,18 +135,57 @@ func buildFailoverChain(cfgModel string) []providerEndpoint {
 	return chain
 }
 
-// LLMClient manages failover, retry loops, and HTTP requests across multi-provider AI endpoints.
+var (
+	sharedLimiterMu sync.Mutex
+	sharedLimiter   *rate.Limiter
+	sharedRPM       int
+)
+
+// SharedRateLimiter returns a process-wide rate limiter shared between GeminiAnalyzer and TailorService
+// so concurrent scoring and CV/interview generation calls respect the same API key pool quota.
+func SharedRateLimiter(rpm int) *rate.Limiter {
+	if rpm <= 0 {
+		rpm = 30
+	}
+	sharedLimiterMu.Lock()
+	defer sharedLimiterMu.Unlock()
+	if sharedLimiter == nil || sharedRPM != rpm {
+		interval := time.Duration(60000/rpm) * time.Millisecond
+		if interval <= 0 {
+			interval = time.Millisecond
+		}
+		sharedLimiter = rate.NewLimiter(rate.Every(interval), 1)
+		sharedRPM = rpm
+	}
+	return sharedLimiter
+}
+
+// LLMClient manages failover, retry loops, shared rate limiting, and HTTP requests across multi-provider AI endpoints.
 type LLMClient struct {
-	endpoints []providerEndpoint
-	cursor    atomic.Uint64
-	client    *http.Client
+	endpoints   []providerEndpoint
+	cursor      atomic.Uint64
+	client      *http.Client
+	limiter     *rate.Limiter
+	baseBackoff time.Duration
 }
 
 // NewLLMClient creates a failover AI client with specified timeout and configured model.
-func NewLLMClient(cfgModel string, timeout time.Duration) *LLMClient {
+func NewLLMClient(cfgModel string, timeout time.Duration, rpm ...int) *LLMClient {
+	var lim *rate.Limiter
+	if len(rpm) > 0 && rpm[0] > 0 {
+		lim = SharedRateLimiter(rpm[0])
+	}
 	return &LLMClient{
 		endpoints: buildFailoverChain(cfgModel),
 		client:    &http.Client{Timeout: timeout},
+		limiter:   lim,
+	}
+}
+
+// SetRateLimiter attaches a rate limiter to the client.
+func (c *LLMClient) SetRateLimiter(lim *rate.Limiter) {
+	if c != nil {
+		c.limiter = lim
 	}
 }
 
@@ -162,12 +204,25 @@ func (c *LLMClient) EndpointLabels() []string {
 }
 
 // Generate executes prompt with failover rotation and exponential backoff retry.
-func (c *LLMClient) Generate(ctx context.Context, prompt string, maxTokens int) (string, error) {
+// Optional temperature defaults to 0.25 if omitted (scoring passes 0.10, tailoring/interview passes 0.25).
+func (c *LLMClient) Generate(ctx context.Context, prompt string, maxTokens int, temperature ...float64) (string, error) {
 	n := len(c.endpoints)
 	if n == 0 {
 		return "", fmt.Errorf("missing AI API key (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
 	}
 
+	if c.limiter != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return "", fmt.Errorf("rate limiter: %w", err)
+		}
+	}
+
+	temp := 0.25
+	if len(temperature) > 0 && temperature[0] >= 0 {
+		temp = temperature[0]
+	}
+
+	var lastErr error
 	maxRounds := 2
 	for round := 0; round < maxRounds; round++ {
 		startIdx := int(c.cursor.Load() % uint64(n))
@@ -181,9 +236,9 @@ func (c *LLMClient) Generate(ctx context.Context, prompt string, maxTokens int) 
 			var err error
 
 			if ep.provider == ProviderGemini {
-				rawText, err = c.callGemini(ctx, ep, prompt, maxTokens)
+				rawText, err = c.callGemini(ctx, ep, prompt, maxTokens, temp)
 			} else {
-				rawText, err = c.callGroq(ctx, ep, prompt, maxTokens)
+				rawText, err = c.callGroq(ctx, ep, prompt, maxTokens, temp)
 			}
 
 			if err == nil {
@@ -192,6 +247,7 @@ func (c *LLMClient) Generate(ctx context.Context, prompt string, maxTokens int) 
 				}
 				return rawText, nil
 			}
+			lastErr = err
 
 			if ctx.Err() != nil {
 				return "", ctx.Err()
@@ -212,7 +268,11 @@ func (c *LLMClient) Generate(ctx context.Context, prompt string, maxTokens int) 
 			}
 
 			if sawRetryable {
-				backoff := time.Duration((round+1)*3) * time.Second
+				unit := c.baseBackoff
+				if unit <= 0 {
+					unit = 3 * time.Second
+				}
+				backoff := time.Duration(round+1) * unit
 				slog.Warn("ai failover: tüm istasyonlar meşgul (429/503), bekleniyor...",
 					"round", round+1,
 					"wait", backoff.String(),
@@ -228,10 +288,10 @@ func (c *LLMClient) Generate(ctx context.Context, prompt string, maxTokens int) 
 		}
 	}
 
-	return "", fmt.Errorf("all %d AI endpoints busy or rate-limited after %d rounds", n, maxRounds)
+	return "", fmt.Errorf("%w: all %d AI endpoints busy or rate-limited after %d rounds (last: %v)", ErrAIBusy, n, maxRounds, lastErr)
 }
 
-func (c *LLMClient) callGemini(ctx context.Context, ep providerEndpoint, prompt string, maxTokens int) (string, error) {
+func (c *LLMClient) callGemini(ctx context.Context, ep providerEndpoint, prompt string, maxTokens int, temperature float64) (string, error) {
 	reqURL := fmt.Sprintf(geminiAPIURL, ep.model)
 
 	if maxTokens <= 0 {
@@ -247,7 +307,7 @@ func (c *LLMClient) callGemini(ctx context.Context, ep providerEndpoint, prompt 
 			},
 		},
 		"generationConfig": map[string]any{
-			"temperature":      0.25,
+			"temperature":      temperature,
 			"maxOutputTokens":  maxTokens,
 			"responseMimeType": "application/json",
 		},
@@ -296,7 +356,7 @@ func (c *LLMClient) callGemini(ctx context.Context, ep providerEndpoint, prompt 
 	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
 }
 
-func (c *LLMClient) callGroq(ctx context.Context, ep providerEndpoint, prompt string, maxTokens int) (string, error) {
+func (c *LLMClient) callGroq(ctx context.Context, ep providerEndpoint, prompt string, maxTokens int, temperature float64) (string, error) {
 	if maxTokens <= 0 {
 		maxTokens = 2000
 	}
@@ -310,7 +370,7 @@ func (c *LLMClient) callGroq(ctx context.Context, ep providerEndpoint, prompt st
 			},
 		},
 		"max_tokens":  maxTokens,
-		"temperature": 0.25,
+		"temperature": temperature,
 		"response_format": map[string]any{
 			"type": "json_object",
 		},

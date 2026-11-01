@@ -125,13 +125,13 @@ func untilNextHour(hour, min int) time.Duration {
 
 func (s *Scheduler) untilNextMonday() time.Duration {
 	now := time.Now()
-	daysUntilMonday := (time.Monday - now.Weekday() + 7) % 7
-	if daysUntilMonday == 0 {
-		daysUntilMonday = 7
-	}
+	daysUntilMonday := (int(time.Monday) - int(now.Weekday()) + 7) % 7
 	nextMonday := time.Date(
-		now.Year(), now.Month(), now.Day()+int(daysUntilMonday),
+		now.Year(), now.Month(), now.Day()+daysUntilMonday,
 		9, 0, 0, 0, now.Location(),
 	)
+	if !nextMonday.After(now) {
+		nextMonday = nextMonday.AddDate(0, 0, 7)
+	}
 	return time.Until(nextMonday)
 }

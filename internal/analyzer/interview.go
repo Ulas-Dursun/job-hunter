@@ -35,7 +35,7 @@ func (s *TailorService) GenerateInterviewPrep(
 	title, company, location, description string,
 ) (*InterviewPrepAssets, error) {
 	prompt := s.buildInterviewPrompt(title, company, location, description)
-	rawText, err := s.client.Generate(ctx, prompt, 3500)
+	rawText, err := s.client.Generate(ctx, prompt, 3500, 0.25)
 	if err != nil {
 		return nil, err
 	}

@@ -15,6 +15,9 @@ import (
 type PromptBuilder struct {
 	candidateName string
 	profileText   string
+	targetCities  string
+	cloudSummary  string
+	archBonusNote string
 	mu            sync.RWMutex
 	feedbackText  string
 }
@@ -24,9 +27,31 @@ func NewPromptBuilder(cfg *config.CandidateConfig) *PromptBuilder {
 	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
 		name = strings.TrimSpace(cfg.Name)
 	}
+	targetCities := "Istanbul, Brussels, Amsterdam, Berlin, Munich, Copenhagen, London, Zurich, Geneva, or Remote"
+	if cfg != nil && len(cfg.TargetLocations) > 0 {
+		targetCities = strings.Join(cfg.TargetLocations, ", ")
+	}
+	cloudSummary := "Docker, Linux (Bash), AWS / Cloud infrastructure, CI/CD (GitHub Actions), Prometheus, Grafana"
+	if cfg != nil && (len(cfg.Skills.Cloud) > 0 || len(cfg.Skills.Infra) > 0) {
+		var parts []string
+		if len(cfg.Skills.Infra) > 0 {
+			parts = append(parts, strings.Join(cfg.Skills.Infra, ", "))
+		}
+		if len(cfg.Skills.Cloud) > 0 {
+			parts = append(parts, strings.Join(cfg.Skills.Cloud, ", "))
+		}
+		cloudSummary = strings.Join(parts, ", ")
+	}
+	archBonus := "Distributed Systems (Go, Redis Streams, Worker Pools, Concurrency, Microservices) OR Cloud/AI Engineering backed by cloud credentials and Python/SQL data pipelines in the Candidate Profile"
+	if cfg != nil && strings.TrimSpace(cfg.ArchitecturalBonusNote) != "" {
+		archBonus = strings.TrimSpace(cfg.ArchitecturalBonusNote)
+	}
 	return &PromptBuilder{
 		candidateName: name,
 		profileText:   buildProfile(cfg),
+		targetCities:  targetCities,
+		cloudSummary:  cloudSummary,
+		archBonusNote: archBonus,
 	}
 }
 
@@ -66,7 +91,7 @@ Description: %s
 Your task:
 Determine whether this role is a strong career match for the candidate across his 4 core target pillars (plus broad 0-2 year Software/Data/Solutions roles):
 1. Backend & Systems Software: Go, Java (Spring Boot), Python, Rust, Distributed Systems, Concurrency, REST APIs, Microservices.
-2. Cloud, Platform & DevOps / SRE: Docker, Linux (Bash), AWS (EC2, S3, IAM, VPC, Certified AI Practitioner), CI/CD (GitHub Actions), Prometheus, Grafana.
+2. Cloud, Platform & DevOps / SRE: %s.
 3. Data Engineering, Analytics & ML: SQL, Python, PostgreSQL, Real-time Data Processing, Data Pipelines, Analytics, Business Intelligence, Machine Learning fundamentals (university coursework).
 4. Systems & Mission-Critical Software: Protocol/telemetry data decoding, JSON schema validation, TCP/UDP sockets, C++/Python/Java/Rust services.
 
@@ -94,8 +119,8 @@ CRITICAL RULES (MUST OBEY):
      * Core tech stack aligns 80%%+ with candidate's primary skills (Go, Java/Spring Boot, Python backend/data, Docker/Linux/AWS/APIs, or systems/protocol engineering in the Candidate Profile).
      * No major missing requirements, no explicit visa/language blockers.
    - 7.0 - 7.9 (STRONG FIT / APPLY — Included in Daily Evening Digest, action: "apply"):
-     * Entry-level or junior role (0-2 years) in target cities (Istanbul, Brussels, Amsterdam, Berlin, Munich, Copenhagen, London, Zurich, Geneva, or Remote) with solid fundamentals, even if visa sponsorship is not explicitly mentioned or candidate has 1-2 secondary tool gaps (e.g., Kubernetes, Terraform, Kafka) that can be learned on the job.
-     * Or ~2 year role where candidate's strong project portfolio + European traineeship/engineering experience in the Candidate Profile makes it a strong application.
+     * Entry-level or junior role (0-2 years) in target cities (%s) with solid fundamentals, even if visa sponsorship is not explicitly mentioned or candidate has 1-2 secondary tool gaps (e.g., Kubernetes, Terraform, Kafka) that can be learned on the job.
+     * Or ~2 year role where candidate's strong project portfolio + international/engineering experience in the Candidate Profile makes it a strong application.
    - 6.8 - 6.9 (HIGH WATCH / VIABLE STRETCH — Eligible for Evening Digest, action: "watch"):
      * RESERVED ONLY FOR: (a) 0-2 year / Junior / Graduate roles requiring an adjacent stack transition (e.g., Full-stack TypeScript/React + Python/Java, or Solutions/BI/Technical Analyst with SQL/Python), OR (b) ~2 year (light mid-level) roles in target cities where primary stack (Java Spring Boot, Go, Python, AWS) aligns strongly.
      * Any role requiring 3+ years of experience MUST NOT be placed in 6.8-6.9 unless it explicitly welcomes New Grads/Juniors.
@@ -113,7 +138,7 @@ CRITICAL RULES (MUST OBEY):
    - If the job is explicitly for "New Grad", "Junior", "Associate", "Graduate", "Trainee", or "0-2 years", prioritize engineering & analytical fundamentals over exact tool names.
 
 2a. STRONG ARCHITECTURAL & AI PRACTITIONER BONUS (+0.4 to +0.5):
-   - For 0-2 year / Junior / New Grad / Graduate / Associate roles that directly match the candidate's verified architectural strengths — specifically Distributed Systems (Go, Redis Streams, Worker Pools, Concurrency, High-Throughput Microservices, Rust TCP/UDP, Java 21 Spring Boot Pessimistic Locking) OR Cloud/AI Engineering backed by his AWS Certified AI Practitioner (2026) credential and Python/Cloud background — award an explicit +0.4 to +0.5 Strong Architectural Match bonus so high-signal matches cross the 8.0+ Instant Telegram Notification threshold.
+   - For 0-2 year / Junior / New Grad / Graduate / Associate roles that directly match the candidate's verified architectural strengths — specifically %s — award an explicit +0.4 to +0.5 Strong Architectural Match bonus so high-signal matches cross the 8.0+ Instant Telegram Notification threshold.
 
 2b. TOOL GAP FLEXIBILITY:
    If the candidate is missing only 1-2 secondary infrastructure/tool requirements (e.g., Kubernetes in production, Terraform, Spark/Kafka) but core fundamentals AND primary tech stack align well:
@@ -122,13 +147,13 @@ CRITICAL RULES (MUST OBEY):
 
 2c. SOFTWARE ENGINEER / FULLSTACK FLEXIBILITY:
    If a role is titled "Software Engineer", "Associate Software Engineer", or "Full Stack Developer", and the core workload is backend, APIs, data, or cloud (with secondary React/TypeScript tasks):
-   - Do NOT disqualify. Candidate built a React/Firebase real-time dashboard in his Capstone IoT project.
+   - Do NOT disqualify when the Candidate Profile includes frontend/dashboard project experience alongside backend/cloud skills.
 
 2d. ML / DATA SCIENCE / ANALYTICS NEW-GRAD CHANCE:
-   The candidate is strong in Python, SQL, Real-time Data Processing, Data Pipelines, holds the AWS Certified AI Practitioner (2026) credential, and completed university Machine Learning coursework.
+   The candidate is strong in Python, SQL, Real-time Data Processing, Data Pipelines, cloud/AI credentials listed in the Candidate Profile, and university Machine Learning coursework.
    If a role is explicitly New Grad / Graduate / Junior / Entry-level / 0-2 years in ML, Data Science, AI, Business Intelligence, or Data Analytics:
    - Do NOT skip merely because production ML experience or a master's degree is not proven.
-   - Score 6.8-7.8 when Python/SQL/Data fundamentals fit (or 8.0+ if AI Engineer / Cloud AI integration directly leverages AWS AI Practitioner + Python backend). Add any real gap (e.g. "No production PyTorch/Spark experience") to missing_skills.
+   - Score 6.8-7.8 when Python/SQL/Data fundamentals fit (or 8.0+ if AI Engineer / Cloud AI integration directly leverages the candidate's cloud AI credentials + Python backend). Add any real gap (e.g. "No production PyTorch/Spark experience") to missing_skills.
    - Still skip PhD-required / Senior Research Scientist roles.
 
 3. HARD FILTERS:
@@ -150,16 +175,16 @@ CRITICAL RULES (MUST OBEY):
 7. UNRELATED FIELD CHECK:
    If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical), set match_score below 3.0 and action "skip".
 
-8. VISA, CITIZENSHIP & EUROPEAN TARGET CITY STRATEGY (BRUSSELS, AMSTERDAM, BERLIN, MUNICH, COPENHAGEN, ZURICH, LONDON):
-   - Use the candidate's Location & Mobility and Work Experience in the Candidate Profile (including European traineeship mobility in Brussels and full-time availability across Turkey & Europe).
+8. VISA, CITIZENSHIP & EUROPEAN TARGET CITY STRATEGY (%s):
+   - Use the candidate's Location & Mobility and Work Experience in the Candidate Profile.
    - HARD DISQUALIFIERS (STRICT SKIP < 3.5):
      1. EXPLICIT NO-SPONSORSHIP: Explicitly mandates "EU/EEA citizenship required", "No visa sponsorship provided", or "Must already hold permanent unrestricted work permit" -> score 2.0-3.0, action "skip".
      2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: Explicitly mandates fluent French, German, Dutch, or Danish ("Français courant", "Deutsch C1", "Nederlands vereist", "flydende dansk") without accepting English -> score 2.0-3.5, action "skip".
      3. US / OVERSEAS ON-SITE: On-site in US/Canada/Australia/APAC -> score 1.5-2.5, action "skip".
 
    - TARGET CITY 0-2 YEAR / GRADUATE OPPORTUNITY RULE (WORTH TRYING — DO NOT PENALIZE SILENCE ON VISA):
-     * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates (especially candidates with European traineeship experience in Brussels).
-     * Therefore, if an English-speaking role in Belgium (Brussels), Netherlands (Amsterdam/Rotterdam/Eindhoven), Germany (Berlin/Munich), Denmark (Copenhagen), Switzerland, or UK does NOT forbid sponsorship:
+     * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates.
+     * Therefore, if an English-speaking role in the candidate's target European locations (%s) does NOT forbid sponsorship:
        a) If it is explicitly Junior / Graduate / New Grad / Associate / 0-2 years AND tech fit is strong:
           -> Score 7.2 - 8.4 and set action to "apply"! Worth trying!
           -> If the posting does not explicitly confirm sponsorship, note in red_flags: "Visa sponsorship not explicitly stated (0-2 yr target-city role — worth applying)".
@@ -180,6 +205,7 @@ OUTPUT RULES:
 - Keep reasoning to exactly 2 sentences.
 - skill_overlap, missing_skills, and red_flags must be concise and evidence-based.`,
 		p.candidateName, p.profileText, feedbackBlock, title, company, location, desc,
+		p.cloudSummary, p.targetCities, p.archBonusNote, p.targetCities, p.targetCities,
 	)
 }
 

@@ -23,6 +23,13 @@ const maxDBRetries = 5
 // maxAITransientRetries, geçici AI kota hatalarında (429/503) jobs:failed'e taşımadan önceki deneme sınırıdır.
 const maxAITransientRetries = 8
 
+// maxFailedCycleRetries, geçici altyapı/kota hatası nedeniyle jobs:failed'e düşen bir ilanın
+// dedup anahtarları silinerek yeniden scrape/kuyruk döngüsüne girmesine izin verilen azami döngü sayısıdır.
+const maxFailedCycleRetries = 2
+
+// retryCountKeyPrefix, geçici hata döngü sayacının Redis anahtar önekidir.
+const retryCountKeyPrefix = "job:retry_count:"
+
 // JobProcessor coordinates filtering, AI scoring, database persistence, and notifications for a job message.
 type JobProcessor struct {
 	client        *redis.Client
@@ -95,7 +102,7 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 	if title == "" || company == "" || source == "" || externalID == "" || url == "" {
 		slog.Warn("worker dropping malformed poison-pill message",
 			"id", msg.ID, "source", source, "external_id", externalID, "title", title, "company", company)
-		p.ToFailed(ctx, msg)
+		p.ToFailed(ctx, msg, false)
 		return
 	}
 
@@ -137,7 +144,8 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 		}
 		p.metrics.GeminiRequests.With(map[string]string{"status": "error"}).Inc()
 
-		if analyzer.IsTransient(err) {
+		isTransientErr := analyzer.IsTransient(err)
+		if isTransientErr {
 			attempts := p.bumpAttempts(msg.ID)
 			if attempts < maxAITransientRetries {
 				wait := time.Duration(attempts) * 20 * time.Second
@@ -158,9 +166,10 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 		slog.Error("gemini failed",
 			"title", title,
 			"company", company,
+			"transient", isTransientErr,
 			"error", err,
 		)
-		p.ToFailed(ctx, msg)
+		p.ToFailed(ctx, msg, isTransientErr)
 		return
 	}
 	p.clearAttempts(msg.ID)
@@ -198,7 +207,7 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 		if attempts >= maxDBRetries {
 			slog.Error("db upsert retries exhausted, moving to failed stream", "id", msg.ID, "attempts", attempts)
 			p.clearAttempts(msg.ID)
-			p.ToFailed(ctx, msg)
+			p.ToFailed(ctx, msg, true)
 			return
 		}
 		select {
@@ -235,27 +244,65 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 	}
 }
 
-func (p *JobProcessor) ToFailed(ctx context.Context, msg redis.XMessage) {
-	_, _ = p.client.XAdd(ctx, &redis.XAddArgs{
+// ToFailed moves a failed message to jobs:failed (DLQ).
+//   - If XAdd fails, it logs an error and does NOT ACK so the message remains safely in PEL.
+//   - For permanent failures (transient == false, e.g. malformed payload or JSON parse error),
+//     dedup keys are preserved so the broken job is not re-scraped endlessly.
+//   - For transient failures that exhausted retries (transient == true), a Redis counter
+//     job:retry_count:<id> allows up to maxFailedCycleRetries (2) full re-queue cycles;
+//     after the 2nd failed cycle, dedup keys are kept permanently.
+func (p *JobProcessor) ToFailed(ctx context.Context, msg redis.XMessage, transient ...bool) {
+	isTransient := len(transient) > 0 && transient[0]
+
+	if _, err := p.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: p.cfg.StreamFailed,
 		MaxLen: 1000,
 		Approx: true,
 		Values: msg.Values,
-	}).Result()
+	}).Result(); err != nil {
+		slog.Error("failed to write message to failed stream (keeping in PEL, not ACKing)",
+			"id", msg.ID, "stream", p.cfg.StreamFailed, "error", err)
+		return
+	}
 
-	dedupHash := field(msg.Values, "dedup_hash")
-	contentHash := field(msg.Values, "content_hash")
-	if p.cfg.DedupSetKey != "" {
-		if dedupHash != "" {
-			_ = p.client.SRem(ctx, p.cfg.DedupSetKey, dedupHash).Err()
-			_ = p.client.Del(ctx, p.cfg.DedupSetKey+":"+dedupHash).Err()
+	if isTransient && p.cfg.DedupSetKey != "" {
+		retryID := retryIdentifier(msg)
+		retryKey := retryCountKeyPrefix + retryID
+		cycleCount, err := p.client.Incr(ctx, retryKey).Result()
+		if err == nil {
+			_ = p.client.Expire(ctx, retryKey, 7*24*time.Hour).Err()
 		}
-		if contentHash != "" {
-			_ = p.client.Del(ctx, p.cfg.DedupSetKey+":c:"+contentHash).Err()
+		if err == nil && cycleCount <= maxFailedCycleRetries {
+			dedupHash := field(msg.Values, "dedup_hash")
+			contentHash := field(msg.Values, "content_hash")
+			if dedupHash != "" {
+				_ = p.client.SRem(ctx, p.cfg.DedupSetKey, dedupHash).Err()
+				_ = p.client.Del(ctx, p.cfg.DedupSetKey+":"+dedupHash).Err()
+			}
+			if contentHash != "" {
+				_ = p.client.Del(ctx, p.cfg.DedupSetKey+":c:"+contentHash).Err()
+			}
+			slog.Info("transient failure moved to DLQ; dedup cleared for retry cycle",
+				"id", msg.ID, "retry_id", retryID, "cycle", cycleCount, "max_cycles", maxFailedCycleRetries)
+		} else {
+			slog.Warn("transient failure exhausted max retry cycles; keeping dedup keys permanently",
+				"id", msg.ID, "retry_id", retryID, "cycle", cycleCount)
 		}
 	}
 
 	p.Ack(ctx, p.cfg.StreamFiltered, msg.ID)
+}
+
+func retryIdentifier(msg redis.XMessage) string {
+	if h := field(msg.Values, "dedup_hash"); h != "" {
+		return h
+	}
+	src := field(msg.Values, "source")
+	ext := field(msg.Values, "external_id")
+	if src != "" && ext != "" {
+		return src + ":" + ext
+	}
+	return msg.ID
 }
 
 func (p *JobProcessor) Ack(ctx context.Context, stream, id string) {

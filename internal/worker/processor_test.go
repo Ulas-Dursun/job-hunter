@@ -2,6 +2,9 @@ package worker
 
 import (
 	"testing"
+
+	"github.com/redis/go-redis/v9"
+	"github.com/ulasdursun/job-hunter/internal/config"
 )
 
 func TestDeriveAction(t *testing.T) {
@@ -44,5 +47,55 @@ func TestField(t *testing.T) {
 	}
 	if field(vals, "count") != "" {
 		t.Errorf("expected empty string for non-string value")
+	}
+}
+
+func TestRetryIdentifier(t *testing.T) {
+	msgWithHash := redis.XMessage{
+		ID:     "1-0",
+		Values: map[string]any{"dedup_hash": "abc123hash", "source": "linkedin", "external_id": "99"},
+	}
+	if got := retryIdentifier(msgWithHash); got != "abc123hash" {
+		t.Errorf("expected dedup_hash 'abc123hash', got %q", got)
+	}
+
+	msgWithSrcExt := redis.XMessage{
+		ID:     "2-0",
+		Values: map[string]any{"source": "indeed", "external_id": "42"},
+	}
+	if got := retryIdentifier(msgWithSrcExt); got != "indeed:42" {
+		t.Errorf("expected 'indeed:42', got %q", got)
+	}
+
+	msgFallback := redis.XMessage{
+		ID:     "3-0",
+		Values: map[string]any{},
+	}
+	if got := retryIdentifier(msgFallback); got != "3-0" {
+		t.Errorf("expected fallback msg ID '3-0', got %q", got)
+	}
+}
+
+func TestProcessorAttemptsLifecycle(t *testing.T) {
+	p := NewJobProcessor(nil, nil, nil, nil, &config.RedisConfig{ConsumerName: "worker"}, nil, nil, false)
+	if n := p.bumpAttempts("msg-1"); n != 1 {
+		t.Fatalf("expected attempt 1, got %d", n)
+	}
+	if n := p.bumpAttempts("msg-1"); n != 2 {
+		t.Fatalf("expected attempt 2, got %d", n)
+	}
+	p.clearAttempts("msg-1")
+	if n := p.bumpAttempts("msg-1"); n != 1 {
+		t.Fatalf("expected attempt reset to 1 after clearAttempts, got %d", n)
+	}
+}
+
+func TestPoolConsumerNameFor(t *testing.T) {
+	pool := New(3, nil, nil, nil, nil, &config.RedisConfig{ConsumerName: "worker"}, nil, nil, false)
+	if got := pool.consumerNameFor(0); got != "worker" {
+		t.Errorf("expected 'worker' for workerID 0, got %q", got)
+	}
+	if got := pool.consumerNameFor(2); got != "worker-2" {
+		t.Errorf("expected 'worker-2' for workerID 2, got %q", got)
 	}
 }
