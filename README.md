@@ -14,6 +14,10 @@
 
 **Job Hunter** is a distributed, event-driven job aggregation, scoring, and career-ops platform built with **Go**, **Python**, **Redis Streams**, and **PostgreSQL**. It continuously harvests software, cloud/DevOps, data/AI, and aerospace engineering roles across **Europe and Turkey**, filters out >70% of recruitment noise in microseconds before touching an LLM quota, and provides **preference-aware AI scoring, hallucination-safe resume tailoring, STAR interview preparation, and a full Kanban CRM**.
 
+> [!NOTE]
+> **🏆 Open-Source Ecosystem Recognition — [XERJ Corpus Hub](https://hub.xerj.org/contributors/Ulas-Dursun):**  
+> Job Hunter's dual-stage deterministic filtering, multi-key sticky AI failover, and hallucination-safe ATS tailoring patterns are indexed as a verified open-source contribution in the **[XERJ Corpus Hub](https://hub.xerj.org/contributors/Ulas-Dursun)**.
+
 ---
 
 ## 🏛️ System Architecture
@@ -37,7 +41,7 @@ flowchart TD
     subgraph S3["3. Go Orchestrator & AI Engine (Go 1.25)"]
         C["Stream Consumer Group"]
         D["Tier-1 CheapFilter (Title, Stack, 4+ Yr & Language Gate)"]
-        W["Concurrent Worker Pool + Twin-Skip Cache"]
+        W["Concurrent Worker Pool (XAUTOCLAIM + Twin-Skip Cache)"]
         G["Tier-2 Multi-Key AI Router (Gemini + Groq Sticky Failover)"]
         FB["Kanban Feedback Loop (Preference Calibration)"]
         T["AI Tailor & STAR Interview Prep Engine"]
