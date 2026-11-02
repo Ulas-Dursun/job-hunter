@@ -119,9 +119,9 @@ func parseInterviewResult(text string) (*InterviewPrepAssets, error) {
 		result.QuestionsToAsk = []string{}
 	}
 
-	// Semantik doğrulama: Modelin geçerli ve dolu sorular üretip üretmediği kontrol edilir.
-	if len(result.TechnicalQuestions) == 0 {
-		return nil, fmt.Errorf("interview prep validation: no technical questions generated")
+	// Semantik doğrulama: Modelin geçerli, dolu ve asgari sayıda soru üretip üretmediği kontrol edilir.
+	if len(result.TechnicalQuestions) < 3 {
+		return nil, fmt.Errorf("interview prep validation: insufficient technical questions generated (got %d, minimum 3 required)", len(result.TechnicalQuestions))
 	}
 	for i, q := range result.TechnicalQuestions {
 		if strings.TrimSpace(q.Question) == "" || strings.TrimSpace(q.AnswerStrategy) == "" {
@@ -129,12 +129,21 @@ func parseInterviewResult(text string) (*InterviewPrepAssets, error) {
 		}
 	}
 
-	if len(result.BehavioralQuestions) == 0 {
-		return nil, fmt.Errorf("interview prep validation: no behavioral questions generated")
+	if len(result.BehavioralQuestions) < 2 {
+		return nil, fmt.Errorf("interview prep validation: insufficient behavioral questions generated (got %d, minimum 2 required)", len(result.BehavioralQuestions))
 	}
 	for i, b := range result.BehavioralQuestions {
 		if strings.TrimSpace(b.Question) == "" || strings.TrimSpace(b.STARStoryGuide) == "" {
 			return nil, fmt.Errorf("interview prep validation: behavioral question %d missing question or star guide", i+1)
+		}
+	}
+
+	if len(result.QuestionsToAsk) == 0 {
+		return nil, fmt.Errorf("interview prep validation: no reverse-interview questions (questions_to_ask) generated")
+	}
+	for i, q := range result.QuestionsToAsk {
+		if strings.TrimSpace(q) == "" {
+			return nil, fmt.Errorf("interview prep validation: empty reverse-interview question at index %d", i+1)
 		}
 	}
 

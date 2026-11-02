@@ -367,7 +367,7 @@ function renderJobCard(j) {
     const score = j.match_score || 0
     const scoreColor = getScoreStyle(score)
     const locInfo = formatLocationBadge(j.location)
-    const safeId = escapeHtml(j.id)
+    const safeId = safeJsId(j.id)
 
     const overlapTags = (j.skill_overlap || []).slice(0, 4)
     const missingTags = (j.missing_skills || []).slice(0, 2)
@@ -1075,7 +1075,7 @@ function renderKanbanCard(j) {
     const scoreColor = getScoreStyle(score)
     const locInfo = formatLocationBadge(j.location)
     const overlapTags = (j.skill_overlap || []).slice(0, 3)
-    const safeId = escapeHtml(j.id)
+    const safeId = safeJsId(j.id)
 
     return `
     <div id="kanban-card-${safeId}"
@@ -1424,6 +1424,14 @@ function escapeHtml(str) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+}
+
+function safeJsId(id) {
+    if (!id) return ''
+    // Yalnızca alfanümerik, tire ve alt çizgi karakterlerine izin verir (UUID veya standart ID formatı)
+    // Beklenmeyen karakterleri tamamen temizleyerek inline JS event injection riskini sıfırlar
+    return String(id).replace(/[^a-zA-Z0-9_-]/g, '')
 }
 
 function safeUrl(raw) {

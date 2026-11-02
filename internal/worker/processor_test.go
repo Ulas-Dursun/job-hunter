@@ -99,3 +99,24 @@ func TestPoolConsumerNameFor(t *testing.T) {
 		t.Errorf("expected 'worker-2' for workerID 2, got %q", got)
 	}
 }
+
+func TestPoolInFlightLocking(t *testing.T) {
+	pool := New(2, nil, nil, nil, nil, &config.RedisConfig{ConsumerName: "worker"}, nil, nil, false)
+
+	msgID := "test-msg-123"
+	// Simüle et: 1 numaralı worker bu mesajı işlemeye başladı
+	pool.inFlight.Store(msgID, 1)
+
+	// Başka bir worker (ör. 2 numaralı worker veya XAUTOCLAIM) aynı mesajı almaya çalışırsa skip etmeli
+	if _, loaded := pool.inFlight.LoadOrStore(msgID, 2); !loaded {
+		t.Fatalf("expected message %s to be recognized as already in-flight", msgID)
+	}
+
+	// 1 numaralı worker bitirdiğinde kilit serbest kalmalı
+	pool.inFlight.Delete(msgID)
+
+	if _, loaded := pool.inFlight.LoadOrStore(msgID, 2); loaded {
+		t.Fatalf("expected message %s to be free for processing after deletion", msgID)
+	}
+	pool.inFlight.Delete(msgID)
+}

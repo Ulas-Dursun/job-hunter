@@ -32,6 +32,7 @@ type Pool struct {
 	client    *redis.Client
 	cfg       *config.RedisConfig
 	processor *JobProcessor
+	inFlight  sync.Map // messageID (string) -> workerID (int), aktif işlenen mesajları takip eder
 }
 
 // SetPreFilter configures pre-filtering before invoking AI models.
@@ -143,13 +144,26 @@ func (p *Pool) reclaimOrphanedMessages(ctx context.Context, workerID int) {
 		slog.Info("worker reclaimed orphaned PEL messages via XAUTOCLAIM",
 			"worker_id", workerID, "consumer", consumerName, "count", len(msgs))
 		for _, msg := range msgs {
-			p.processor.Process(ctx, msg, workerID)
+			p.processWithLock(ctx, msg, workerID)
 		}
 		if nextStart == "" || nextStart == "0-0" || nextStart == start {
 			return
 		}
 		start = nextStart
 	}
+}
+
+// processWithLock ensures that an in-flight message is never concurrently processed
+// by another worker or reclaimed prematurely via XAUTOCLAIM during active processing/retries.
+func (p *Pool) processWithLock(ctx context.Context, msg redis.XMessage, workerID int) {
+	if _, loaded := p.inFlight.LoadOrStore(msg.ID, workerID); loaded {
+		slog.Warn("worker message already in-flight, skipping duplicate processing",
+			"msg_id", msg.ID, "worker_id", workerID)
+		return
+	}
+	defer p.inFlight.Delete(msg.ID)
+
+	p.processor.Process(ctx, msg, workerID)
 }
 
 func (p *Pool) processNext(ctx context.Context, workerID int) {
@@ -184,7 +198,7 @@ func (p *Pool) processNext(ctx context.Context, workerID int) {
 
 	for _, stream := range streams {
 		for _, msg := range stream.Messages {
-			p.processor.Process(ctx, msg, workerID)
+			p.processWithLock(ctx, msg, workerID)
 		}
 	}
 }

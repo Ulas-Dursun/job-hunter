@@ -54,12 +54,26 @@ func TestParseInterviewResult(t *testing.T) {
 				"question": "How did you handle backpressure in your 5-goroutine worker pool?",
 				"why_they_ask": "Eşzamanlılık ve kuyruk yönetimi bilgisini ölçmek için.",
 				"answer_strategy": "Redis kuyruğu ve exponential backoff mekanizmasını anlat."
+			},
+			{
+				"question": "What PostgreSQL indexing strategy would you use for job search filtering?",
+				"why_they_ask": "Veritabanı optimizasyonu ve sorgu planı analizi yeteneğini ölçmek için.",
+				"answer_strategy": "Compound index ve partial index yaklaşımlarını anlat."
+			},
+			{
+				"question": "How do you prevent goroutine leaks in long-running services?",
+				"why_they_ask": "Bellek yönetimi ve context lifecycle hakimiyetini test etmek için.",
+				"answer_strategy": "Context cancellation ve sync.WaitGroup kullanımını örneklendir."
 			}
 		],
 		"behavioral_questions": [
 			{
 				"question": "Tell me about a time you collaborated in an Agile team.",
 				"star_story_guide": "7 kişilik Scrum ekibindeki Go/Rust servis entegrasyonunu anlat."
+			},
+			{
+				"question": "Describe a situation where a production service was rate-limited.",
+				"star_story_guide": "Groq/Gemini failover ve rate-limit backoff mimarisini kurma sürecini anlat."
 			}
 		],
 		"questions_to_ask": [
@@ -74,11 +88,11 @@ func TestParseInterviewResult(t *testing.T) {
 	if res.RoleFocusSummary == "" {
 		t.Errorf("expected non-empty role focus summary")
 	}
-	if len(res.TechnicalQuestions) != 1 {
-		t.Errorf("expected 1 technical question, got %d", len(res.TechnicalQuestions))
+	if len(res.TechnicalQuestions) != 3 {
+		t.Errorf("expected 3 technical questions, got %d", len(res.TechnicalQuestions))
 	}
-	if len(res.BehavioralQuestions) != 1 {
-		t.Errorf("expected 1 behavioral question, got %d", len(res.BehavioralQuestions))
+	if len(res.BehavioralQuestions) != 2 {
+		t.Errorf("expected 2 behavioral questions, got %d", len(res.BehavioralQuestions))
 	}
 	if len(res.QuestionsToAsk) != 1 {
 		t.Errorf("expected 1 question to ask, got %d", len(res.QuestionsToAsk))
@@ -203,47 +217,109 @@ func TestSanitizeTailoredAssets_UnownedTechInFreeTextGeneratesWarnings(t *testin
 }
 
 func TestParseInterviewResult_SemanticValidation(t *testing.T) {
-	// 1. Teknik sorular boş dizi
-	noTechJSON := `{
+	// 1. Teknik sorular 3'ten az
+	insufficientTechJSON := `{
 		"role_focus_summary": "Focus",
-		"technical_questions": [],
-		"behavioral_questions": [{"question": "Q1", "star_story_guide": "G1"}],
-		"questions_to_ask": []
+		"technical_questions": [
+			{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"},
+			{"question": "Q2", "why_they_ask": "W", "answer_strategy": "A2"}
+		],
+		"behavioral_questions": [
+			{"question": "B1", "star_story_guide": "G1"},
+			{"question": "B2", "star_story_guide": "G2"}
+		],
+		"questions_to_ask": ["Ask 1"]
 	}`
-	if _, err := parseInterviewResult(noTechJSON); err == nil {
-		t.Errorf("expected error for empty technical_questions, got nil")
+	if _, err := parseInterviewResult(insufficientTechJSON); err == nil {
+		t.Errorf("expected error for fewer than 3 technical_questions, got nil")
 	}
 
 	// 2. Teknik soruda answer_strategy boş
 	emptyTechAnswerJSON := `{
 		"role_focus_summary": "Focus",
-		"technical_questions": [{"question": "Q1", "why_they_ask": "W", "answer_strategy": "   "}],
-		"behavioral_questions": [{"question": "Q1", "star_story_guide": "G1"}],
-		"questions_to_ask": []
+		"technical_questions": [
+			{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"},
+			{"question": "Q2", "why_they_ask": "W", "answer_strategy": "   "},
+			{"question": "Q3", "why_they_ask": "W", "answer_strategy": "A3"}
+		],
+		"behavioral_questions": [
+			{"question": "B1", "star_story_guide": "G1"},
+			{"question": "B2", "star_story_guide": "G2"}
+		],
+		"questions_to_ask": ["Ask 1"]
 	}`
 	if _, err := parseInterviewResult(emptyTechAnswerJSON); err == nil {
 		t.Errorf("expected error for empty technical question answer strategy, got nil")
 	}
 
-	// 3. Davranışsal sorular boş dizi
-	noBehJSON := `{
+	// 3. Davranışsal sorular 2'den az
+	insufficientBehJSON := `{
 		"role_focus_summary": "Focus",
-		"technical_questions": [{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"}],
-		"behavioral_questions": [],
-		"questions_to_ask": []
+		"technical_questions": [
+			{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"},
+			{"question": "Q2", "why_they_ask": "W", "answer_strategy": "A2"},
+			{"question": "Q3", "why_they_ask": "W", "answer_strategy": "A3"}
+		],
+		"behavioral_questions": [
+			{"question": "B1", "star_story_guide": "G1"}
+		],
+		"questions_to_ask": ["Ask 1"]
 	}`
-	if _, err := parseInterviewResult(noBehJSON); err == nil {
-		t.Errorf("expected error for empty behavioral_questions, got nil")
+	if _, err := parseInterviewResult(insufficientBehJSON); err == nil {
+		t.Errorf("expected error for fewer than 2 behavioral_questions, got nil")
 	}
 
 	// 4. Davranışsal soruda star_story_guide boş
 	emptyBehGuideJSON := `{
 		"role_focus_summary": "Focus",
-		"technical_questions": [{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"}],
-		"behavioral_questions": [{"question": "Q1", "star_story_guide": ""}],
-		"questions_to_ask": []
+		"technical_questions": [
+			{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"},
+			{"question": "Q2", "why_they_ask": "W", "answer_strategy": "A2"},
+			{"question": "Q3", "why_they_ask": "W", "answer_strategy": "A3"}
+		],
+		"behavioral_questions": [
+			{"question": "B1", "star_story_guide": "G1"},
+			{"question": "B2", "star_story_guide": ""}
+		],
+		"questions_to_ask": ["Ask 1"]
 	}`
 	if _, err := parseInterviewResult(emptyBehGuideJSON); err == nil {
 		t.Errorf("expected error for empty star_story_guide, got nil")
+	}
+
+	// 5. Reverse sorular (questions_to_ask) boş dizi
+	noReverseJSON := `{
+		"role_focus_summary": "Focus",
+		"technical_questions": [
+			{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"},
+			{"question": "Q2", "why_they_ask": "W", "answer_strategy": "A2"},
+			{"question": "Q3", "why_they_ask": "W", "answer_strategy": "A3"}
+		],
+		"behavioral_questions": [
+			{"question": "B1", "star_story_guide": "G1"},
+			{"question": "B2", "star_story_guide": "G2"}
+		],
+		"questions_to_ask": []
+	}`
+	if _, err := parseInterviewResult(noReverseJSON); err == nil {
+		t.Errorf("expected error for empty questions_to_ask, got nil")
+	}
+
+	// 6. Reverse sorularda boş metin elemanı
+	emptyReverseItemJSON := `{
+		"role_focus_summary": "Focus",
+		"technical_questions": [
+			{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"},
+			{"question": "Q2", "why_they_ask": "W", "answer_strategy": "A2"},
+			{"question": "Q3", "why_they_ask": "W", "answer_strategy": "A3"}
+		],
+		"behavioral_questions": [
+			{"question": "B1", "star_story_guide": "G1"},
+			{"question": "B2", "star_story_guide": "G2"}
+		],
+		"questions_to_ask": ["   "]
+	}`
+	if _, err := parseInterviewResult(emptyReverseItemJSON); err == nil {
+		t.Errorf("expected error for empty string in questions_to_ask, got nil")
 	}
 }
