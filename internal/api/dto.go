@@ -73,6 +73,7 @@ type TailorResponseDTO struct {
 	TailoredProjectBullets    []string `json:"tailored_project_bullets"`
 	SkillsHighlight           []string `json:"skills_highlight"`
 	ATSKeywords               []string `json:"ats_keywords"`
+	Warnings                  []string `json:"warnings,omitempty"`
 	Cached                    bool     `json:"cached"`
 }
 

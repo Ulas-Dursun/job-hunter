@@ -33,9 +33,13 @@ var defaultBlacklistKeywords = []string{
 
 // NewCheapFilter, config'deki blacklist_keywords listesinden ve yerleşik kurumsal/kıdem redlerinden filter oluşturur.
 func NewCheapFilter(cfg *config.CandidateConfig) *CheapFilter {
-	seen := make(map[string]struct{}, len(cfg.BlacklistKeywords)+len(defaultBlacklistKeywords))
-	blacklist := make([]string, 0, len(cfg.BlacklistKeywords)+len(defaultBlacklistKeywords))
-	for _, kw := range cfg.BlacklistKeywords {
+	var userKeywords []string
+	if cfg != nil {
+		userKeywords = cfg.BlacklistKeywords
+	}
+	seen := make(map[string]struct{}, len(userKeywords)+len(defaultBlacklistKeywords))
+	blacklist := make([]string, 0, len(userKeywords)+len(defaultBlacklistKeywords))
+	for _, kw := range userKeywords {
 		k := strings.ToLower(strings.TrimSpace(kw))
 		if k != "" {
 			if _, ok := seen[k]; !ok {

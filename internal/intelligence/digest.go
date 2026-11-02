@@ -93,7 +93,12 @@ func (d *EveningDigest) Send(ctx context.Context) {
 	}
 
 	for _, id := range ids {
-		_, _ = d.pool.Exec(ctx, `UPDATE jobs SET notified_at = NOW() WHERE id = $1::uuid`, id)
+		tag, err := d.pool.Exec(ctx, `UPDATE jobs SET notified_at = NOW() WHERE id = $1::uuid`, id)
+		if err != nil {
+			slog.Error("evening digest mark notified failed", "job_id", id, "error", err)
+		} else if tag.RowsAffected() == 0 {
+			slog.Warn("evening digest mark notified affected 0 rows", "job_id", id)
+		}
 	}
 	slog.Info("evening digest sent", "count", len(items))
 }

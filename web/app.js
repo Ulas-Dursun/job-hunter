@@ -367,6 +367,7 @@ function renderJobCard(j) {
     const score = j.match_score || 0
     const scoreColor = getScoreStyle(score)
     const locInfo = formatLocationBadge(j.location)
+    const safeId = escapeHtml(j.id)
 
     const overlapTags = (j.skill_overlap || []).slice(0, 4)
     const missingTags = (j.missing_skills || []).slice(0, 2)
@@ -374,11 +375,11 @@ function renderJobCard(j) {
     const statusBadge = getStatusBadge(j.status)
 
     return `
-    <div id="card-${j.id}" class="job-card bg-dark-surface border border-dark-border rounded-xl p-4 flex flex-col justify-between gap-3 relative">
+    <div id="card-${safeId}" class="job-card bg-dark-surface border border-dark-border rounded-xl p-4 flex flex-col justify-between gap-3 relative">
         <div class="space-y-2">
             <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${meta.label}</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${escapeHtml(meta.label)}</span>
                     <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-textMuted border border-dark-border">${escapeHtml(locInfo)}</span>
                     ${statusBadge}
                 </div>
@@ -388,7 +389,7 @@ function renderJobCard(j) {
                 </div>
             </div>
 
-            <div class="cursor-pointer group" onclick="openDetailModal('${j.id}')">
+            <div class="cursor-pointer group" onclick="openDetailModal('${safeId}')">
                 <div class="text-xs font-semibold text-cyan-400 mb-0.5 flex items-center gap-1">
                     <span>${escapeHtml(j.company)}</span>
                 </div>
@@ -412,7 +413,7 @@ function renderJobCard(j) {
 
         <div class="pt-3 border-t border-dark-border flex items-center justify-between gap-2 mt-1">
             <div class="flex items-center gap-1.5 flex-wrap">
-                <select onchange="updateJobStatus('${j.id}', this.value)" class="text-[11px] px-2 py-1 rounded bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/50">
+                <select onchange="updateJobStatus('${safeId}', this.value)" class="text-[11px] px-2 py-1 rounded bg-dark-card border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400/50">
                     <option value="new" ${j.status === 'new' ? 'selected' : ''}>Yeni</option>
                     <option value="applied" ${j.status === 'applied' ? 'selected' : ''}>Başvurdum</option>
                     <option value="interview" ${j.status === 'interview' ? 'selected' : ''}>Mülakat</option>
@@ -422,29 +423,29 @@ function renderJobCard(j) {
                 </select>
 
                 ${j.status === 'new' || !j.status ? `
-                    <button onclick="updateJobStatus('${j.id}', 'applied')" class="px-2 py-1 rounded text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1" title="Tek tıkla Başvuruldu yap">
+                    <button onclick="updateJobStatus('${safeId}', 'applied')" class="px-2 py-1 rounded text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1" title="Tek tıkla Başvuruldu yap">
                         <span>📨</span> Başvurdum
                     </button>
-                    <button onclick="updateJobStatus('${j.id}', 'skipped')" class="px-2 py-1 rounded text-[10px] font-medium bg-slate-700/30 hover:bg-slate-700/60 text-slate-300 border border-slate-600/50 transition flex items-center gap-1" title="Tek tıkla Geçildi yap (AI geri bildirimini besler)">
+                    <button onclick="updateJobStatus('${safeId}', 'skipped')" class="px-2 py-1 rounded text-[10px] font-medium bg-slate-700/30 hover:bg-slate-700/60 text-slate-300 border border-slate-600/50 transition flex items-center gap-1" title="Tek tıkla Geçildi yap (AI geri bildirimini besler)">
                         <span>⏭</span> Geç
                     </button>
                 ` : j.status === 'applied' ? `
-                    <button onclick="updateJobStatus('${j.id}', 'interview')" class="px-2 py-1 rounded text-[10px] font-semibold bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition flex items-center gap-1" title="Tek tıkla Mülakata taşı">
+                    <button onclick="updateJobStatus('${safeId}', 'interview')" class="px-2 py-1 rounded text-[10px] font-semibold bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition flex items-center gap-1" title="Tek tıkla Mülakata taşı">
                         <span>🎤</span> Mülakat
                     </button>
                 ` : j.status === 'interview' ? `
-                    <button onclick="updateJobStatus('${j.id}', 'offer')" class="px-2 py-1 rounded text-[10px] font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1" title="Tek tıkla Teklif durumuna al">
+                    <button onclick="updateJobStatus('${safeId}', 'offer')" class="px-2 py-1 rounded text-[10px] font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition flex items-center gap-1" title="Tek tıkla Teklif durumuna al">
                         <span>🎉</span> Teklif
                     </button>
                 ` : ''}
 
-                <button onclick="deleteSingleJob('${j.id}')" class="p-1.5 rounded text-dark-textMuted hover:text-rose-400 hover:bg-rose-500/10 transition" title="Bu İlanı Kalıcı Olarak Sil">
+                <button onclick="deleteSingleJob('${safeId}')" class="p-1.5 rounded text-dark-textMuted hover:text-rose-400 hover:bg-rose-500/10 transition" title="Bu İlanı Kalıcı Olarak Sil">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                 </button>
             </div>
 
             <div class="flex items-center gap-1.5">
-                <button onclick="openDetailModal('${j.id}')" class="px-2.5 py-1 rounded text-xs font-medium text-dark-text hover:text-white bg-dark-card border border-dark-border hover:border-slate-500 transition">
+                <button onclick="openDetailModal('${safeId}')" class="px-2.5 py-1 rounded text-xs font-medium text-dark-text hover:text-white bg-dark-card border border-dark-border hover:border-slate-500 transition">
                     Detay
                 </button>
                 <a href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 rounded text-xs font-bold bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500 hover:text-black border border-cyan-500/30 transition flex items-center gap-1">
@@ -511,8 +512,8 @@ function openDetailModal(id) {
     const scoreColor = getScoreStyle(score)
 
     document.getElementById('modal-badges').innerHTML = `
-        <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${meta.label}</span>
-        ${j.role_family ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-text border border-dark-border">${j.role_family}</span>` : ''}
+        <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${escapeHtml(meta.label)}</span>
+        ${j.role_family ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-text border border-dark-border">${escapeHtml(j.role_family)}</span>` : ''}
         ${getStatusBadge(j.status)}
     `
 
@@ -605,6 +606,11 @@ async function preloadModalKits(j) {
 }
 
 function resetTailorAndInterviewDOM() {
+    const banner = document.getElementById('tailor-warning-banner')
+    if (banner) banner.classList.add('hidden')
+    const warnText = document.getElementById('tailor-warning-text')
+    if (warnText) warnText.innerHTML = ''
+
     const idsToClearText = ['tailor-letter-text', 'tailor-cv-summary', 'interview-role-focus']
     idsToClearText.forEach(id => {
         const el = document.getElementById(id)
@@ -772,6 +778,18 @@ async function generateInterviewPrep(force = false, switchAfter = true) {
 }
 
 function renderTailoredData(data) {
+    const banner = document.getElementById('tailor-warning-banner')
+    const warnText = document.getElementById('tailor-warning-text')
+    if (banner && warnText) {
+        if (data.warnings && data.warnings.length > 0) {
+            warnText.innerHTML = data.warnings.map(w => `<div>• ${escapeHtml(w)}</div>`).join('')
+            banner.classList.remove('hidden')
+        } else {
+            banner.classList.add('hidden')
+            warnText.innerHTML = ''
+        }
+    }
+
     document.getElementById('tailor-letter-text').textContent = data.cover_letter || 'Ön yazı oluşturulamadı.'
     document.getElementById('tailor-cv-summary').textContent = data.tailored_summary || 'Özet oluşturulamadı.'
 
@@ -1057,23 +1075,24 @@ function renderKanbanCard(j) {
     const scoreColor = getScoreStyle(score)
     const locInfo = formatLocationBadge(j.location)
     const overlapTags = (j.skill_overlap || []).slice(0, 3)
+    const safeId = escapeHtml(j.id)
 
     return `
-    <div id="kanban-card-${j.id}"
+    <div id="kanban-card-${safeId}"
          class="kanban-card bg-dark-card border border-dark-border hover:border-cyan-500/50 rounded-xl p-3 space-y-2 relative shadow-md group"
          draggable="true"
-         ondragstart="onKanbanDragStart(event, '${j.id}')"
+         ondragstart="onKanbanDragStart(event, '${safeId}')"
          ondragend="onKanbanDragEnd(event)">
         
         <div class="flex items-center justify-between gap-1.5">
-            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${meta.badge}">${meta.label}</span>
+            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${meta.badge}">${escapeHtml(meta.label)}</span>
             <div class="flex items-center gap-1 px-2 py-0.5 rounded border font-mono font-bold text-[11px] ${scoreColor}">
                 <span>⚡</span>
                 <span>${score.toFixed(1)}</span>
             </div>
         </div>
 
-        <div class="cursor-pointer" onclick="openDetailModal('${j.id}')">
+        <div class="cursor-pointer" onclick="openDetailModal('${safeId}')">
             <div class="text-[11px] font-semibold text-cyan-400 truncate mb-0.5">${escapeHtml(j.company)}</div>
             <h4 class="text-xs font-bold text-dark-textHeading group-hover:text-cyan-300 transition line-clamp-2 leading-tight">${escapeHtml(j.title)}</h4>
         </div>
@@ -1086,7 +1105,7 @@ function renderKanbanCard(j) {
         </div>` : ''}
 
         <div class="pt-2 border-t border-dark-border/80 flex items-center justify-between gap-1 mt-1">
-            <select onchange="updateJobStatus('${j.id}', this.value)" onclick="event.stopPropagation()" class="text-[10px] px-1.5 py-1 rounded bg-dark-surface border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400 max-w-[120px]">
+            <select onchange="updateJobStatus('${safeId}', this.value)" onclick="event.stopPropagation()" class="text-[10px] px-1.5 py-1 rounded bg-dark-surface border border-dark-border text-dark-text focus:outline-none focus:border-cyan-400 max-w-[120px]">
                 <option value="new" ${j.status === 'new' ? 'selected' : ''}>📥 Yeni</option>
                 <option value="applied" ${j.status === 'applied' ? 'selected' : ''}>📨 Başvuruldu</option>
                 <option value="interview" ${j.status === 'interview' ? 'selected' : ''}>🎤 Mülakat</option>
@@ -1097,20 +1116,20 @@ function renderKanbanCard(j) {
 
             <div class="flex items-center gap-1">
                 ${j.status === 'new' || !j.status ? `
-                    <button onclick="event.stopPropagation(); updateJobStatus('${j.id}', 'applied')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition" title="Başvuruldu olarak işaretle">
+                    <button onclick="event.stopPropagation(); updateJobStatus('${safeId}', 'applied')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition" title="Başvuruldu olarak işaretle">
                         📨 Başvur
                     </button>
                 ` : j.status === 'applied' ? `
-                    <button onclick="event.stopPropagation(); updateJobStatus('${j.id}', 'interview')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition" title="Mülakata taşı">
+                    <button onclick="event.stopPropagation(); updateJobStatus('${safeId}', 'interview')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition" title="Mülakata taşı">
                         🎤 Mülakat
                     </button>
                 ` : j.status === 'interview' ? `
-                    <button onclick="event.stopPropagation(); updateJobStatus('${j.id}', 'offer')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition" title="Teklif durumuna al">
+                    <button onclick="event.stopPropagation(); updateJobStatus('${safeId}', 'offer')" class="px-1.5 py-1 rounded text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition" title="Teklif durumuna al">
                         🎉 Teklif
                     </button>
                 ` : ''}
 
-                <button onclick="openDetailModal('${j.id}')" class="px-1.5 py-1 rounded text-[10px] bg-dark-surface border border-dark-border text-dark-text hover:text-white transition" title="Detaylar">
+                <button onclick="openDetailModal('${safeId}')" class="px-1.5 py-1 rounded text-[10px] bg-dark-surface border border-dark-border text-dark-text hover:text-white transition" title="Detaylar">
                     👁️
                 </button>
                 <a href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer" class="p-1 rounded bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500 hover:text-black transition" title="İlana Git">
@@ -1199,8 +1218,8 @@ async function updateJobStatus(id, newStatus) {
             if (modalBadges && targetRaw) {
                 const meta = SOURCE_META[targetRaw.source] || { label: targetRaw.source, badge: 'bg-slate-700/30 text-slate-300 border-slate-600' }
                 modalBadges.innerHTML = `
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${meta.label}</span>
-                    ${targetRaw.role_family ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-text border border-dark-border">${targetRaw.role_family}</span>` : ''}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badge}">${escapeHtml(meta.label)}</span>
+                    ${targetRaw.role_family ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-card text-dark-text border border-dark-border">${escapeHtml(targetRaw.role_family)}</span>` : ''}
                     ${getStatusBadge(newStatus)}
                 `
             }

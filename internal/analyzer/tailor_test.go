@@ -164,3 +164,86 @@ func TestPromptBuilder_ChainOfThoughtOrderAndBonus(t *testing.T) {
 		t.Errorf("expected 8.0 threshold alignment in prompt")
 	}
 }
+
+func TestSanitizeTailoredAssets_UnownedTechInFreeTextGeneratesWarnings(t *testing.T) {
+	rawJSON := `{
+		"cover_letter": "I have extensive production experience with Kubernetes and Terraform clusters.",
+		"tailored_summary": "Expert in SAP and Apache Spark data pipelines.",
+		"tailored_experience_bullets": ["Led Kubernetes migrations across AWS infrastructure."],
+		"tailored_project_bullets": ["Built microservices using C#."],
+		"skills_highlight": ["Go", "PostgreSQL"],
+		"ats_keywords": ["Go", "PostgreSQL"]
+	}`
+
+	res, err := parseTailoredResult(rawJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(res.Warnings) == 0 {
+		t.Fatalf("expected warnings for unowned technologies mentioned in free-text fields, got none")
+	}
+
+	foundK8s := false
+	foundCover := false
+	for _, w := range res.Warnings {
+		if strings.Contains(strings.ToLower(w), "kubernetes") {
+			foundK8s = true
+		}
+		if strings.Contains(w, "Cover Letter") {
+			foundCover = true
+		}
+	}
+	if !foundK8s {
+		t.Errorf("expected warning mentioning kubernetes, got: %v", res.Warnings)
+	}
+	if !foundCover {
+		t.Errorf("expected warning mentioning Cover Letter field, got: %v", res.Warnings)
+	}
+}
+
+func TestParseInterviewResult_SemanticValidation(t *testing.T) {
+	// 1. Teknik sorular boş dizi
+	noTechJSON := `{
+		"role_focus_summary": "Focus",
+		"technical_questions": [],
+		"behavioral_questions": [{"question": "Q1", "star_story_guide": "G1"}],
+		"questions_to_ask": []
+	}`
+	if _, err := parseInterviewResult(noTechJSON); err == nil {
+		t.Errorf("expected error for empty technical_questions, got nil")
+	}
+
+	// 2. Teknik soruda answer_strategy boş
+	emptyTechAnswerJSON := `{
+		"role_focus_summary": "Focus",
+		"technical_questions": [{"question": "Q1", "why_they_ask": "W", "answer_strategy": "   "}],
+		"behavioral_questions": [{"question": "Q1", "star_story_guide": "G1"}],
+		"questions_to_ask": []
+	}`
+	if _, err := parseInterviewResult(emptyTechAnswerJSON); err == nil {
+		t.Errorf("expected error for empty technical question answer strategy, got nil")
+	}
+
+	// 3. Davranışsal sorular boş dizi
+	noBehJSON := `{
+		"role_focus_summary": "Focus",
+		"technical_questions": [{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"}],
+		"behavioral_questions": [],
+		"questions_to_ask": []
+	}`
+	if _, err := parseInterviewResult(noBehJSON); err == nil {
+		t.Errorf("expected error for empty behavioral_questions, got nil")
+	}
+
+	// 4. Davranışsal soruda star_story_guide boş
+	emptyBehGuideJSON := `{
+		"role_focus_summary": "Focus",
+		"technical_questions": [{"question": "Q1", "why_they_ask": "W", "answer_strategy": "A1"}],
+		"behavioral_questions": [{"question": "Q1", "star_story_guide": ""}],
+		"questions_to_ask": []
+	}`
+	if _, err := parseInterviewResult(emptyBehGuideJSON); err == nil {
+		t.Errorf("expected error for empty star_story_guide, got nil")
+	}
+}

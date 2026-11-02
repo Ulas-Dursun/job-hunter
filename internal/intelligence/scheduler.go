@@ -66,7 +66,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.generateAndSend(ctx)
-			ticker.Reset(7 * 24 * time.Hour)
+			ticker.Reset(s.untilNextMonday())
 		}
 	}
 }
@@ -81,7 +81,7 @@ func (s *Scheduler) runEveningDigest(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.digest.Send(ctx)
-			ticker.Reset(24 * time.Hour)
+			ticker.Reset(untilNextHour(20, 0))
 		}
 	}
 }

@@ -154,6 +154,23 @@ func TestCheapFilter_RejectsDescriptionStack(t *testing.T) {
 	}
 }
 
+func TestCheapFilter_NilConfig(t *testing.T) {
+	f := filter.NewCheapFilter(nil)
+	if f == nil {
+		t.Fatal("expected non-nil filter even when config is nil")
+	}
+	result := f.Check("Backend Developer", "Acme Corp", "Go and Docker experience")
+	if result.Rejected {
+		t.Errorf("expected clean job to pass, got rejected: %s", result.Reason)
+	}
+
+	// Kara liste boş olsa bile non-tech ve uninformative title filtreleri çalışmalı
+	rejectNonTech := f.Check("Physical Therapist", "Acme Health", "Medical role")
+	if !rejectNonTech.Rejected {
+		t.Errorf("expected non-tech title to be rejected even with nil config")
+	}
+}
+
 func TestCheapFilter_RejectsHighExperienceInDescription(t *testing.T) {
 	f := testFilter()
 

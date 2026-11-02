@@ -119,5 +119,24 @@ func parseInterviewResult(text string) (*InterviewPrepAssets, error) {
 		result.QuestionsToAsk = []string{}
 	}
 
+	// Semantik doğrulama: Modelin geçerli ve dolu sorular üretip üretmediği kontrol edilir.
+	if len(result.TechnicalQuestions) == 0 {
+		return nil, fmt.Errorf("interview prep validation: no technical questions generated")
+	}
+	for i, q := range result.TechnicalQuestions {
+		if strings.TrimSpace(q.Question) == "" || strings.TrimSpace(q.AnswerStrategy) == "" {
+			return nil, fmt.Errorf("interview prep validation: technical question %d missing question or answer strategy", i+1)
+		}
+	}
+
+	if len(result.BehavioralQuestions) == 0 {
+		return nil, fmt.Errorf("interview prep validation: no behavioral questions generated")
+	}
+	for i, b := range result.BehavioralQuestions {
+		if strings.TrimSpace(b.Question) == "" || strings.TrimSpace(b.STARStoryGuide) == "" {
+			return nil, fmt.Errorf("interview prep validation: behavioral question %d missing question or star guide", i+1)
+		}
+	}
+
 	return &result, nil
 }

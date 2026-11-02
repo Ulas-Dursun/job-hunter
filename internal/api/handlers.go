@@ -210,6 +210,7 @@ func (h *Handlers) TailorJob(w http.ResponseWriter, r *http.Request) {
 		TailoredProjectBullets:    assets.TailoredProjectBullets,
 		SkillsHighlight:           assets.SkillsHighlight,
 		ATSKeywords:               assets.ATSKeywords,
+		Warnings:                  assets.Warnings,
 		Cached:                    false,
 	}
 

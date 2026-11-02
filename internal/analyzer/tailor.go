@@ -21,6 +21,7 @@ type TailoredAssets struct {
 	TailoredProjectBullets    []string `json:"tailored_project_bullets"`
 	SkillsHighlight           []string `json:"skills_highlight"`
 	ATSKeywords               []string `json:"ats_keywords"`
+	Warnings                  []string `json:"warnings,omitempty"`
 }
 
 // TailorService coordinates ATS CV customization, Cover Letter generation, and Interview Prep via Gemini / Groq failover chain.
@@ -314,5 +315,36 @@ func sanitizeTailoredAssets(res *TailoredAssets, unownedList []string) {
 		if isUnownedSkill(kw, unownedList...) && !strings.Contains(low, "gap") && !strings.Contains(low, "eksik") {
 			res.ATSKeywords[i] = kw + " (gap — do not claim on CV)"
 		}
+	}
+
+	// Serbest metinlerde (ön yazı, özet ve maddeler) adayın profilinde bulunmayan teknoloji denetimi.
+	// Cümle gramerini bozmamak için metin körlemesine kırpılmaz; bunun yerine belirgin uyarı (warning)
+	// üretilerek arayüzde kullanıcıya "Manuel Kontrol Gerekli" durumu sunulur ve loglanır.
+	detectedUnowned := make(map[string]bool)
+	checkField := func(fieldName, text string) {
+		low := strings.ToLower(text)
+		for _, bad := range unownedList {
+			b := strings.ToLower(strings.TrimSpace(bad))
+			if b != "" && containsTechToken(low, b) {
+				key := fmt.Sprintf("%s:%s", fieldName, b)
+				if !detectedUnowned[key] {
+					detectedUnowned[key] = true
+					if res.Warnings == nil {
+						res.Warnings = []string{}
+					}
+					slog.Warn("unowned technology detected in tailored free text", "field", fieldName, "tech", b)
+					res.Warnings = append(res.Warnings, fmt.Sprintf("%s içinde adayın profilinde yer almayan teknoloji tespit edildi: %s (gözden geçirin)", fieldName, b))
+				}
+			}
+		}
+	}
+
+	checkField("Cover Letter", res.CoverLetter)
+	checkField("Özet (Summary)", res.TailoredSummary)
+	for _, b := range res.TailoredExperienceBullets {
+		checkField("Deneyim Maddeleri", b)
+	}
+	for _, b := range res.TailoredProjectBullets {
+		checkField("Proje Maddeleri", b)
 	}
 }

@@ -19,7 +19,9 @@ import (
 )
 
 // orphanedMinIdle is the minimum idle time in PEL before a pending message is reclaimed via XAUTOCLAIM.
-const orphanedMinIdle = 5 * time.Minute
+// Set to 15 minutes to strictly exceed the maximum cumulative transient retry backoff (~9 minutes),
+// ensuring an active worker in exponential backoff is never overtaken by another worker.
+const orphanedMinIdle = 15 * time.Minute
 
 // autoClaimInterval controls how often workers check for orphaned PEL messages from dead consumers.
 const autoClaimInterval = 2 * time.Minute
