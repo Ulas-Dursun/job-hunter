@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/ulasdursun/job-hunter/internal/config"
@@ -20,7 +21,7 @@ type RedisClient struct {
 func NewRedisClient(ctx context.Context, addr string, cfg *config.RedisConfig) (*RedisClient, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
-		Password: "",
+		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       0,
 	})
 

@@ -108,6 +108,12 @@ Return this exact JSON structure (evaluate reasoning, overlap, gaps, and red_fla
   "red_flags": [<concerns: wrong stack, too senior, irrelevant domain, visa issue>],
   "role_family": "<primary|secondary>",
   "match_score": <float 0.0-10.0>,
+  "score_breakdown": {
+    "tech_fit": <float 0.0-5.0>,
+    "seniority_fit": <float 0.0-2.5>,
+    "domain_fit": <float 0.0-1.5>,
+    "location_fit": <float 0.0-1.0>
+  },
   "action": "<apply|watch|skip>"
 }
 

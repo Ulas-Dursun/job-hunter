@@ -170,7 +170,7 @@ func PostgresDSN() string {
 		getEnv("POSTGRES_USER", "jobhunter"),
 		getEnv("POSTGRES_PASSWORD", "jobhunter"),
 		getEnv("POSTGRES_HOST", "localhost"),
-		getEnv("POSTGRES_PORT", "5432"),
+		getEnv("POSTGRES_PORT", "5433"),
 		getEnv("POSTGRES_DB", "jobhunter"),
 	)
 }

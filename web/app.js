@@ -737,7 +737,7 @@ async function generateInterviewPrep(force = false, switchAfter = true) {
         if (switchAfter) {
             loading.classList.remove('hidden')
             if (loadingTitle) loadingTitle.textContent = 'Gemini Mülakat Hazırlık Kitini Hazırlıyor...'
-            if (loadingDesc) loadingDesc.textContent = 'Şirketin teknoloji yığını ve projelerinize özel 5 Teknik + 3 STAR Mülakat Sorusu ve Cevap Rehberi kurgulanıyor.'
+            if (loadingDesc) loadingDesc.textContent = 'Şirketin teknoloji yığını ve projelerinize özel 3 Teknik + 2 STAR Mülakat Sorusu ve Cevap Rehberi kurgulanıyor.'
             contentLetter.classList.add('hidden')
             contentCv.classList.add('hidden')
             contentKw.classList.add('hidden')
@@ -924,8 +924,8 @@ async function copyActiveTailorTab() {
         const revText = (currentInterviewData.questions_to_ask || []).map(r => `• ${r}`).join('\n')
 
         textToCopy = `MÜLAKAT & ROL ODAK ÖZETİ:\n${currentInterviewData.role_focus_summary || ''}\n\n` +
-                     `5 TEKNİK MÜLAKAT SORUSU & CEVAP REHBERİ:\n${techText}\n\n` +
-                     `3 DAVRANIŞSAL (STAR) SORU REHBERİ:\n${starText}\n\n` +
+                     `3 TEKNİK MÜLAKAT SORUSU & CEVAP REHBERİ:\n${techText}\n\n` +
+                     `2 DAVRANIŞSAL (STAR) SORU REHBERİ:\n${starText}\n\n` +
                      `MÜLAKATÇIYA SORULACAK SORULAR:\n${revText}`
     } else {
         if (!currentTailorData) return
@@ -1235,7 +1235,7 @@ async function updateJobStatus(id, newStatus) {
             if (STATE.selectedJob && STATE.selectedJob.id === id) {
                 openInterviewPrepTab()
             } else if (targetRaw && !targetRaw.has_interview_prep) {
-                toast('🎤 Mülakat Hazırlık Kiti (5 Teknik + 3 STAR) arka planda hazırlanıyor...', 'info')
+                toast('🎤 Mülakat Hazırlık Kiti (3 Teknik + 2 STAR) arka planda hazırlanıyor...', 'info')
                 API.interviewPrep(id, false)
                     .then(() => {
                         if (targetRaw) targetRaw.has_interview_prep = true

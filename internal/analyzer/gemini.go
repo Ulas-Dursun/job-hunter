@@ -13,15 +13,24 @@ import (
 	"github.com/ulasdursun/job-hunter/internal/config"
 )
 
+// ScoreBreakdown, AI eşleşme puanının nesnel alt bileşenlerini tutar.
+type ScoreBreakdown struct {
+	TechFit      float64 `json:"tech_fit,omitempty"`
+	SeniorityFit float64 `json:"seniority_fit,omitempty"`
+	DomainFit    float64 `json:"domain_fit,omitempty"`
+	LocationFit  float64 `json:"location_fit,omitempty"`
+}
+
 // ScoreResult, AI'ın bir ilan için ürettiği yapılandırılmış analiz sonucu.
 type ScoreResult struct {
-	MatchScore    float64  `json:"match_score"`
-	RoleFamily    string   `json:"role_family"`
-	SkillOverlap  []string `json:"skill_overlap"`
-	MissingSkills []string `json:"missing_skills"`
-	RedFlags      []string `json:"red_flags"`
-	Action        string   `json:"action"`
-	Reasoning     string   `json:"reasoning"`
+	MatchScore     float64         `json:"match_score"`
+	RoleFamily     string          `json:"role_family"`
+	SkillOverlap   []string        `json:"skill_overlap"`
+	MissingSkills  []string        `json:"missing_skills"`
+	RedFlags       []string        `json:"red_flags"`
+	ScoreBreakdown *ScoreBreakdown `json:"score_breakdown,omitempty"`
+	Action         string          `json:"action"`
+	Reasoning      string          `json:"reasoning"`
 }
 
 // GeminiAnalyzer, Google Gemini ve Groq API havuzu üzerinden kesintisiz (failover destekli) iş ilanı analizi yapar.

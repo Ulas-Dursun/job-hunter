@@ -12,11 +12,11 @@
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat&logo=github-sponsors)](https://github.com/sponsors/Ulas-Dursun)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/ulasdursun)
 
-**Job Hunter** is a distributed, event-driven job aggregation, scoring, and career-ops platform built with **Go**, **Python**, **Redis Streams**, and **PostgreSQL**. It continuously harvests software, cloud/DevOps, data/AI, and aerospace engineering roles across **Europe and Turkey**, filters out >70% of recruitment noise in microseconds before touching an LLM quota, and provides **preference-aware AI scoring, hallucination-safe resume tailoring, STAR interview preparation, and a full Kanban CRM**.
+**Job Hunter** is a distributed, event-driven job aggregation, scoring, and career-ops platform built with **Go**, **Python**, **Redis Streams**, and **PostgreSQL**. It continuously harvests software, cloud/DevOps, data/AI, and aerospace engineering roles across **Europe and Turkey**, filters out >70% of recruitment noise in microseconds before touching an LLM quota, and provides **preference-aware AI scoring with explainable breakdown, sanitized resume tailoring with human-in-the-loop review guards, STAR interview preparation, and a full Kanban CRM**.
 
 > [!NOTE]
 > **🏆 Open-Source Ecosystem Recognition — [XERJ Corpus Hub](https://hub.xerj.org/contributors/Ulas-Dursun):**  
-> Job Hunter's dual-stage deterministic filtering, multi-key sticky AI failover, and hallucination-safe ATS tailoring patterns are indexed as a verified open-source contribution in the **[XERJ Corpus Hub](https://hub.xerj.org/contributors/Ulas-Dursun)**.
+> Job Hunter's dual-stage deterministic filtering, multi-key sticky AI failover, and sanitized ATS tailoring with human-in-the-loop review guards are indexed as a verified open-source contribution in the **[XERJ Corpus Hub](https://hub.xerj.org/contributors/Ulas-Dursun)**.
 
 ---
 
@@ -88,10 +88,10 @@ flowchart TD
 * **Self-Calibrating Kanban Feedback Loop**: Periodically queries your real `applied / interview / offer` vs. `skipped / rejected` decisions from PostgreSQL and injects your historical preference profile into the scoring prompt.
 * **Anti-Clustering Granular Rubric**: Separates `8.0+` (Jackpot Apply), `7.0–7.9` (Strong Apply), `6.8–7.3` (0–2 yr High Watch), and `5.8–6.5` (3+ yr Mid-Level Stretch).
 
-### 3. Hallucination-Safe CV Tailor & STAR Interview Prep Kit
+### 3. Human-Guarded CV Tailor & STAR Interview Prep Kit
 * **Language-Aware Generation**: Automatically writes cover letters and CV bullets in **Turkish** for Turkish postings and **English** for international postings.
-* **Recruiter-Ready Brevity**: Generates concise **130–170 word (3-paragraph)** cover letters and **≤ 22-word** high-impact CV bullet points grounded strictly in the candidate's verified profile.
-* **Deterministic Anti-Hallucination Sanitizer**: Post-processes LLM output to strip unowned technologies from `skills_highlight` and explicitly flags missing tools in `ats_keywords` with `⚠ (gap — do not claim on CV)`.
+* **Recruiter-Ready Brevity**: Prompts concise **130–170 word (3-paragraph)** cover letters and **≤ 22-word** high-impact CV bullet points grounded strictly in the candidate's verified profile.
+* **Deterministic Sanitization & Review Guard**: Post-processes LLM output to strip unowned technologies from `skills_highlight` and explicitly flags missing tools in `ats_keywords` with `⚠ (gap — do not claim on CV)`. Any unowned technology detected in free-text (cover letter/summary) raises an actionable **"Manual Review Required"** alert banner.
 * **One-Click Interview Prep Kit**: Generates **3 role-specific technical questions** (with *Why They Ask* + *Answer Strategy*), **2 behavioral STAR stories** mapped to real candidate projects, and **reverse questions** for the interviewer. Automatically pre-generates in the background when a job card is moved to `Interview`.
 
 ### 4. Two-Tier Telegram Notifications & System Health Guard
