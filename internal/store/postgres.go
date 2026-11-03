@@ -87,6 +87,7 @@ func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cover_letter TEXT;
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS tailored_cv JSONB;
 		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS interview_prep JSONB;
+		ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_breakdown JSONB;
 	`)
 	return err
 }

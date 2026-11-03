@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ulasdursun/job-hunter/internal/analyzer"
 )
 
 // ErrNotFound, istenen ilan kaydı bulunamadığında döner (HTTP 404'e çevrilir).
@@ -47,6 +49,7 @@ const baseJobColumns = `
 	COALESCE(skill_overlap, '{}'),
 	COALESCE(missing_skills, '{}'),
 	COALESCE(red_flags, '{}'),
+	score_breakdown,
 	ai_action, ai_reasoning, role_family, status,
 	(cover_letter IS NOT NULL AND cover_letter <> '' AND tailored_cv IS NOT NULL) AS has_tailored,
 	(interview_prep IS NOT NULL) AS has_interview_prep,
@@ -87,14 +90,22 @@ func (r *Repository) ListJobs(ctx context.Context, f JobFilter) ([]JobDTO, int, 
 	var jobs []JobDTO
 	for rows.Next() {
 		var j JobDTO
+		var rawBreakdown []byte
 		if err := rows.Scan(
 			&j.ID, &j.Source, &j.Title, &j.Company, &j.Location, &j.URL,
 			&j.Description, &j.PostedAt,
 			&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
+			&rawBreakdown,
 			&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status,
 			&j.HasTailored, &j.HasInterviewPrep, &j.ScrapedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning job row: %w", err)
+		}
+		if len(rawBreakdown) > 0 {
+			var sb analyzer.ScoreBreakdown
+			if err := json.Unmarshal(rawBreakdown, &sb); err == nil {
+				j.ScoreBreakdown = &sb
+			}
 		}
 		jobs = append(jobs, j)
 	}
@@ -135,10 +146,12 @@ func (r *Repository) GetJob(ctx context.Context, id string) (*JobDTO, error) {
 	query := fmt.Sprintf(`SELECT %s FROM jobs WHERE id = $1::uuid`, baseJobColumns)
 
 	var j JobDTO
+	var rawBreakdown []byte
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&j.ID, &j.Source, &j.Title, &j.Company, &j.Location, &j.URL,
 		&j.Description, &j.PostedAt,
 		&j.MatchScore, &j.SkillOverlap, &j.MissingSkills, &j.RedFlags,
+		&rawBreakdown,
 		&j.AIAction, &j.AIReasoning, &j.RoleFamily, &j.Status,
 		&j.HasTailored, &j.HasInterviewPrep, &j.ScrapedAt,
 	)
@@ -147,6 +160,12 @@ func (r *Repository) GetJob(ctx context.Context, id string) (*JobDTO, error) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("getting job %s: %w", id, err)
+	}
+	if len(rawBreakdown) > 0 {
+		var sb analyzer.ScoreBreakdown
+		if err := json.Unmarshal(rawBreakdown, &sb); err == nil {
+			j.ScoreBreakdown = &sb
+		}
 	}
 	return &j, nil
 }

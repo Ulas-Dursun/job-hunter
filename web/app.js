@@ -531,6 +531,36 @@ function openDetailModal(id) {
 
     document.getElementById('modal-reasoning').textContent = j.ai_reasoning || 'AI gerekçesi henüz oluşturulmadı.'
 
+    const bdCont = document.getElementById('modal-breakdown-container')
+    const bdGrid = document.getElementById('modal-breakdown-grid')
+    if (bdCont && bdGrid) {
+        if (j.score_breakdown && (j.score_breakdown.tech_fit || j.score_breakdown.seniority_fit)) {
+            const b = j.score_breakdown
+            bdGrid.innerHTML = `
+                <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
+                    <div class="text-[10px] text-dark-textMuted mb-0.5">Teknoloji</div>
+                    <div class="font-mono font-bold text-cyan-300 text-xs">${(b.tech_fit || 0).toFixed(1)} / 5.0</div>
+                </div>
+                <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
+                    <div class="text-[10px] text-dark-textMuted mb-0.5">Kıdem & Rol</div>
+                    <div class="font-mono font-bold text-emerald-300 text-xs">${(b.seniority_fit || 0).toFixed(1)} / 2.5</div>
+                </div>
+                <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
+                    <div class="text-[10px] text-dark-textMuted mb-0.5">Alan / Domain</div>
+                    <div class="font-mono font-bold text-purple-300 text-xs">${(b.domain_fit || 0).toFixed(1)} / 1.5</div>
+                </div>
+                <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
+                    <div class="text-[10px] text-dark-textMuted mb-0.5">Lokasyon</div>
+                    <div class="font-mono font-bold text-amber-300 text-xs">${(b.location_fit || 0).toFixed(1)} / 1.0</div>
+                </div>
+            `
+            bdCont.classList.remove('hidden')
+        } else {
+            bdCont.classList.add('hidden')
+            bdGrid.innerHTML = ''
+        }
+    }
+
     document.getElementById('modal-overlap').innerHTML = (j.skill_overlap || []).length
         ? j.skill_overlap.map(s => `<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ ${escapeHtml(s)}</span>`).join('')
         : '<span class="text-[11px] text-dark-textMuted italic">Eşleşen beceri yok</span>'

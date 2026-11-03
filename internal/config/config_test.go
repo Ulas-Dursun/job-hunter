@@ -92,3 +92,21 @@ func TestLoadLocalOverrideAndFallback(t *testing.T) {
 		t.Errorf("expected local override candidate name 'Local Override User', got %q", cfgLocal.Candidate.Name)
 	}
 }
+
+func TestPostgresDSN(t *testing.T) {
+	dsn := config.PostgresDSN()
+	if !strings.HasPrefix(dsn, "postgres://") {
+		t.Fatalf("expected DSN to start with 'postgres://', got: %s", dsn)
+	}
+	if !strings.Contains(dsn, "@localhost:5433/jobhunter?sslmode=disable") {
+		t.Fatalf("expected DSN to target localhost:5433/jobhunter, got: %s", dsn)
+	}
+	if strings.Contains(dsn, "%!(EXTRA") {
+		t.Fatalf("detected format string parameter mismatch in DSN: %s", dsn)
+	}
+
+	masked := config.MaskedPostgresDSN()
+	if !strings.Contains(masked, ":%2A%2A%2A@") && !strings.Contains(masked, ":***@") {
+		t.Fatalf("expected masked DSN to hide password, got: %s", masked)
+	}
+}

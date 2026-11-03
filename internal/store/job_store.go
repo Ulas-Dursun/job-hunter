@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -45,13 +46,14 @@ func (s *JobStore) Upsert(ctx context.Context, rec JobRecord) error {
 	}
 
 	var (
-		matchScore    *float64
-		skillOverlap  []string
-		missingSkills []string
-		redFlags      []string
-		aiAction      *string
-		aiReasoning   *string
-		roleFamily    *string
+		matchScore         *float64
+		skillOverlap       []string
+		missingSkills      []string
+		redFlags           []string
+		aiAction           *string
+		aiReasoning        *string
+		roleFamily         *string
+		scoreBreakdownJSON []byte
 	)
 
 	if rec.Score != nil {
@@ -62,6 +64,11 @@ func (s *JobStore) Upsert(ctx context.Context, rec JobRecord) error {
 		aiAction = &rec.Score.Action
 		aiReasoning = &rec.Score.Reasoning
 		roleFamily = &rec.Score.RoleFamily
+		if rec.Score.ScoreBreakdown != nil {
+			if b, err := json.Marshal(rec.Score.ScoreBreakdown); err == nil {
+				scoreBreakdownJSON = b
+			}
+		}
 
 		// Nil slice yerine boş slice — PostgreSQL NULL yerine {} yazar
 		if skillOverlap == nil {
@@ -80,23 +87,24 @@ func (s *JobStore) Upsert(ctx context.Context, rec JobRecord) error {
 			source, external_id, url, title, company, location,
 			description, posted_at,
 			match_score, skill_overlap, missing_skills, red_flags,
-			ai_action, ai_reasoning, role_family
+			ai_action, ai_reasoning, role_family, score_breakdown
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8,
 			$9, $10, $11, $12,
-			$13, $14, $15
+			$13, $14, $15, $16
 		)
 		ON CONFLICT (source, external_id)
 		DO UPDATE SET
-			match_score    = EXCLUDED.match_score,
-			skill_overlap  = EXCLUDED.skill_overlap,
-			missing_skills = EXCLUDED.missing_skills,
-			red_flags      = EXCLUDED.red_flags,
-			ai_action      = EXCLUDED.ai_action,
-			ai_reasoning   = EXCLUDED.ai_reasoning,
-			role_family    = EXCLUDED.role_family,
-			updated_at     = NOW()
+			match_score     = EXCLUDED.match_score,
+			skill_overlap   = EXCLUDED.skill_overlap,
+			missing_skills  = EXCLUDED.missing_skills,
+			red_flags       = EXCLUDED.red_flags,
+			ai_action       = EXCLUDED.ai_action,
+			ai_reasoning    = EXCLUDED.ai_reasoning,
+			role_family     = EXCLUDED.role_family,
+			score_breakdown = EXCLUDED.score_breakdown,
+			updated_at      = NOW()
 		WHERE jobs.match_score IS NULL
 	`,
 		truncateRunes(rec.Source, 50),
@@ -107,7 +115,7 @@ func (s *JobStore) Upsert(ctx context.Context, rec JobRecord) error {
 		truncateRunes(rec.Location, 255),
 		rec.Description, postedAt,
 		matchScore, skillOverlap, missingSkills, redFlags,
-		aiAction, aiReasoning, roleFamily,
+		aiAction, aiReasoning, roleFamily, scoreBreakdownJSON,
 	)
 
 	if err != nil {

@@ -18,8 +18,9 @@ type JobDTO struct {
 	MatchScore       *float64   `json:"match_score"`
 	SkillOverlap     []string   `json:"skill_overlap"`
 	MissingSkills    []string   `json:"missing_skills"`
-	RedFlags         []string   `json:"red_flags"`
-	AIAction         *string    `json:"ai_action"`
+	RedFlags         []string                 `json:"red_flags"`
+	ScoreBreakdown   *analyzer.ScoreBreakdown `json:"score_breakdown,omitempty"`
+	AIAction         *string                  `json:"ai_action"`
 	AIReasoning      *string    `json:"ai_reasoning"`
 	RoleFamily       *string    `json:"role_family"`
 	Status           string     `json:"status"`
