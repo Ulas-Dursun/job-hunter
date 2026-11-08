@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -161,15 +162,16 @@ func TestPromptBuilder_ChainOfThoughtOrderAndBonus(t *testing.T) {
 	idxOverlap := strings.Index(prompt, `"skill_overlap":`)
 	idxMissing := strings.Index(prompt, `"missing_skills":`)
 	idxFlags := strings.Index(prompt, `"red_flags":`)
+	idxBreakdown := strings.Index(prompt, `"score_breakdown":`)
 	idxScore := strings.Index(prompt, `"match_score":`)
 	idxAction := strings.Index(prompt, `"action":`)
 
-	if idxReasoning == -1 || idxOverlap == -1 || idxMissing == -1 || idxFlags == -1 || idxScore == -1 || idxAction == -1 {
+	if idxReasoning == -1 || idxOverlap == -1 || idxMissing == -1 || idxFlags == -1 || idxBreakdown == -1 || idxScore == -1 || idxAction == -1 {
 		t.Fatalf("missing expected JSON keys in prompt schema")
 	}
-	if !(idxReasoning < idxOverlap && idxOverlap < idxMissing && idxMissing < idxFlags && idxFlags < idxScore && idxScore < idxAction) {
-		t.Errorf("expected CoT JSON field order (reasoning -> overlap -> missing -> red_flags -> match_score -> action), got indices: reasoning=%d overlap=%d missing=%d flags=%d score=%d action=%d",
-			idxReasoning, idxOverlap, idxMissing, idxFlags, idxScore, idxAction)
+	if !(idxReasoning < idxOverlap && idxOverlap < idxMissing && idxMissing < idxFlags && idxFlags < idxBreakdown && idxBreakdown < idxScore && idxScore < idxAction) {
+		t.Errorf("expected CoT JSON field order (reasoning -> overlap -> missing -> red_flags -> score_breakdown -> match_score -> action), got indices: reasoning=%d overlap=%d missing=%d flags=%d breakdown=%d score=%d action=%d",
+			idxReasoning, idxOverlap, idxMissing, idxFlags, idxBreakdown, idxScore, idxAction)
 	}
 	if !strings.Contains(prompt, "STRONG ARCHITECTURAL & AI PRACTITIONER BONUS (+0.4 to +0.5)") {
 		t.Errorf("expected Strong Architectural & AI Practitioner bonus rule in prompt")
@@ -321,5 +323,55 @@ func TestParseInterviewResult_SemanticValidation(t *testing.T) {
 	}`
 	if _, err := parseInterviewResult(emptyReverseItemJSON); err == nil {
 		t.Errorf("expected error for empty string in questions_to_ask, got nil")
+	}
+}
+
+func TestParseResult_ScoreBreakdownClampingAndZeroPreservation(t *testing.T) {
+	raw := `{
+		"reasoning": "Test reasoning.",
+		"role_family": "backend",
+		"skill_overlap": ["Go"],
+		"missing_skills": ["Kubernetes"],
+		"red_flags": [],
+		"score_breakdown": {
+			"tech_fit": 7.5,
+			"seniority_fit": -1.0,
+			"domain_fit": 2.0,
+			"location_fit": 0.0
+		},
+		"match_score": 12.0,
+		"action": "apply"
+	}`
+
+	res, err := parseResult(raw)
+	if err != nil {
+		t.Fatalf("parseResult failed: %v", err)
+	}
+	if res.MatchScore != 10.0 {
+		t.Errorf("expected MatchScore clamped to 10.0, got %v", res.MatchScore)
+	}
+	if res.ScoreBreakdown == nil {
+		t.Fatalf("expected ScoreBreakdown to be non-nil")
+	}
+	if res.ScoreBreakdown.TechFit != 5.0 {
+		t.Errorf("expected TechFit clamped to 5.0, got %v", res.ScoreBreakdown.TechFit)
+	}
+	if res.ScoreBreakdown.SeniorityFit != 0.0 {
+		t.Errorf("expected SeniorityFit clamped to 0.0, got %v", res.ScoreBreakdown.SeniorityFit)
+	}
+	if res.ScoreBreakdown.DomainFit != 1.5 {
+		t.Errorf("expected DomainFit clamped to 1.5, got %v", res.ScoreBreakdown.DomainFit)
+	}
+	if res.ScoreBreakdown.LocationFit != 0.0 {
+		t.Errorf("expected LocationFit 0.0, got %v", res.ScoreBreakdown.LocationFit)
+	}
+
+	b, err := json.Marshal(res.ScoreBreakdown)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	jsonStr := string(b)
+	if !strings.Contains(jsonStr, `"seniority_fit":0`) || !strings.Contains(jsonStr, `"location_fit":0`) {
+		t.Errorf("expected 0.0 fields to be preserved in JSON (no omitempty), got: %s", jsonStr)
 	}
 }

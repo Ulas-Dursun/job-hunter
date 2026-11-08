@@ -94,12 +94,18 @@ func TestLoadLocalOverrideAndFallback(t *testing.T) {
 }
 
 func TestPostgresDSN(t *testing.T) {
+	t.Setenv("POSTGRES_USER", "jobhunter")
+	t.Setenv("POSTGRES_PASSWORD", "jobhunter")
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_PORT", "")
+	t.Setenv("POSTGRES_DB", "jobhunter")
+
 	dsn := config.PostgresDSN()
 	if !strings.HasPrefix(dsn, "postgres://") {
 		t.Fatalf("expected DSN to start with 'postgres://', got: %s", dsn)
 	}
 	if !strings.Contains(dsn, "@localhost:5433/jobhunter?sslmode=disable") {
-		t.Fatalf("expected DSN to target localhost:5433/jobhunter, got: %s", dsn)
+		t.Fatalf("expected default fallback port 5433 in DSN, got: %s", dsn)
 	}
 	if strings.Contains(dsn, "%!(EXTRA") {
 		t.Fatalf("detected format string parameter mismatch in DSN: %s", dsn)
@@ -108,5 +114,11 @@ func TestPostgresDSN(t *testing.T) {
 	masked := config.MaskedPostgresDSN()
 	if !strings.Contains(masked, ":%2A%2A%2A@") && !strings.Contains(masked, ":***@") {
 		t.Fatalf("expected masked DSN to hide password, got: %s", masked)
+	}
+
+	t.Setenv("POSTGRES_PORT", "5439")
+	customDSN := config.PostgresDSN()
+	if !strings.Contains(customDSN, "@localhost:5439/jobhunter?sslmode=disable") {
+		t.Fatalf("expected custom port 5439 in DSN, got: %s", customDSN)
 	}
 }

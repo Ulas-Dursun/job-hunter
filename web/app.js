@@ -534,24 +534,25 @@ function openDetailModal(id) {
     const bdCont = document.getElementById('modal-breakdown-container')
     const bdGrid = document.getElementById('modal-breakdown-grid')
     if (bdCont && bdGrid) {
-        if (j.score_breakdown && (j.score_breakdown.tech_fit || j.score_breakdown.seniority_fit)) {
-            const b = j.score_breakdown
+        const b = j.score_breakdown
+        const hasBreakdown = b && (b.tech_fit != null || b.seniority_fit != null || b.domain_fit != null || b.location_fit != null)
+        if (hasBreakdown) {
             bdGrid.innerHTML = `
                 <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
                     <div class="text-[10px] text-dark-textMuted mb-0.5">Teknoloji</div>
-                    <div class="font-mono font-bold text-cyan-300 text-xs">${(b.tech_fit || 0).toFixed(1)} / 5.0</div>
+                    <div class="font-mono font-bold text-cyan-300 text-xs">${Number(b.tech_fit || 0).toFixed(1)} / 5.0</div>
                 </div>
                 <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
                     <div class="text-[10px] text-dark-textMuted mb-0.5">Kıdem & Rol</div>
-                    <div class="font-mono font-bold text-emerald-300 text-xs">${(b.seniority_fit || 0).toFixed(1)} / 2.5</div>
+                    <div class="font-mono font-bold text-emerald-300 text-xs">${Number(b.seniority_fit || 0).toFixed(1)} / 2.5</div>
                 </div>
                 <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
                     <div class="text-[10px] text-dark-textMuted mb-0.5">Alan / Domain</div>
-                    <div class="font-mono font-bold text-purple-300 text-xs">${(b.domain_fit || 0).toFixed(1)} / 1.5</div>
+                    <div class="font-mono font-bold text-purple-300 text-xs">${Number(b.domain_fit || 0).toFixed(1)} / 1.5</div>
                 </div>
                 <div class="p-2 rounded bg-dark-card border border-dark-border text-center">
                     <div class="text-[10px] text-dark-textMuted mb-0.5">Lokasyon</div>
-                    <div class="font-mono font-bold text-amber-300 text-xs">${(b.location_fit || 0).toFixed(1)} / 1.0</div>
+                    <div class="font-mono font-bold text-amber-300 text-xs">${Number(b.location_fit || 0).toFixed(1)} / 1.0</div>
                 </div>
             `
             bdCont.classList.remove('hidden')

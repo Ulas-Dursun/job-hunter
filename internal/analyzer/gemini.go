@@ -15,10 +15,10 @@ import (
 
 // ScoreBreakdown, AI eşleşme puanının nesnel alt bileşenlerini tutar.
 type ScoreBreakdown struct {
-	TechFit      float64 `json:"tech_fit,omitempty"`
-	SeniorityFit float64 `json:"seniority_fit,omitempty"`
-	DomainFit    float64 `json:"domain_fit,omitempty"`
-	LocationFit  float64 `json:"location_fit,omitempty"`
+	TechFit      float64 `json:"tech_fit"`
+	SeniorityFit float64 `json:"seniority_fit"`
+	DomainFit    float64 `json:"domain_fit"`
+	LocationFit  float64 `json:"location_fit"`
 }
 
 // ScoreResult, AI'ın bir ilan için ürettiği yapılandırılmış analiz sonucu.
@@ -128,7 +128,24 @@ func parseResult(text string) (*ScoreResult, error) {
 		result.MatchScore = 10
 	}
 
+	if b := result.ScoreBreakdown; b != nil {
+		b.TechFit = clampFloat(b.TechFit, 0, 5.0)
+		b.SeniorityFit = clampFloat(b.SeniorityFit, 0, 2.5)
+		b.DomainFit = clampFloat(b.DomainFit, 0, 1.5)
+		b.LocationFit = clampFloat(b.LocationFit, 0, 1.0)
+	}
+
 	return &result, nil
+}
+
+func clampFloat(v, minVal, maxVal float64) float64 {
+	if v < minVal {
+		return minVal
+	}
+	if v > maxVal {
+		return maxVal
+	}
+	return v
 }
 
 func min(a, b int) int {

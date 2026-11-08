@@ -100,20 +100,20 @@ Do not hallucinate skills, experience, or projects.
 Prefer "watch" over "skip" when the role is entry/junior level (0-2 years) or an adjacent growth opportunity.
 Prefer "apply" when there is strong alignment with any of the 4 pillars at an entry/junior level.
 
-Return this exact JSON structure (evaluate reasoning, overlap, gaps, and red_flags FIRST before deciding match_score and action):
+Return this exact JSON structure (evaluate reasoning, overlap, gaps, red_flags, and score_breakdown FIRST before deciding match_score and action):
 {
   "reasoning": "<2 sentence explanation connecting the job requirements with the candidate's verified projects and experience>",
   "skill_overlap": [<matching skills from candidate profile>],
   "missing_skills": [<required skills candidate lacks>],
   "red_flags": [<concerns: wrong stack, too senior, irrelevant domain, visa issue>],
   "role_family": "<primary|secondary>",
-  "match_score": <float 0.0-10.0>,
   "score_breakdown": {
     "tech_fit": <float 0.0-5.0>,
     "seniority_fit": <float 0.0-2.5>,
     "domain_fit": <float 0.0-1.5>,
     "location_fit": <float 0.0-1.0>
   },
+  "match_score": <float 0.0-10.0>,
   "action": "<apply|watch|skip>"
 }
 
@@ -209,7 +209,8 @@ OUTPUT RULES:
 - Return ONLY the JSON object.
 - Use double quotes for all strings. No markdown fences.
 - Keep reasoning to exactly 2 sentences.
-- skill_overlap, missing_skills, and red_flags must be concise and evidence-based.`,
+- skill_overlap, missing_skills, and red_flags must be concise and evidence-based.
+- score_breakdown values must stay within their max ranges (tech_fit <= 5.0, seniority_fit <= 2.5, domain_fit <= 1.5, location_fit <= 1.0) and their sum should align with match_score.`,
 		p.candidateName, p.profileText, feedbackBlock, title, company, location, desc,
 		p.cloudSummary, p.targetCities, p.archBonusNote, p.targetCities, p.targetCities,
 	)
