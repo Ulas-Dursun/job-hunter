@@ -53,10 +53,10 @@ else
     fi
 fi
 
-# Eğer veritabanı yeni kurulduysa (0 ilan varsa), önceki başvurduğun (applied) 4 ilanı AI hafızası için yükle
+# Eğer veritabanı yeni kurulduysa (0 ilan varsa) ve yedek seed dosyası varsa, başvuru hafızasını yükle
 JOB_COUNT=$(docker exec jobhunter_postgres psql -U jobhunter -d jobhunter -Atc "SELECT COUNT(*) FROM jobs;" 2>/dev/null || echo "0")
 if [ "$JOB_COUNT" = "0" ] && [ -f "./backups/applied_history_seed.sql" ]; then
-    echo "→ Önceki başvurduğun (applied) ilan hafızası yükleniyor (temiz başlangıç + AI hafızası)..."
+    echo "→ Başvuru hafıza tohumu (applied_history_seed.sql) yükleniyor..."
     docker exec -i jobhunter_postgres psql -U jobhunter -d jobhunter < ./backups/applied_history_seed.sql >/dev/null 2>&1 || true
 fi
 
