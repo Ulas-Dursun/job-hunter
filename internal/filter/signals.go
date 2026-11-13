@@ -16,15 +16,15 @@ var (
 	reYearsThenExp = regexp.MustCompile(`(\d{1,2})\s*\+?\s*(?:[-–]\s*\d{1,2}\s*)?(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b.{0,40}?(?:experience|erfahrung|ervaring|deneyim|expérience|erfaring)`)
 	// "experience of 4+ years", "Berufserfahrung von mindestens 5 Jahren"
 	reExpThenYears = regexp.MustCompile(`(?:experience|erfahrung|ervaring|deneyim|expérience|erfaring)\D{0,30}(\d{1,2})\s*\+?\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b`)
-	// "at least 5 years", "minimum of 6 years", "mindestens 4 Jahre", "en az 5 yıl"
-	reMinYears = regexp.MustCompile(`(?:at least|minimum(?: of)?|min\.|mindestens|en az|minstens|au moins|mindst)\s*(\d{1,2})\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b`)
+	// "at least 5 years", "at least 5+ years", "minimum of 6 years", "mindestens 4 Jahre", "en az 5 yıl"
+	reMinYears = regexp.MustCompile(`(?:at least|minimum(?: of)?|min\.|mindestens|en az|minstens|au moins|mindst)\s*(\d{1,2})\s*\+?\s*(?:years?|yrs?|jahre[n]?|jaar|yıl|ans|års?|år)\b`)
 )
 
 // companyClaimPrefixes: sayının öncesindeki bağlamda geçerse ifade şirket/ekip tanıtımıdır
-// ("over 20 years of experience", "our team has 10 years of experience", "work with seniors having 5+ years"),
+// ("more than 20 years of experience", "our team has 10 years of experience", "work with seniors having 5+ years"),
 // adaydan istenen asgari şart değildir.
 var companyClaimPrefixes = []string{
-	"over ", "more than ", "nearly ", "almost ", "meer dan ", "plus de ", "mehr als ", "über ", "since ", "for ",
+	"more than ", "nearly ", "almost ", "meer dan ", "plus de ", "mehr als ", "über ", "since ",
 	"our team", "the team", "team has", "team with", "team of", "we have", "we bring", "company has", "company with",
 	"with seniors", "senior engineers", "seniors having", "seniors with", "mentors with", "colleagues with",
 	"leaders with", "experts with", "combined ", "collective ", "founded ", "established ", "backed by",
@@ -75,8 +75,10 @@ var languageBarrierPatterns = []string{
 	"fluent german", "fluent in german", "german fluent", "german required", "german is required",
 	"fluent dutch", "fluent in dutch", "dutch fluent", "dutch speaking", "dutch required", "dutch is required",
 	"fluent french", "fluent in french", "french fluent", "french required", "french is required",
+	"fluent in english and french", "fluent in english and dutch", "bilingual fr/nl", "fr/nl", "nl/fr", "french/dutch", "nederlands/frans", "trilingual",
 	"native german", "german native", "native dutch", "native french",
 	"german (c1", "german c1", "german c2", "german (c2", "dutch (c1", "dutch c1",
+	"french (c1", "french c1", "dutch (b2", "french (b2",
 	"verhandlungssicher", "fließend deutsch", "fliessend deutsch", "fließende deutschkenntnisse",
 	"sehr gute deutschkenntnisse", "gute deutschkenntnisse", "deutschkenntnisse", "deutsch c1", "deutsch c2", "muttersprache deutsch",
 	"vloeiend nederlands", "nederlands vereist", "goede beheersing van het nederlands",
@@ -90,6 +92,9 @@ var languageBarrierPatterns = []string{
 var languageSoftWords = []string{
 	"plus", "advantage", "nice to have", "nice-to-have", "preferred", "desirable", "bonus", "beneficial",
 	"optional", "not required", "nicht erforderlich", "niet vereist",
+	"pas requis", "non requis", "pas nécessaire", "pas obligatoire",
+	"not mandatory", "not a requirement", "don't need",
+	"no french required", "no dutch required", "no german required", "no danish required",
 	"von vorteil", "wünschenswert", "vorteilhaft",
 }
 
@@ -148,11 +153,24 @@ func extractSentenceWindow(s string, matchStart, matchEnd int) string {
 	}
 	for j := matchEnd; j < hi; j++ {
 		if isSentenceBreak(s[j]) {
+			// İki satırlı madde yapılarında ("- Fluent in French\n  (nice to have)")
+			// alt satırdaki parantezli yumuşatıcıyı aynı pencereye dahil et.
+			if (s[j] == '\n' || s[j] == '\r') && isContinuationParen(s, j, hi) {
+				continue
+			}
 			hi = j
 			break
 		}
 	}
 	return s[lo:hi]
+}
+
+func isContinuationParen(s string, breakIdx, limit int) bool {
+	k := breakIdx
+	for k < limit && (s[k] == '\r' || s[k] == '\n' || s[k] == ' ' || s[k] == '\t') {
+		k++
+	}
+	return k < limit && s[k] == '('
 }
 
 func isSentenceBreak(b byte) bool {
@@ -186,9 +204,12 @@ func toSet(words ...string) map[string]struct{} {
 
 // englishFriendlyPhrases: ilan metni yerel dilde olsa bile İngilizce çalışmanın açıkça kabul edildiğini gösterir.
 var englishFriendlyPhrases = []string{
-	"english-speaking", "english speaking", "working language is english", "company language is english",
-	"dutch is not required", "dutch not required", "no dutch required", "german is not required",
-	"german not required", "no german required", "danish is not required", "danish not required", "no danish required",
+	"english-speaking", "english speaking", "working language is english", "working language: english",
+	"company language is english", "langue de travail : anglais",
+	"dutch is not required", "dutch not required", "no dutch required",
+	"french is not required", "no french required",
+	"german is not required", "german not required", "no german required",
+	"danish is not required", "danish not required", "no danish required",
 	"arbeitssprache ist englisch", "voertaal is engels",
 }
 

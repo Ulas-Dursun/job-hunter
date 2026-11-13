@@ -68,8 +68,19 @@ func (c *Consumer) processBatch(ctx context.Context) {
 		Count:    10,
 	}).Result()
 
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		if !errors.Is(err, redis.Nil) {
+			slog.Error("xreadgroup pending error", "error", err)
+			c.sleepWithContext(ctx, 1*time.Second)
+			return
+		}
+	}
+
 	// Eğer pending mesaj yoksa veya boşsa, yeni mesajları bekle (ID: ">", Block: 2s)
-	if err != nil || len(streams) == 0 || len(streams[0].Messages) == 0 {
+	if len(streams) == 0 || len(streams[0].Messages) == 0 {
 		streams, err = c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    c.cfg.ConsumerGroup,
 			Consumer: c.cfg.ConsumerName,
@@ -89,6 +100,7 @@ func (c *Consumer) processBatch(ctx context.Context) {
 			return
 		}
 		slog.Error("xreadgroup error", "error", err)
+		c.sleepWithContext(ctx, 1*time.Second)
 		return
 	}
 
@@ -136,7 +148,8 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 			"msg_id", msg.ID,
 			"error", err,
 		)
-		// ACK etme — retry için pending listede kalsın
+		// ACK etme — retry için pending listede kalsın, spin-loop önlemek için kısa bekle
+		c.sleepWithContext(ctx, 1*time.Second)
 		return
 	}
 
@@ -152,9 +165,20 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 }
 
 // ack, işlenen mesajı consumer group'tan siler.
-func (c *Consumer) ack(ctx context.Context, msgID string) {
-	if err := c.client.XAck(ctx, c.cfg.StreamRaw, c.cfg.ConsumerGroup, msgID).Err(); err != nil {
+// Graceful shutdown sırasında iptal edilmiş ctx yüzünden ACK kaybını önlemek için
+// bağımsız 5 saniye timeout'lu context kullanır.
+func (c *Consumer) ack(_ context.Context, msgID string) {
+	ackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.client.XAck(ackCtx, c.cfg.StreamRaw, c.cfg.ConsumerGroup, msgID).Err(); err != nil {
 		slog.Error("xack failed", "msg_id", msgID, "error", err)
+	}
+}
+
+func (c *Consumer) sleepWithContext(ctx context.Context, d time.Duration) {
+	select {
+	case <-time.After(d):
+	case <-ctx.Done():
 	}
 }
 

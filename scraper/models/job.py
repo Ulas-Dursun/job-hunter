@@ -77,11 +77,25 @@ class Job:
         canonical = f"{norm(self.company)}|{norm(self.title)}|{city}"
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
+    @staticmethod
+    def _smart_truncate(text: str, max_len: int = 4000, head: int = 1500, tail: int = 2450) -> str:
+        """
+        Uzun ilan açıklamalarını baştan kesmek yerine başını ve sonunu korur.
+        Sondaki Requirements / Qualifications / Languages bölümlerinin kaybolmasını önler.
+        """
+        if not text:
+            return ""
+        if len(text) <= max_len:
+            return text
+        if tail <= 0:
+            return text[:max_len]
+        return f"{text[:head]}\n...\n{text[-tail:]}"
+
     def to_redis_fields(self) -> dict[str, str]:
         """
         Redis XADD için flat string dict üretir.
         Redis Streams tüm değerleri string olarak saklar.
-        Description 4000 karakterle sınırlandırılır (Go prompt kapasitesiyle uyumlu).
+        Description 4000 karakterden uzunsa ilk 1500 + son 2450 karakter korunarak akıllı kesilir.
         """
         return {
             "source":       self.source,
@@ -90,7 +104,7 @@ class Job:
             "title":        self.title,
             "company":      self.company,
             "location":     self.location,
-            "description":  self.description[:4000],
+            "description":  self._smart_truncate(self.description),
             "posted_at":    self.posted_at or "",
             "scraped_at":   self.scraped_at,
             "dedup_hash":   self.dedup_hash(),

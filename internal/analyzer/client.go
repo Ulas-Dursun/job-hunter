@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -252,7 +255,7 @@ func (c *LLMClient) Generate(ctx context.Context, prompt string, maxTokens int, 
 			if ctx.Err() != nil {
 				return "", ctx.Err()
 			}
-			if isRetryable(err) {
+			if isFailoverRetryable(ctx, err) {
 				sawRetryable = true
 			}
 
@@ -353,12 +356,27 @@ func (c *LLMClient) callGemini(ctx context.Context, ep providerEndpoint, prompt 
 		return "", fmt.Errorf("empty gemini response candidates")
 	}
 
-	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+	var sb strings.Builder
+	for _, part := range geminiResp.Candidates[0].Content.Parts {
+		if part.Text != "" {
+			sb.WriteString(part.Text)
+		}
+	}
+	combined := sb.String()
+	if strings.TrimSpace(combined) == "" {
+		return "", fmt.Errorf("empty gemini response text parts")
+	}
+
+	return combined, nil
 }
 
 func (c *LLMClient) callGroq(ctx context.Context, ep providerEndpoint, prompt string, maxTokens int, temperature float64) (string, error) {
 	if maxTokens <= 0 {
 		maxTokens = 2000
+	}
+	// Groq ve reasoning modellerinde (gpt-oss-120b, qwen3.8-27b) düşünme tokenları bütçeyi tüketebileceği için alt sınır uygulanır.
+	if (ep.provider == ProviderGroq || strings.Contains(ep.model, "gpt-oss") || strings.Contains(ep.model, "qwen3")) && maxTokens < 1800 {
+		maxTokens = 1800
 	}
 
 	reqBody := map[string]any{
@@ -384,19 +402,19 @@ func (c *LLMClient) callGroq(ctx context.Context, ep providerEndpoint, prompt st
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return "", fmt.Errorf("creating groq/openai request: %w", err)
+		return "", fmt.Errorf("creating %s request: %w", ep.provider, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+ep.apiKey)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("groq http call: %w", err)
+		return "", fmt.Errorf("%s http call: %w", ep.provider, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", newStatusError("groq", resp)
+		return "", newStatusError(string(ep.provider), resp)
 	}
 
 	var apiResp struct {
@@ -408,12 +426,41 @@ func (c *LLMClient) callGroq(ctx context.Context, ep providerEndpoint, prompt st
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return "", fmt.Errorf("decoding groq response: %w", err)
+		return "", fmt.Errorf("decoding %s response: %w", ep.provider, err)
 	}
 
 	if len(apiResp.Choices) == 0 {
-		return "", fmt.Errorf("empty groq response")
+		return "", fmt.Errorf("empty %s response", ep.provider)
 	}
 
 	return apiResp.Choices[0].Message.Content, nil
+}
+
+// isFailoverRetryable, 429/500/502/503/504 HTTP durumları ile üst context iptal edilmemişken
+// oluşan HTTP client timeout / ağ hatalarını geçici ve failover yapılabilir sayar.
+func isFailoverRetryable(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	if isRetryable(err) {
+		return true
+	}
+	var se *httpStatusError
+	if errors.As(err, &se) {
+		switch se.Status {
+		case http.StatusInternalServerError, http.StatusBadGateway, http.StatusGatewayTimeout:
+			return true
+		}
+		return false
+	}
+	if ctx != nil && ctx.Err() == nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return true
+		}
+		var netErr net.Error
+		if errors.As(err, &netErr) {
+			return true
+		}
+	}
+	return false
 }

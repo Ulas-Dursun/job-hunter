@@ -8,13 +8,6 @@ config.local.yaml
 *.p12
 *.pfx
 
-# Backups, SQL Dumps & Transition Prompts
-backups/
-*.sql
-!internal/store/migrations/*.sql
-MACBOOK_PROMPT.md
-*_REHBERI.txt
-
 # Local AI Agent Rules & Skills
 AGENTS.md
 .agents/
@@ -50,3 +43,10 @@ tmp/
 # OS
 .DS_Store
 Thumbs.db
+
+# Backups & Local Guides
+backups/
+*.sql.gz
+*.dump
+JOB_HUNTER_MACBOOK_REHBERI.txt
+MACBOOK_PROMPT.md

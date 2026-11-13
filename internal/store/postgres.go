@@ -92,9 +92,11 @@ func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return err
 }
 
-// StartRetentionCleaner, veritabanının zamanla eski ve düşük skorlu (< 6.0) gürültü ilanlarla
-// şişmesini önlemek için başlangıçta ve her 24 saatte bir güvenli temizlik (auto-prune) yapar.
-// Başvurulan (applied), mülakat (interview), teklif (offer), yüksek skorlu (>= 6.0) veya
+// StartRetentionCleaner, veritabanının zamanla eski ve düşük skorlu gürültü ilanlarla
+// şişmesini önlemek için başlangıçta ve her 24 saatte bir güvenli temizlik (auto-prune) yapar:
+// - 14+ günlük ve match_score < 6.0 (veya NULL) olanlar
+// - 21+ günlük ve match_score < 7.0 olanlar
+// Başvurulan (applied), mülakat (interview), teklif (offer), >= 7.0 skorlu veya
 // CV/Mülakat kiti üretilmiş hiçbir ilana dokunmaz.
 func (p *PostgresPool) StartRetentionCleaner(ctx context.Context) {
 	go func() {
@@ -118,18 +120,21 @@ func (p *PostgresPool) pruneOldLowScoreJobs(ctx context.Context) {
 	tag, err := p.pool.Exec(ctx, `
 		DELETE FROM jobs
 		WHERE status IN ('new', 'skipped')
-		  AND (match_score IS NULL OR match_score < 6.0)
 		  AND cover_letter IS NULL
 		  AND tailored_cv IS NULL
 		  AND interview_prep IS NULL
-		  AND scraped_at < NOW() - INTERVAL '14 days'
+		  AND (
+			((match_score IS NULL OR match_score < 6.0) AND scraped_at < NOW() - INTERVAL '14 days')
+			OR
+			(match_score < 7.0 AND scraped_at < NOW() - INTERVAL '21 days')
+		  )
 	`)
 	if err != nil {
 		slog.Warn("db auto-retention cleanup failed", "error", err)
 		return
 	}
 	if deleted := tag.RowsAffected(); deleted > 0 {
-		slog.Info("db auto-retention cleanup completed (14+ günlük düşük skorlu gürültü ilanlar temizlendi)", "deleted_rows", deleted)
+		slog.Info("db auto-retention cleanup completed (eski düşük skorlu gürültü ilanlar temizlendi)", "deleted_rows", deleted)
 	}
 }
 

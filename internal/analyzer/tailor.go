@@ -30,6 +30,7 @@ type TailorService struct {
 	candidateName string
 	masterProfile string
 	unownedTech   []string
+	ownedSkills   map[string]bool
 }
 
 func NewTailorService(cfg *config.GeminiConfig, candidates ...*config.CandidateConfig) *TailorService {
@@ -64,7 +65,77 @@ func NewTailorService(cfg *config.GeminiConfig, candidates ...*config.CandidateC
 		candidateName: name,
 		masterProfile: buildMasterProfile(candidate),
 		unownedTech:   unowned,
+		ownedSkills:   buildOwnedSkillsAllowlist(candidate),
 	}
+}
+
+// buildOwnedSkillsAllowlist, adayın config'deki gerçek yetkinlikleri ile temel mühendislik
+// terimlerini içeren pozitif doğrulama kümesi (allowlist) oluşturur. candidate nil ise nil döner.
+func buildOwnedSkillsAllowlist(cfg *config.CandidateConfig) map[string]bool {
+	if cfg == nil {
+		return nil
+	}
+
+	allowed := make(map[string]bool)
+	addTerm := func(raw string) {
+		low := strings.ToLower(strings.TrimSpace(raw))
+		if low == "" {
+			return
+		}
+		allowed[low] = true
+
+		// "Go (Golang)" veya "Docker / Compose" gibi birleşik ifadelerin parça terimlerini de ekle
+		if idx := strings.Index(low, "("); idx > 0 {
+			base := strings.TrimSpace(low[:idx])
+			if base != "" {
+				allowed[base] = true
+			}
+			inner := strings.TrimSuffix(strings.TrimSpace(low[idx+1:]), ")")
+			for _, part := range strings.Split(inner, ",") {
+				if p := strings.TrimSpace(part); p != "" {
+					allowed[p] = true
+				}
+			}
+		}
+		if strings.Contains(low, "/") {
+			for _, part := range strings.Split(low, "/") {
+				if p := strings.TrimSpace(part); p != "" {
+					allowed[p] = true
+				}
+			}
+		}
+	}
+
+	for _, list := range [][]string{
+		cfg.Skills.Languages,
+		cfg.Skills.Frameworks,
+		cfg.Skills.Databases,
+		cfg.Skills.OS,
+		cfg.Skills.Infra,
+		cfg.Skills.Cloud,
+		cfg.Skills.Concepts,
+	} {
+		for _, item := range list {
+			addTerm(item)
+		}
+	}
+
+	// Temel yazılım mühendisliği kavramları (sık kullanılan güvenli terimler)
+	coreTerms := []string{
+		"software engineering", "backend", "backend engineering", "distributed systems",
+		"microservices", "rest", "rest api", "restful", "restful api", "restful apis", "api", "http", "json",
+		"concurrency", "multithreading", "system design", "clean architecture",
+		"sql", "nosql", "database", "databases", "relational databases",
+		"golang", "postgres", "aws ec2", "aws s3",
+		"oop", "object-oriented programming", "data structures", "algorithms",
+		"unit testing", "unit tests", "integration testing", "integration tests", "testing", "ci/cd", "git",
+		"agile", "scrum", "linux", "docker", "devops", "cloud",
+	}
+	for _, term := range coreTerms {
+		allowed[term] = true
+	}
+
+	return allowed
 }
 
 // buildMasterProfile constructs the factual master resume text from CandidateConfig.
@@ -106,9 +177,29 @@ func buildMasterProfile(cfg *config.CandidateConfig) string {
 	}
 
 	if len(cfg.Experience) > 0 {
-		sb.WriteString("\nWORK EXPERIENCE & ASSIGNMENTS:\n")
-		for i, exp := range cfg.Experience {
-			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, strings.TrimSpace(exp)))
+		var engExp, otherExp []string
+		for _, exp := range cfg.Experience {
+			trimmed := strings.TrimSpace(exp)
+			if trimmed == "" {
+				continue
+			}
+			if isNonEngineeringExperience(trimmed) {
+				otherExp = append(otherExp, trimmed)
+			} else {
+				engExp = append(engExp, trimmed)
+			}
+		}
+		if len(engExp) > 0 {
+			sb.WriteString("\nENGINEERING WORK EXPERIENCE & ASSIGNMENTS (Prioritize these for tailored_experience_bullets):\n")
+			for i, exp := range engExp {
+				sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, exp))
+			}
+		}
+		if len(otherExp) > 0 {
+			sb.WriteString("\nOTHER / NON-ENGINEERING EXPERIENCE (Contextual only — do NOT use in tailored_experience_bullets):\n")
+			for i, exp := range otherExp {
+				sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, exp))
+			}
 		}
 	}
 
@@ -131,6 +222,18 @@ func buildMasterProfile(cfg *config.CandidateConfig) string {
 	return sb.String()
 }
 
+// isNonEngineeringExperience, mühendislik dışı/mevsimlik rolleri (örn. kamp danışmanlığı,
+// müşteri hizmetleri, dönemsel işler) CV deneyim maddelerinden ayırmak için kullanılır.
+func isNonEngineeringExperience(exp string) bool {
+	low := strings.ToLower(exp)
+	for _, kw := range []string{"camp counselor", "seasonal", "customer service", "non-engineering", "hospitality", "retail"} {
+		if strings.Contains(low, kw) {
+			return true
+		}
+	}
+	return false
+}
+
 // GenerateTailoredAssets produces an ATS-optimized cover letter, tailored summary, and bullet points.
 func (s *TailorService) GenerateTailoredAssets(
 	ctx context.Context,
@@ -141,7 +244,7 @@ func (s *TailorService) GenerateTailoredAssets(
 	if err != nil {
 		return nil, err
 	}
-	return parseTailoredResult(rawText, s.unownedTech...)
+	return parseTailoredResultWithAllowlist(rawText, s.ownedSkills, s.unownedTech...)
 }
 
 func (s *TailorService) buildPrompt(title, company, location, description string) string {
@@ -170,7 +273,8 @@ Recruiters and hiring managers scan cover letters in 15 seconds. Long, repetitiv
 TAILORED CV REVISIONS — HIGH-SIGNAL, SCANNABLE BULLETS:
 1. tailored_summary (MAX 2 sentences, <= 32 words): Based on the Candidate's Summary Variants and Master Profile, write a sharp 1-2 sentence summary tailored to this role's focus.
 2. tailored_experience_bullets (EXACTLY 3 bullets, each <= 22 words):
-   - Rewrite the candidate's work experience / internship / traineeship bullets angled toward the target job's terminology while keeping all verified metrics intact.
+   - Prioritize verified engineering experiences in the Candidate Profile and EXCLUDE non-engineering / extracurricular roles from tailored_experience_bullets.
+   - Rewrite the candidate's engineering work experience / internship / traineeship bullets angled toward the target job's terminology while keeping all verified metrics intact.
 3. tailored_project_bullets (EXACTLY 3 bullets, each <= 22 words):
    - Pick the 3 strongest bullets across the candidate's key engineering projects that best fit this role's domain and stack.
 4. HONEST KEYWORD MAPPING:
@@ -200,6 +304,10 @@ Respond with a strict, valid JSON object without markdown formatting, backticks,
 }
 
 func parseTailoredResult(text string, customUnowned ...string) (*TailoredAssets, error) {
+	return parseTailoredResultWithAllowlist(text, nil, customUnowned...)
+}
+
+func parseTailoredResultWithAllowlist(text string, ownedSkills map[string]bool, customUnowned ...string) (*TailoredAssets, error) {
 	start := strings.Index(text, "{")
 	end := strings.LastIndex(text, "}")
 	if start == -1 || end == -1 || end < start {
@@ -210,6 +318,13 @@ func parseTailoredResult(text string, customUnowned ...string) (*TailoredAssets,
 	if err := json.Unmarshal([]byte(text[start:end+1]), &result); err != nil {
 		slog.Error("failed to unmarshal tailored json", "raw", text[start:end+1])
 		return nil, fmt.Errorf("unmarshaling tailored json: %w", err)
+	}
+
+	if strings.TrimSpace(result.CoverLetter) == "" {
+		return nil, fmt.Errorf("tailored result validation: cover_letter is empty")
+	}
+	if strings.TrimSpace(result.TailoredSummary) == "" {
+		return nil, fmt.Errorf("tailored result validation: tailored_summary is empty")
 	}
 
 	if result.TailoredExperienceBullets == nil {
@@ -229,7 +344,7 @@ func parseTailoredResult(text string, customUnowned ...string) (*TailoredAssets,
 	if len(customUnowned) > 0 {
 		unowned = customUnowned
 	}
-	sanitizeTailoredAssets(&result, unowned)
+	sanitizeTailoredAssets(&result, unowned, ownedSkills)
 	return &result, nil
 }
 
@@ -301,12 +416,65 @@ func containsTechToken(s, tech string) bool {
 	return false
 }
 
-func sanitizeTailoredAssets(res *TailoredAssets, unownedList []string) {
+func isOwnedSkill(skill string, ownedSkills map[string]bool) bool {
+	if len(ownedSkills) == 0 {
+		return true
+	}
+	low := strings.ToLower(strings.TrimSpace(skill))
+	if low == "" {
+		return false
+	}
+	if ownedSkills[low] {
+		return true
+	}
+	if idx := strings.Index(low, "("); idx > 0 {
+		base := strings.TrimSpace(low[:idx])
+		if base != "" && ownedSkills[base] {
+			return true
+		}
+	}
+	if strings.Contains(low, "/") {
+		parts := strings.Split(low, "/")
+		allOwned := true
+		hasNonEmpty := false
+		for _, p := range parts {
+			pt := strings.TrimSpace(p)
+			if pt == "" {
+				continue
+			}
+			hasNonEmpty = true
+			if !ownedSkills[pt] {
+				allOwned = false
+				break
+			}
+		}
+		if hasNonEmpty && allOwned {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeTailoredAssets(res *TailoredAssets, unownedList []string, ownedSkillsList ...map[string]bool) {
+	var ownedSkills map[string]bool
+	if len(ownedSkillsList) > 0 {
+		ownedSkills = ownedSkillsList[0]
+	}
+
 	kept := make([]string, 0, len(res.SkillsHighlight))
 	for _, sk := range res.SkillsHighlight {
-		if !isUnownedSkill(sk, unownedList...) {
-			kept = append(kept, sk)
+		if isUnownedSkill(sk, unownedList...) {
+			continue
 		}
+		if len(ownedSkills) > 0 && !isOwnedSkill(sk, ownedSkills) {
+			if res.Warnings == nil {
+				res.Warnings = []string{}
+			}
+			slog.Warn("unverified skill removed from skills_highlight via allowlist", "skill", sk)
+			res.Warnings = append(res.Warnings, fmt.Sprintf("Skills Highlight içinde adayın profilinde doğrulanamayan teknoloji çıkarıldı: %s", sk))
+			continue
+		}
+		kept = append(kept, sk)
 	}
 	res.SkillsHighlight = kept
 

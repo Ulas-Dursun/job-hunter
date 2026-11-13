@@ -28,15 +28,16 @@ TECH_TITLE_KEYWORDS = [
 ]
 
 ENTRY_SIGNALS = [
-    "graduate", "new grad", "entry level", "entry-level", "junior", "trainee", "associate",
+    "graduate", "graduates", "new grad", "entry level", "entry-level", "junior", "juniors",
+    "jr", "trainee", "traineeship", "associate", "starter", "v.i.e", "vie", "young potential",
     "yeni mezun", "genç yetenek", "mt programı", "management trainee", "uzman yardımcısı",
     "0-2 years", "0-1 years", "0-2 yıl", "0-1 yıl", "1-2 years", "1-3 years", "early career", "young graduate",
 ]
 
 # Yumuşak filtrede açıklamanın gerçekten yazılım/veri işi olduğunu kanıtlayan somut araç/teknoloji terimleri
 TECH_DESC_TERMS = [
-    "python", "java", "golang", "sql", "backend", "software engineering", "computer science",
-    "rest api", "docker", "kubernetes", "machine learning", "aws", "linux", "git",
+    "python", "java", "golang", "sql", "backend", "software", "software engineering", "computer science",
+    "api", "rest", "rest api", "database", "pipeline", "docker", "kubernetes", "machine learning", "aws", "linux", "git",
     "yazılım", "veri tabanı", "veritabanı", "postgresql", "redis", "mongodb", "c++", "rust",
     "microservices", "data pipeline", "etl", "pandas", "spark", "power bi", "tableau",
     "bilgisayar mühendisliği", "yazılım mühendisliği",

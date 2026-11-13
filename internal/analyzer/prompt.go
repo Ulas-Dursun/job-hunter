@@ -181,14 +181,24 @@ CRITICAL RULES (MUST OBEY):
 7. UNRELATED FIELD CHECK:
    If the posting is from an unrelated engineering discipline (mechanical, civil, chemical, biomedical), set match_score below 3.0 and action "skip".
 
-8. VISA, CITIZENSHIP & EUROPEAN TARGET CITY STRATEGY (%s):
-   - Use the candidate's Location & Mobility and Work Experience in the Candidate Profile.
+8. VISA, CITIZENSHIP & LOCATION TIER STRATEGY (%s):
+   - Use the candidate's Location & Mobility, availability, and Work Experience as stated in the Candidate Profile.
    - HARD DISQUALIFIERS (STRICT SKIP < 3.5):
-     1. EXPLICIT NO-SPONSORSHIP: Explicitly mandates "EU/EEA citizenship required", "No visa sponsorship provided", or "Must already hold permanent unrestricted work permit" -> score 2.0-3.0, action "skip".
-     2. NON-ENGLISH MANDATORY LANGUAGE BARRIER: Explicitly mandates fluent French, German, Dutch, or Danish ("Français courant", "Deutsch C1", "Nederlands vereist", "flydende dansk") without accepting English -> score 2.0-3.5, action "skip".
+     1. EXPLICIT NO-SPONSORSHIP: Explicitly mandates "EU/EEA citizenship required", "No visa sponsorship provided", "Must already hold UK or CH permit", or "Must already hold permanent unrestricted work permit" -> score 2.0-3.0, location_fit <= 0.1, action "skip".
+     2. NON-ENGLISH MANDATORY LANGUAGE BARRIER (INCLUDING BRUSSELS FR/NL): Explicitly mandates fluent French, Dutch, German, or Danish — especially Brussels/Belgium roles requiring "fluent FR/NL", "bilingual FR-NL required", "Français courant", or "Nederlands vereist" ("Deutsch C1", "flydende dansk") without accepting English-only -> score 2.0-3.5, action "skip" (add language barrier to red_flags).
      3. US / OVERSEAS ON-SITE: On-site in US/Canada/Australia/APAC -> score 1.5-2.5, action "skip".
+     4. INTERNATIONAL ORGANIZATION SECONDMENT: "Secondment" postings (temporary assignment from member states / national administrations) are ineligible for external individual applicants -> score < 3.5, action "skip" (add "Secondment posting (member-state assignment only)" to red_flags).
 
-   - TARGET CITY 0-2 YEAR / GRADUATE OPPORTUNITY RULE (WORTH TRYING — DO NOT PENALIZE SILENCE ON VISA):
+   - LOCATION ACCESSIBILITY TIERS (guide location_fit 0.0-1.0):
+     * TIER-1 HIGH ACCESSIBILITY (location_fit 0.8-1.0): Brussels & Belgium (work authorization / sponsorship context per Candidate Profile), Netherlands (Amsterdam, Rotterdam, Eindhoven, Utrecht — strong HSM sponsorship ecosystem), EU/Global Remote, and the candidate's secondary home market (per Candidate Profile, no visa required).
+     * TIER-2 EUROPEAN TARGETS (location_fit 0.6-0.8): Germany (Berlin, Munich), Luxembourg, Denmark (Copenhagen).
+     * TIER-3 HIGH-VALUE / SPONSORSHIP-CRITICAL (Switzerland: Zurich, Geneva; UK: London):
+       - Very high-value targets, but sponsorship is critical for junior/new-grad candidates.
+       - If sponsorship is explicitly offered OR the employer is Big Tech / international org (e.g. CERN, major global tech) -> strong score (location_fit 0.8-1.0, do NOT penalize).
+       - If "no sponsorship / must already hold UK or CH permit" -> STRICT SKIP (2.0-3.0, action "skip").
+       - If sponsorship is unstated in UK/CH at a smaller/local company -> keep location_fit moderate (0.5-0.6) and note sponsorship uncertainty in red_flags.
+
+   - TARGET CITY 0-2 YEAR / GRADUATE OPPORTUNITY RULE (WORTH TRYING — DO NOT PENALIZE SILENCE ON VISA IN TIER-1/TIER-2):
      * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates.
      * Therefore, if an English-speaking role in the candidate's target European locations (%s) does NOT forbid sponsorship:
        a) If it is explicitly Junior / Graduate / New Grad / Associate / 0-2 years AND tech fit is strong:
@@ -204,6 +214,9 @@ CRITICAL RULES (MUST OBEY):
 
 10. GIG WORK, DATA LABELING & NON-ENGINEERING NOISE FILTER:
    - "AI Trainer", "Data Annotation/Labeler" (Outlier, Alignerr, Scale AI), or basic "IT Helpdesk/Desktop Support" -> match_score below 3.5, action "skip".
+
+11. START DATE & AVAILABILITY:
+   - If the Candidate Profile specifies a future full-time availability date and the posting explicitly requires an immediate/ASAP start well before that date, cap match_score at <= 6.5 and set action to "watch", and add a start-date mismatch note to red_flags comparing the posting's required start date with the candidate's stated availability.
 
 OUTPUT RULES:
 - Return ONLY the JSON object.
@@ -257,7 +270,7 @@ func buildProfile(cfg *config.CandidateConfig) string {
 	}
 
 	if len(cfg.Experience) > 0 {
-		sb.WriteString("Work Experience & Incoming Assignments:\n")
+		sb.WriteString("Work Experience & Current Assignments:\n")
 		for _, exp := range cfg.Experience {
 			sb.WriteString(fmt.Sprintf("- %s\n", strings.TrimSpace(exp)))
 		}

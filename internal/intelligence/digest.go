@@ -24,9 +24,10 @@ func NewEveningDigest(pool *pgxpool.Pool, n *notifier.Telegram) *EveningDigest {
 }
 
 // Send queries the database for top unnotified opportunities and dispatches Telegram summary.
-func (d *EveningDigest) Send(ctx context.Context) {
+// Returns true when no retry is needed (sent successfully, no candidates, or notifier not configured).
+func (d *EveningDigest) Send(ctx context.Context) bool {
 	if d.notifier == nil || !d.notifier.IsConfigured() {
-		return
+		return true
 	}
 
 	rows, err := d.pool.Query(ctx, `
@@ -41,7 +42,7 @@ func (d *EveningDigest) Send(ctx context.Context) {
 	`)
 	if err != nil {
 		slog.Error("evening digest query failed", "error", err)
-		return
+		return false
 	}
 	defer rows.Close()
 
@@ -58,7 +59,7 @@ func (d *EveningDigest) Send(ctx context.Context) {
 	}
 	if len(items) == 0 {
 		slog.Info("evening digest: no new unnotified >=6.8 opportunities in last 24h")
-		return
+		return true
 	}
 
 	esc := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
@@ -89,7 +90,7 @@ func (d *EveningDigest) Send(ctx context.Context) {
 
 	if err := d.notifier.SendRaw(ctx, sb.String()); err != nil {
 		slog.Warn("evening digest send failed", "error", err)
-		return
+		return false
 	}
 
 	for _, id := range ids {
@@ -101,4 +102,5 @@ func (d *EveningDigest) Send(ctx context.Context) {
 		}
 	}
 	slog.Info("evening digest sent", "count", len(items))
+	return true
 }

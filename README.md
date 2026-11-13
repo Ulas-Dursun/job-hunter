@@ -27,7 +27,7 @@ flowchart TD
     subgraph S1["1. Multi-Source Ingestion Layer (Python 3.11)"]
         A1["LinkedIn & Indeed (JobSpy)"]
         A2["European Tech Hub Feed (Arbeitnow)"]
-        A3["Direct Company ATS (Greenhouse & SmartRecruiters)"]
+        A3["Direct Company ATS (Greenhouse, Lever, Ashby & SmartRecruiters)"]
         A4["Regional Portals (Kariyer.net, Techcareer, Coderspace)"]
         A5["Atomic Redis Dedup (URL 30d + Content Hash 14d)"]
     end
@@ -77,6 +77,8 @@ flowchart TD
 ### 1. Zero-Waste Dual-Stage Filtering Pipeline
 * **Cross-Platform Atomic Deduplication (Python → Redis)**:
   * Combines **URL hash (`30d TTL`)** and normalized **`company + title + city` content hash (`14d TTL`)** via atomic `SET NX EX` so identical postings scraped from LinkedIn, Indeed, and company ATS boards are published only once.
+* **Smart Description Truncation (Head + Tail Preservation)**:
+  * Preserves the role introduction (**1500-char head**) and requirements/tech-stack section (**2450-char tail**) when truncating long job descriptions, ensuring key qualification signals are retained within token budgets.
 * **Tier 1 — Deterministic `CheapFilter` (Go, Microsecond Latency, Zero Token Cost)**:
   * **Soft 0–2 Year / New Grad Gate**: Welcomes broad entry-level opportunities (*Software, Backend, Cloud/DevOps, Data Analyst, Data Scientist, ML/AI, BI, Systems/Solutions Engineer, Graduate Programmes*) when backed by concrete technical terms.
   * **Hard Seniority & Corporate Noise Blocker**: Drops `4+ years` requirements (while ignoring company-age claims like *"Over 20 years of experience"*), senior/management titles, non-software corporate roles (*FinCrime, Operational Risk, Product Cost Analyst, Sales/HR*), and non-EUROCONTROL internships.
@@ -91,13 +93,14 @@ flowchart TD
 ### 3. Human-Guarded CV Tailor & STAR Interview Prep Kit
 * **Language-Aware Generation**: Automatically writes cover letters and CV bullets in **Turkish** for Turkish postings and **English** for international postings.
 * **Recruiter-Ready Brevity**: Prompts concise **130–170 word (3-paragraph)** cover letters and **≤ 22-word** high-impact CV bullet points grounded strictly in the candidate's verified profile.
-* **Deterministic Sanitization & Review Guard**: Post-processes LLM output to strip unowned technologies from `skills_highlight` and explicitly flags missing tools in `ats_keywords` with `⚠ (gap — do not claim on CV)`. Any unowned technology detected in free-text (cover letter/summary) raises an actionable **"Manual Review Required"** alert banner.
+* **Deterministic Sanitization & Review Guard**: Post-processes LLM output using a positive `ownedSkills` **allowlist sanitization** mechanism to strip unowned technologies from `skills_highlight` and explicitly flags missing tools in `ats_keywords` with `⚠ (gap — do not claim on CV)`. Any unowned technology detected in free-text (cover letter/summary) raises an actionable **"Manual Review Required"** alert banner.
 * **One-Click Interview Prep Kit**: Generates **3 role-specific technical questions** (with *Why They Ask* + *Answer Strategy*), **2 behavioral STAR stories** mapped to real candidate projects, and **reverse questions** for the interviewer. Automatically pre-generates in the background when a job card is moved to `Interview`.
 
 ### 4. Two-Tier Telegram Notifications & System Health Guard
 * **Instant Jackpot Alerts (`≥ 8.0`)**: Real-time push notification for top-tier entry-level matches.
 * **Daily 20:00 Evening Digest (`6.8 – 7.9`)**: Summarizes the top 5 unnotified opportunities of the day in a single evening message—zero notification fatigue.
 * **Autonomous Queue & DLQ Monitor**: Alerts via Telegram if `jobs:filtered` backlog exceeds `200` or if new failures appear in `jobs:failed`.
+* **Sleep-Resilient Wall-Clock Scheduler**: Driven by a **1-minute wall-clock ticker + Redis state persistence**, ensuring the 20:00 Evening Digest, weekly analytics, and retention jobs recover cleanly across macOS sleep/wake cycles without drift or duplicate runs.
 
 ### 5. Interactive Web Dashboard & Kanban CRM
 * **9 Smart Category Views**: *All, Top Matches (≥ 7.5), Junior / 0–2 Yıl, Backend (Go/Java/Py), DevOps & Cloud, Data/ML & AI, Istanbul & TR, Brussels & Europe, Direct Company ATS*.
@@ -162,8 +165,17 @@ pip install -r scraper/requirements.txt
 
 ### 4. Run the Orchestrator & Scrapers
 
-Run a full batch (scrapers + Go orchestrator) on Windows PowerShell:
+Run a full batch (scrapers + Go orchestrator):
+```bash
+# macOS / Apple Silicon (one-command launcher):
+bash run_mac.sh
+
+# Restart services cleanly on macOS:
+bash run_mac.sh --restart
+```
+
 ```powershell
+# Windows PowerShell:
 .\run_batch.ps1
 ```
 
@@ -206,7 +218,7 @@ go test -count=1 ./...
 ├── scraper/
 │   ├── models/                 # Normalized Job schema (URL & cross-source content hashing)
 │   ├── publisher/              # Atomic Redis Streams producer with TTL deduplication
-│   ├── sources/                # JobSpy, Greenhouse, SmartRecruiters, Arbeitnow, EUROCONTROL, Kariyer.net, Techcareer, Coderspace
+│   ├── sources/                # JobSpy, Greenhouse, Lever, Ashby, SmartRecruiters, Arbeitnow, EUROCONTROL, Kariyer.net, Techcareer, Coderspace
 │   └── tests/                  # Python unit test suite
 ├── web/
 │   ├── index.html              # Single-page Tailwind CSS dashboard, Kanban CRM & AI Tailor/Interview modals

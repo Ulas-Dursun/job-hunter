@@ -65,6 +65,11 @@ REQUIREMENTS:
 4. questions_to_ask (EXACTLY 2 items):
    - 2 sharp engineering questions (in English, with a 1-line Turkish note on why it works) for the end of the interview.
 
+BELGIUM / EU HIRING & PRACTICAL REALITY STRATEGY:
+- Availability & Sponsorship: When relevant to location, role focus, or behavioral/reverse-interview framing, prepare the candidate to clearly state the candidate's stated availability date and work authorization/sponsorship context in the Candidate Profile without overpromising permit exemption.
+- Multilingual Environment: Frame strong English technical communication as the primary working language in international engineering teams, while demonstrating openness to collaborating in multilingual (FR/NL/EU) environments.
+- Gap-Bridging for Missing Tools: Never claim production experience with unowned tools from the posting; instead, include concrete gap-bridging angles in answer strategies showing how the candidate's verified fundamentals map to ramping up on missing tools.
+
 CANDIDATE MASTER PROFILE:
 %s
 

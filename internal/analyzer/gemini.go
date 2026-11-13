@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -133,6 +134,19 @@ func parseResult(text string) (*ScoreResult, error) {
 		b.SeniorityFit = clampFloat(b.SeniorityFit, 0, 2.5)
 		b.DomainFit = clampFloat(b.DomainFit, 0, 1.5)
 		b.LocationFit = clampFloat(b.LocationFit, 0, 1.0)
+
+		// Alt bileşenlerin tamamı doluysa toplam ile match_score arasındaki büyük sapmaları logla.
+		// Hard cap (<= 6.5) ve hard disqualifier low-score kurallarını bozmamak için match_score ezilmez.
+		if b.TechFit > 0 && b.SeniorityFit > 0 && b.DomainFit > 0 && b.LocationFit > 0 {
+			breakdownSum := b.TechFit + b.SeniorityFit + b.DomainFit + b.LocationFit
+			if math.Abs(breakdownSum-result.MatchScore) > 0.5 {
+				slog.Warn("ai score_breakdown ile match_score arasında tutarsızlık tespit edildi",
+					"breakdown_sum", breakdownSum,
+					"match_score", result.MatchScore,
+					"diff", math.Abs(breakdownSum-result.MatchScore),
+				)
+			}
+		}
 	}
 
 	return &result, nil

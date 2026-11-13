@@ -1,5 +1,5 @@
 """
-ATSSource — Greenhouse, Lever ve SmartRecruiters genel API çekicisi.
+ATSSource — Greenhouse, Lever, SmartRecruiters ve Ashby genel API çekicisi.
 
 Şirketlerin kariyer sayfalarının arka planındaki halka açık JSON API'lerini kullanır.
 Scraping, captcha veya ban riski yoktur; doğrudan güncel ilanları çeker.
@@ -35,12 +35,20 @@ DISALLOWED_REGIONS = {
     "brazil", "são paulo", "sao paulo", "sao jose dos campos",
     "canada", "toronto", "vancouver", "montreal", "kuala lumpur", "shanghai",
     "beijing", "seoul", "korea", "taipei", "taiwan", "manila", "jakarta",
-    "mexico", "latin america", "bogota", "santiago", "buenos aires", "apac", "americas", "namer"
+    "mexico", "latin america", "north america", "bogota", "santiago", "buenos aires", "apac", "americas", "namer"
+}
+
+ALLOWED_EU_COUNTRY_CODES = {
+    "de", "nl", "be", "fr", "gb", "ch", "dk", "lu", "tr",
+    "at", "se", "no", "fi", "ie", "pl", "es", "it", "pt",
+    "ro", "cz", "hu", "bg", "ee", "gr", "uk",
 }
 
 EU_TR_INDICATORS = [
     "turkey", "türkiye", "istanbul", "ankara", "izmir", "bursa", "antalya", "kocaeli",
-    "brussel", "belgium", "belgique", "belgië", "antwerp", "ghent",
+    "brussel", "brussels", "belgium", "belgique", "belgië", "belgie",
+    "antwerp", "antwerpen", "ghent", "gent", "leuven", "zaventem", "liège", "liege",
+    "mechelen", "louvain-la-neuve", "luxembourg",
     "amsterdam", "netherlands", "rotterdam", "utrecht", "eindhoven", "the hague", "alkmaar",
     "germany", "deutschland", "berlin", "munich", "münchen", "frankfurt", "hamburg", "cologne", "köln", "stuttgart", "düsseldorf", "dusseldorf",
     "london", "uk", "united kingdom", "england", "scotland", "manchester", "edinburgh", "cambridge", "bristol",
@@ -67,14 +75,21 @@ def clean_html(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", soup.get_text("\n")).strip()
 
 
-def is_allowed_location(loc: str) -> bool:
+def is_allowed_location(loc: str, country_code: str = "") -> bool:
     """Yalnızca Türkiye, Avrupa (Brüksel, Amsterdam, Berlin, Londra vb.) ve EMEA Remote lokasyonları kabul eder."""
     if not loc:
         return True
     loc_lower = loc.lower()
+    # Kısa ISO ülke kodları yalnızca SmartRecruiters country alanı veya sondaki ", xx" kodu üzerinden tanınır.
+    cc = country_code.strip().lower()
+    if not cc:
+        m = re.search(r"(?:^|,\s*)([a-z]{2})$", loc_lower.strip())
+        if m:
+            cc = m.group(1)
+
     # Kısa token'lar ('uk', 'us') kelime sınırıyla aranır: "Ukraine" artık 'uk' sayılmaz,
     # "Remote - US" artık sadece 'remote' içerdiği için geçmez.
-    has_eu_tr = any(has_word(loc_lower, ind) for ind in EU_TR_INDICATORS)
+    has_eu_tr = any(has_word(loc_lower, ind) for ind in EU_TR_INDICATORS) or (cc in ALLOWED_EU_COUNTRY_CODES)
     has_disallowed = any(has_word(loc_lower, dis) for dis in DISALLOWED_REGIONS) or has_word(loc_lower, "us")
 
     if has_eu_tr:
@@ -126,6 +141,15 @@ class ATSSource(BaseSource):
             if not comp_id:
                 continue
             jobs.extend(self._fetch_smartrecruiters(name, comp_id))
+
+        # ── 4. Ashby ──────────────────────────────────────────────────────────
+        ashby_companies = self.cfg.get("ashby", [])
+        for comp in ashby_companies:
+            name = comp.get("name", "Unknown")
+            slug = comp.get("slug")
+            if not slug:
+                continue
+            jobs.extend(self._fetch_ashby(name, slug))
 
         logger.info("ats source fetched total %d jobs across configured boards", len(jobs))
         return jobs
@@ -239,7 +263,12 @@ class ATSSource(BaseSource):
                 title = item.get("name", "").strip()
                 ext_id = str(item.get("id", ""))
                 loc_data = item.get("location", {}) or {}
-                loc = f"{loc_data.get('city', '')}, {loc_data.get('country', '')}".strip(", ")
+                city = (loc_data.get("city") or "").strip()
+                country = (loc_data.get("country") or "").strip()
+                loc_parts = [p for p in (city, country) if p]
+                if loc_data.get("remote") and not any("remote" in p.lower() for p in loc_parts):
+                    loc_parts.append("Remote")
+                loc = ", ".join(loc_parts)
                 job_url = f"https://jobs.smartrecruiters.com/{company_id}/{ext_id}"
 
                 if not title or not ext_id:
@@ -247,7 +276,7 @@ class ATSSource(BaseSource):
                 # Başlık-only ön eleme (açıklama henüz yok): giriş sinyali olan teknik dışı başlıklar da ilk turu geçer.
                 if not is_tech_title(title, "python software data"):
                     continue
-                if not is_allowed_location(loc):
+                if not is_allowed_location(loc, country_code=country):
                     continue
 
                 desc = self._sr_description(base, ext_id)
@@ -285,3 +314,51 @@ class ATSSource(BaseSource):
         except Exception as exc:
             logger.debug("smartrecruiters detail failed id=%s: %s", posting_id, exc)
             return ""
+
+    def _fetch_ashby(self, company_name: str, slug: str) -> list[Job]:
+        """Ashby halka açık posting API'sinden ilanları çeker ve filtreler."""
+        url = f"https://api.ashbyhq.com/posting-api/job-board/{slug}"
+        jobs: list[Job] = []
+        try:
+            r = self.session.get(url, timeout=12)
+            if r.status_code != 200:
+                logger.warning("ashby slug %s returned status %d", slug, r.status_code)
+                return jobs
+            data = r.json()
+            if not isinstance(data, dict):
+                return jobs
+            for item in data.get("jobs", []):
+                if item.get("isListed") is False:
+                    continue
+                title = (item.get("title") or "").strip()
+                ext_id = str(item.get("id") or "")
+                job_url = item.get("jobUrl") or item.get("applyUrl") or ""
+                loc_raw = item.get("location")
+                if isinstance(loc_raw, dict):
+                    loc = str(loc_raw.get("name") or "")
+                else:
+                    loc = str(loc_raw or "")
+                desc = clean_html(item.get("descriptionPlain") or item.get("descriptionHtml") or "")
+                posted_at = item.get("publishedAt")
+
+                if not title or not job_url:
+                    continue
+                if not is_tech_title(title, desc):
+                    continue
+                if not is_allowed_location(loc):
+                    continue
+
+                jobs.append(Job(
+                    source="ashby",
+                    external_id=f"ashby:{slug}:{ext_id}",
+                    url=job_url,
+                    title=title,
+                    company=company_name,
+                    location=loc,
+                    description=desc,
+                    posted_at=str(posted_at) if posted_at else None,
+                ))
+            logger.info("ashby %s (%s): %d jobs found", company_name, slug, len(jobs))
+        except Exception as e:
+            logger.warning("ashby fetch error for %s (%s): %s", company_name, slug, e)
+        return jobs

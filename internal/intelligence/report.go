@@ -9,6 +9,7 @@ import (
 // telegram.go parse_mode: HTML kullandığı için burada HTML tag'leri kullanılıyor.
 func FormatTelegramReport(r *MarketReport) string {
 	var sb strings.Builder
+	esc := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
 	sb.WriteString("📊 <b>Haftalık Market Raporu</b>\n")
 	sb.WriteString(fmt.Sprintf("<i>%d günlük analiz — %s</i>\n\n",
@@ -30,7 +31,7 @@ func FormatTelegramReport(r *MarketReport) string {
 			bar := progressBar(s.Frequency, 8)
 			sb.WriteString(fmt.Sprintf(
 				"  <code>%-16s</code> %s\n",
-				capitalize(s.Skill), bar,
+				esc.Replace(capitalize(s.Skill)), bar,
 			))
 		}
 		sb.WriteString("\n")
@@ -43,7 +44,7 @@ func FormatTelegramReport(r *MarketReport) string {
 			bar := progressBar(s.Frequency, 8)
 			sb.WriteString(fmt.Sprintf(
 				"  <code>%-16s</code> %s\n",
-				capitalize(s.Skill), bar,
+				esc.Replace(capitalize(s.Skill)), bar,
 			))
 		}
 		sb.WriteString("\n")
@@ -56,8 +57,8 @@ func FormatTelegramReport(r *MarketReport) string {
 			if i >= 5 {
 				break
 			}
-			// HTML'de & karakteri encode edilmeli
-			company := strings.ReplaceAll(c.Company, "&", "&amp;")
+			// HTML özel karakterleri (&, <, >) encode edilmeli
+			company := esc.Replace(c.Company)
 			sb.WriteString(fmt.Sprintf(
 				"  %d. %s — %d ilan (avg: %.1f)\n",
 				i+1, company, c.JobCount, c.AvgScore,

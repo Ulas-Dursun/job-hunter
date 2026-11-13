@@ -16,6 +16,7 @@ from jobspy import scrape_jobs
 
 from scraper.models.job import Job
 from scraper.sources.base import BaseSource
+from scraper.sources.filters import has_word
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,9 @@ def resolve_indeed_country(location: str, default: str = "Turkey") -> str:
     for markers, country_name in _INDEED_COUNTRY_MAP:
         if any(m in loc_lower for m in markers):
             return country_name
+    # Remote/Europe/EU/EMEA aramaları varsayılan Turkey yerine AB merkezi (Netherlands) olarak çözümlenir
+    if any(has_word(loc_lower, kw) for kw in ("remote", "europe", "eu", "emea")):
+        return "Netherlands"
     return default
 
 
@@ -59,7 +63,12 @@ class JobSpySource(BaseSource):
 
     def fetch(self, keywords: list[str], location: str) -> list[Job]:
         all_jobs: list[Job] = []
-        target_locations = self._locations if self._locations else [location]
+        raw_locations = self._locations if self._locations else [location]
+        # Türkiye lokasyonlarını en sona sırala: önce Brüksel/Benelüks/AB taransın
+        target_locations = sorted(
+            raw_locations,
+            key=lambda loc: resolve_indeed_country(loc, self._country_indeed) == "Turkey",
+        )
 
         for loc in target_locations:
             is_tr = resolve_indeed_country(loc, self._country_indeed) == "Turkey"
@@ -113,13 +122,13 @@ class JobSpySource(BaseSource):
 
         jobs = []
         for _, row in df.iterrows():
-            job = self._row_to_job(row)
+            job = self._row_to_job(row, fallback_location=location)
             if job:
                 jobs.append(job)
 
         return jobs
 
-    def _row_to_job(self, row) -> Optional[Job]:
+    def _row_to_job(self, row, fallback_location: str = "Brussels, Belgium") -> Optional[Job]:
         """DataFrame row'unu Job nesnesine dönüştürür."""
         title   = str(row.get("title") or "").strip()
         company = str(row.get("company") or "").strip()
@@ -147,9 +156,9 @@ class JobSpySource(BaseSource):
         if len(external_id) > 200:
             external_id = hashlib.sha256(url.encode()).hexdigest()[:20]
 
-        location = str(row.get("location") or "İstanbul").strip()
-        if location == "nan":
-            location = "İstanbul"
+        location = str(row.get("location") or "").strip()
+        if not location or location.lower() in ("nan", "none", "nat"):
+            location = fallback_location
 
         description = str(row.get("description") or "").strip()
         if description == "nan":
@@ -157,7 +166,7 @@ class JobSpySource(BaseSource):
 
         posted_at = None
         date_posted = row.get("date_posted")
-        if date_posted and str(date_posted) != "nan":
+        if date_posted is not None and str(date_posted).strip() not in ("nan", "NaT", "None", ""):
             try:
                 if hasattr(date_posted, "isoformat"):
                     posted_at = date_posted.isoformat()

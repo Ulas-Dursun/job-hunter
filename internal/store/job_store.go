@@ -178,12 +178,13 @@ func parsePostedAt(s string) (time.Time, error) {
 }
 
 // BuildPreferenceSummary, kullanıcının Kanban panosunda yaptığı gerçek seçimleri
-// (applied/interview/offer vs skipped/rejected) özetleyerek AI prompt'una geri bildirim üretir.
+// (applied/interview/offer vs skipped) son 45 gün penceresinde özetleyerek AI prompt'una geri bildirim üretir.
 func (s *JobStore) BuildPreferenceSummary(ctx context.Context) (string, error) {
 	posRows, err := s.pool.Query(ctx, `
 		SELECT title, company, COALESCE(location, ''), COALESCE(array_to_string(skill_overlap, ', '), '')
 		FROM jobs
 		WHERE status IN ('applied', 'interview', 'offer')
+		  AND updated_at >= NOW() - INTERVAL '45 days'
 		ORDER BY updated_at DESC NULLS LAST, scraped_at DESC
 		LIMIT 8
 	`)
@@ -200,10 +201,12 @@ func (s *JobStore) BuildPreferenceSummary(ctx context.Context) (string, error) {
 		}
 	}
 
+	// rejected ilanlar adayın sevdiği ama red aldığı rollerdir; negatif sinyal olarak beslenmez.
 	negRows, err := s.pool.Query(ctx, `
 		SELECT title, company, COALESCE(location, ''), COALESCE(array_to_string(red_flags, '; '), '')
 		FROM jobs
-		WHERE status IN ('skipped', 'rejected')
+		WHERE status = 'skipped'
+		  AND updated_at >= NOW() - INTERVAL '45 days'
 		ORDER BY updated_at DESC NULLS LAST, scraped_at DESC
 		LIMIT 8
 	`)
@@ -225,12 +228,13 @@ func (s *JobStore) BuildPreferenceSummary(ctx context.Context) (string, error) {
 	}
 
 	var sb strings.Builder
+	sb.WriteString("Note: Distinguish location-based skips (e.g., legacy non-target cities) from genuine role/tech preferences based on the candidate's current Location & Mobility.\n")
 	if len(liked) > 0 {
 		sb.WriteString("Roles the candidate actively chose to APPLY/INTERVIEW for (reward similar entry/junior roles +0.3):\n")
 		sb.WriteString(strings.Join(liked, "\n") + "\n")
 	}
 	if len(disliked) > 0 {
-		sb.WriteString("Roles the candidate manually SKIPPED/REJECTED (be more conservative on similar patterns):\n")
+		sb.WriteString("Roles the candidate manually SKIPPED (be more conservative on similar patterns):\n")
 		sb.WriteString(strings.Join(disliked, "\n") + "\n")
 	}
 	return sb.String(), nil

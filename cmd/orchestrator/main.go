@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -100,8 +101,13 @@ func main() {
 	cheapFilter := filter.NewCheapFilter(&cfg.Candidate)
 
 	// ── 9. Consumer (jobs:raw → jobs:filtered) ────────────────────────────────
+	var wg sync.WaitGroup
 	jobConsumer := consumer.New(rc.Client(), cheapFilter, appMetrics, &cfg.Redis)
-	go jobConsumer.Run(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		jobConsumer.Run(ctx)
+	}()
 
 	// ── 10. Gemini Analyzer ───────────────────────────────────────────────────
 	geminiAnalyzer := analyzer.NewGeminiAnalyzer(&cfg.Gemini, &cfg.Candidate)
@@ -148,12 +154,20 @@ func main() {
 		cfg.Notifications.TelegramEnabled,
 	)
 	workerPool.SetPreFilter(cheapFilter)
-	go workerPool.Run(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		workerPool.Run(ctx)
+	}()
 
 	// ── 14. Market Intelligence Scheduler ────────────────────────────────────
 	marketScheduler := intelligence.NewScheduler(pg.Pool(), &cfg.Candidate, telegramNotifier)
 	marketScheduler.SetRedisMonitor(rc.Client(), &cfg.Redis)
-	go marketScheduler.Run(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		marketScheduler.Run(ctx)
+	}()
 	slog.Info("market intelligence scheduler started")
 
 	slog.Info("all systems ready",
@@ -165,6 +179,19 @@ func main() {
 
 	<-ctx.Done()
 	slog.Info("shutdown signal received, stopping gracefully")
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		slog.Info("all workers and consumer stopped cleanly")
+	case <-time.After(10 * time.Second):
+		slog.Warn("graceful shutdown timeout exceeded (10s), closing connections")
+	}
 }
 
 func countEnabledSources(cfg *config.Config) int {

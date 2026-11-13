@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/ulasdursun/job-hunter/internal/config"
 )
 
 func TestParseTailoredResult(t *testing.T) {
@@ -373,5 +375,171 @@ func TestParseResult_ScoreBreakdownClampingAndZeroPreservation(t *testing.T) {
 	jsonStr := string(b)
 	if !strings.Contains(jsonStr, `"seniority_fit":0`) || !strings.Contains(jsonStr, `"location_fit":0`) {
 		t.Errorf("expected 0.0 fields to be preserved in JSON (no omitempty), got: %s", jsonStr)
+	}
+}
+
+func TestPromptBuilder_CurrentAssignmentsAndLocationTierRubric(t *testing.T) {
+	cfg := &config.CandidateConfig{
+		Name:            "Alex Rivera",
+		Location:        "Brussels, Belgium",
+		TargetLocations: []string{"Brussels", "Amsterdam", "London", "Zurich"},
+		Experience:      []string{"Example Aerospace: Software Engineering Trainee (Active)"},
+	}
+	pb := NewPromptBuilder(cfg)
+	prompt := pb.Build("Junior Backend Engineer", "Collibra", "Brussels", "Go, PostgreSQL")
+
+	if !strings.Contains(prompt, "Work Experience & Current Assignments:") {
+		t.Errorf("expected 'Work Experience & Current Assignments:' heading in profile")
+	}
+	if strings.Contains(prompt, "Work Experience & Incoming Assignments:") {
+		t.Errorf("did not expect old 'Work Experience & Incoming Assignments:' heading in profile")
+	}
+	if !strings.Contains(prompt, "TIER-1 HIGH ACCESSIBILITY") || !strings.Contains(prompt, "TIER-3 HIGH-VALUE / SPONSORSHIP-CRITICAL") {
+		t.Errorf("expected location accessibility tier rubric in prompt")
+	}
+	if !strings.Contains(prompt, "INCLUDING BRUSSELS FR/NL") {
+		t.Errorf("expected Brussels FR/NL language barrier penalty in prompt")
+	}
+}
+
+func TestParseResult_BreakdownMismatchDoesNotOverrideMatchScore(t *testing.T) {
+	raw := `{
+		"reasoning": "3+ years required so hard cap applied.",
+		"role_family": "primary",
+		"skill_overlap": ["Go", "PostgreSQL"],
+		"missing_skills": ["3+ years production"],
+		"red_flags": ["Requires 3+ years"],
+		"score_breakdown": {
+			"tech_fit": 4.5,
+			"seniority_fit": 1.5,
+			"domain_fit": 1.2,
+			"location_fit": 0.9
+		},
+		"match_score": 6.5,
+		"action": "watch"
+	}`
+
+	res, err := parseResult(raw)
+	if err != nil {
+		t.Fatalf("parseResult failed: %v", err)
+	}
+	if res.MatchScore != 6.5 {
+		t.Errorf("expected hard-capped MatchScore 6.5 to be preserved, got %v", res.MatchScore)
+	}
+}
+
+func TestParseTailoredResult_RejectsEmptyCoverLetterOrSummary(t *testing.T) {
+	emptyCoverJSON := `{
+		"cover_letter": "   ",
+		"tailored_summary": "Valid summary",
+		"skills_highlight": ["Go"]
+	}`
+	if _, err := parseTailoredResult(emptyCoverJSON); err == nil {
+		t.Errorf("expected error when cover_letter is empty, got nil")
+	}
+
+	emptySummaryJSON := `{
+		"cover_letter": "Valid cover letter",
+		"tailored_summary": "",
+		"skills_highlight": ["Go"]
+	}`
+	if _, err := parseTailoredResult(emptySummaryJSON); err == nil {
+		t.Errorf("expected error when tailored_summary is empty, got nil")
+	}
+}
+
+func TestSanitizeTailoredAssets_AllowlistCatchesLeaks(t *testing.T) {
+	cfg := &config.CandidateConfig{
+		Name: "Test Candidate",
+		Skills: config.SkillsConfig{
+			Languages: []string{"Go", "Python"},
+			Databases: []string{"PostgreSQL", "Redis"},
+			Infra:     []string{"Docker"},
+			Cloud:     []string{"AWS"},
+		},
+		Experience: []string{
+			"Example Aerospace: Software Engineering Trainee",
+			"Summer Camp Counselor: Seasonal Staff",
+		},
+	}
+
+	svc := NewTailorService(nil, cfg)
+	if len(svc.ownedSkills) == 0 {
+		t.Fatalf("expected non-empty ownedSkills allowlist when candidate is provided")
+	}
+
+	rawJSON := `{
+		"cover_letter": "Concise cover letter.",
+		"tailored_summary": "Backend engineer experienced in Go and PostgreSQL.",
+		"tailored_experience_bullets": ["Built Go services at Example Aerospace."],
+		"tailored_project_bullets": ["Designed Redis worker pool."],
+		"skills_highlight": ["Go", "TypeScript", "Azure", "GCP", "gRPC", "PostgreSQL", "Docker"],
+		"ats_keywords": ["Go", "PostgreSQL"]
+	}`
+
+	res, err := parseTailoredResultWithAllowlist(rawJSON, svc.ownedSkills, svc.unownedTech...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	leaked := map[string]bool{"TypeScript": true, "Azure": true, "GCP": true, "gRPC": true}
+	for _, sk := range res.SkillsHighlight {
+		if leaked[sk] {
+			t.Errorf("expected leaked unowned skill %q to be removed from skills_highlight", sk)
+		}
+	}
+
+	kept := map[string]bool{}
+	for _, sk := range res.SkillsHighlight {
+		kept[sk] = true
+	}
+	if !kept["Go"] || !kept["PostgreSQL"] || !kept["Docker"] {
+		t.Errorf("expected owned skills Go, PostgreSQL, Docker to remain, got: %v", res.SkillsHighlight)
+	}
+
+	if len(res.Warnings) < 4 {
+		t.Errorf("expected warnings for TypeScript, Azure, GCP, gRPC leaks, got: %v", res.Warnings)
+	}
+
+	// candidate == nil durumunda sadece unownedTech kara listesi çalışmalı
+	nilSvc := NewTailorService(nil)
+	if nilSvc.ownedSkills != nil {
+		t.Errorf("expected nil ownedSkills when candidate is nil")
+	}
+	nilRes, err := parseTailoredResultWithAllowlist(rawJSON, nilSvc.ownedSkills, nilSvc.unownedTech...)
+	if err != nil {
+		t.Fatalf("unexpected error with nil allowlist: %v", err)
+	}
+	nilKept := map[string]bool{}
+	for _, sk := range nilRes.SkillsHighlight {
+		nilKept[sk] = true
+	}
+	if !nilKept["TypeScript"] {
+		t.Errorf("expected TypeScript to remain when candidate is nil (only blacklist active), got: %v", nilRes.SkillsHighlight)
+	}
+}
+
+func TestBuildMasterProfile_SeparatesNonEngineeringExperienceAndInterviewPrompt(t *testing.T) {
+	cfg := &config.CandidateConfig{
+		Name: "Alex Rivera",
+		Experience: []string{
+			"Example Aerospace: Software Engineering Trainee",
+			"Example Labs: Backend Developer Intern",
+			"Summer Camp Counselor: Seasonal Staff (1 June 2027)",
+		},
+	}
+	svc := NewTailorService(nil, cfg)
+	if !strings.Contains(svc.masterProfile, "ENGINEERING WORK EXPERIENCE & ASSIGNMENTS") {
+		t.Errorf("expected engineering experience heading in master profile")
+	}
+	if !strings.Contains(svc.masterProfile, "OTHER / NON-ENGINEERING EXPERIENCE") {
+		t.Errorf("expected non-engineering experience heading in master profile")
+	}
+
+	interviewPrompt := svc.buildInterviewPrompt("Backend Engineer", "Collibra", "Brussels", "Go, Kubernetes")
+	for _, needle := range []string{"stated availability date", "work authorization/sponsorship context", "gap-bridging"} {
+		if !strings.Contains(interviewPrompt, needle) {
+			t.Errorf("expected %q in interview prompt", needle)
+		}
 	}
 }

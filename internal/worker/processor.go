@@ -218,8 +218,6 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 	}
 	p.clearAttempts(msg.ID)
 
-	p.Ack(ctx, p.cfg.StreamFiltered, msg.ID)
-
 	// ── Telegram bildirimi ────────────────────────────────────────────────────
 	threshold := p.scoring.TelegramThresholdPrimary
 	if result.RoleFamily == "secondary" {
@@ -237,11 +235,16 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 			p.metrics.TelegramFailed.Inc()
 		} else {
 			p.metrics.TelegramSent.Inc()
-			if err := p.jobStore.MarkNotified(ctx, source, externalID); err != nil {
+			// Bildirim gönderildikten sonra shutdown sırasında ctx iptal edilse bile DB kaydını tamamla.
+			markCtx, markCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := p.jobStore.MarkNotified(markCtx, source, externalID); err != nil {
 				slog.Error("mark notified failed", "error", err)
 			}
+			markCancel()
 		}
 	}
+
+	p.Ack(ctx, p.cfg.StreamFiltered, msg.ID)
 }
 
 // ToFailed moves a failed message to jobs:failed (DLQ).
@@ -305,8 +308,10 @@ func retryIdentifier(msg redis.XMessage) string {
 	return msg.ID
 }
 
-func (p *JobProcessor) Ack(ctx context.Context, stream, id string) {
-	if err := p.client.XAck(ctx, stream, p.cfg.ConsumerGroup, id).Err(); err != nil {
+func (p *JobProcessor) Ack(_ context.Context, stream, id string) {
+	ackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := p.client.XAck(ackCtx, stream, p.cfg.ConsumerGroup, id).Err(); err != nil {
 		slog.Error("xack failed", "id", id, "error", err)
 	}
 }

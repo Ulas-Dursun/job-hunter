@@ -88,8 +88,10 @@ func (p *Pool) runWorker(ctx context.Context, id int) {
 	slog.Info("worker started", "id", id)
 	defer slog.Info("worker stopped", "id", id)
 
-	// Başlangıçta 5 dakikadan uzun süredir PEL'de sahipsiz bekleyen mesajları XAUTOCLAIM ile kurtar.
-	p.reclaimOrphanedMessages(ctx, id)
+	// Başlangıçta yalnızca worker 0, 15 dakikadan uzun süredir PEL'de sahipsiz bekleyen mesajları XAUTOCLAIM ile kurtarır.
+	if id == 0 {
+		p.reclaimOrphanedMessages(ctx, id)
+	}
 	lastAutoClaim := time.Now()
 
 	for {
@@ -97,7 +99,7 @@ func (p *Pool) runWorker(ctx context.Context, id int) {
 		case <-ctx.Done():
 			return
 		default:
-			if time.Since(lastAutoClaim) >= autoClaimInterval {
+			if id == 0 && time.Since(lastAutoClaim) >= autoClaimInterval {
 				p.reclaimOrphanedMessages(ctx, id)
 				lastAutoClaim = time.Now()
 			}
@@ -155,15 +157,17 @@ func (p *Pool) reclaimOrphanedMessages(ctx context.Context, workerID int) {
 
 // processWithLock ensures that an in-flight message is never concurrently processed
 // by another worker or reclaimed prematurely via XAUTOCLAIM during active processing/retries.
-func (p *Pool) processWithLock(ctx context.Context, msg redis.XMessage, workerID int) {
+// Returns false if the message was already in-flight and skipped.
+func (p *Pool) processWithLock(ctx context.Context, msg redis.XMessage, workerID int) bool {
 	if _, loaded := p.inFlight.LoadOrStore(msg.ID, workerID); loaded {
 		slog.Warn("worker message already in-flight, skipping duplicate processing",
 			"msg_id", msg.ID, "worker_id", workerID)
-		return
+		return false
 	}
 	defer p.inFlight.Delete(msg.ID)
 
 	p.processor.Process(ctx, msg, workerID)
+	return true
 }
 
 func (p *Pool) processNext(ctx context.Context, workerID int) {
@@ -177,8 +181,19 @@ func (p *Pool) processNext(ctx context.Context, workerID int) {
 		Count:    1,
 	}).Result()
 
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		if !errors.Is(err, redis.Nil) {
+			slog.Error("worker xreadgroup pending error", "worker_id", workerID, "error", err)
+			sleepWithContext(ctx, 1*time.Second)
+			return
+		}
+	}
+
 	// Eğer pending mesaj yoksa veya boşsa, yeni mesajları bekle (ID: ">", Block: 2s)
-	if err != nil || len(streams) == 0 || len(streams[0].Messages) == 0 {
+	if len(streams) == 0 || len(streams[0].Messages) == 0 {
 		streams, err = p.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    p.cfg.ConsumerGroup,
 			Consumer: consumerName,
@@ -193,12 +208,26 @@ func (p *Pool) processNext(ctx context.Context, workerID int) {
 			return
 		}
 		slog.Error("worker xreadgroup error", "worker_id", workerID, "error", err)
+		sleepWithContext(ctx, 1*time.Second)
 		return
 	}
 
+	skippedInFlight := false
 	for _, stream := range streams {
 		for _, msg := range stream.Messages {
-			p.processWithLock(ctx, msg, workerID)
+			if !p.processWithLock(ctx, msg, workerID) {
+				skippedInFlight = true
+			}
 		}
+	}
+	if skippedInFlight {
+		sleepWithContext(ctx, 500*time.Millisecond)
+	}
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) {
+	select {
+	case <-time.After(d):
+	case <-ctx.Done():
 	}
 }

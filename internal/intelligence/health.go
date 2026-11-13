@@ -45,7 +45,10 @@ func (m *QueueHealthMonitor) Run(ctx context.Context) {
 	}
 
 	// Başlangıçtaki mevcut failed sayısını baz al (eski hatalar için açılışta alarm çalma).
-	lastFailed, _ := m.redis.XLen(ctx, m.redisCfg.StreamFailed).Result()
+	lastFailed, err := m.redis.XLen(ctx, m.redisCfg.StreamFailed).Result()
+	if err != nil {
+		slog.Warn("health monitor initial failed stream xlen failed", "stream", m.redisCfg.StreamFailed, "error", err)
+	}
 	var lastLagAlert time.Time
 
 	ticker := time.NewTicker(healthCheckInterval)
@@ -60,19 +63,21 @@ func (m *QueueHealthMonitor) Run(ctx context.Context) {
 				continue
 			}
 
-			var lag int64
-			if groups, err := m.redis.XInfoGroups(ctx, m.redisCfg.StreamFiltered).Result(); err == nil {
-				for _, g := range groups {
-					if g.Name == m.redisCfg.ConsumerGroup {
-						lag = g.Lag + g.Pending
-						break
-					}
-				}
-			}
-			failedNow, _ := m.redis.XLen(ctx, m.redisCfg.StreamFailed).Result()
-			newFailures := failedNow - lastFailed
+			rawLag := m.streamLag(ctx, m.redisCfg.StreamRaw)
+			filteredLag := m.streamLag(ctx, m.redisCfg.StreamFiltered)
 
-			needLagAlert := lag >= queueLagAlertThreshold && time.Since(lastLagAlert) >= healthAlertCooldown
+			failedNow, err := m.redis.XLen(ctx, m.redisCfg.StreamFailed).Result()
+			var newFailures int64
+			if err != nil {
+				slog.Warn("health monitor failed stream xlen failed", "stream", m.redisCfg.StreamFailed, "error", err)
+			} else {
+				newFailures = failedNow - lastFailed
+			}
+
+			cooldownElapsed := time.Since(lastLagAlert) >= healthAlertCooldown
+			needRawLagAlert := rawLag >= queueLagAlertThreshold && cooldownElapsed
+			needFilteredLagAlert := filteredLag >= queueLagAlertThreshold && cooldownElapsed
+			needLagAlert := needRawLagAlert || needFilteredLagAlert
 			needFailAlert := newFailures >= failedDeltaThreshold
 
 			if !needLagAlert && !needFailAlert {
@@ -81,8 +86,11 @@ func (m *QueueHealthMonitor) Run(ctx context.Context) {
 
 			var sb strings.Builder
 			sb.WriteString("⚠️ <b>SİSTEM SAĞLIK UYARISI (Job Hunter)</b>\n\n")
-			if needLagAlert {
-				sb.WriteString(fmt.Sprintf("• <b>Kuyruk Birikmesi (jobs:filtered):</b> <code>%d</code> ilan bekliyor (eşik: %d)\n", lag, queueLagAlertThreshold))
+			if needRawLagAlert {
+				sb.WriteString(fmt.Sprintf("• <b>Kuyruk Birikmesi (%s):</b> <code>%d</code> ilan bekliyor (eşik: %d)\n", m.redisCfg.StreamRaw, rawLag, queueLagAlertThreshold))
+			}
+			if needFilteredLagAlert {
+				sb.WriteString(fmt.Sprintf("• <b>Kuyruk Birikmesi (%s):</b> <code>%d</code> ilan bekliyor (eşik: %d)\n", m.redisCfg.StreamFiltered, filteredLag, queueLagAlertThreshold))
 			}
 			if needFailAlert {
 				sb.WriteString(fmt.Sprintf("• <b>Yeni Hatalı İlan (jobs:failed):</b> <code>+%d</code> yeni hata (toplam: <code>%d</code>)\n", newFailures, failedNow))
@@ -99,7 +107,24 @@ func (m *QueueHealthMonitor) Run(ctx context.Context) {
 			if needFailAlert {
 				lastFailed = failedNow
 			}
-			slog.Info("queue health alert sent", "lag", lag, "failed_total", failedNow)
+			slog.Info("queue health alert sent", "raw_lag", rawLag, "filtered_lag", filteredLag, "failed_total", failedNow)
 		}
 	}
+}
+
+func (m *QueueHealthMonitor) streamLag(ctx context.Context, stream string) int64 {
+	if stream == "" {
+		return 0
+	}
+	groups, err := m.redis.XInfoGroups(ctx, stream).Result()
+	if err != nil {
+		slog.Warn("health monitor xinfogroups failed", "stream", stream, "error", err)
+		return 0
+	}
+	for _, g := range groups {
+		if g.Name == m.redisCfg.ConsumerGroup {
+			return g.Lag + g.Pending
+		}
+	}
+	return 0
 }

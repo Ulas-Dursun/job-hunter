@@ -362,3 +362,130 @@ func TestCheapFilter_NonEnglishPosting(t *testing.T) {
 		t.Error("Danca ilan elenmeliydi")
 	}
 }
+
+func TestCheapFilter_ExperienceCompanyClaimAndPlusFix(t *testing.T) {
+	f := testFilter()
+
+	// "for " ve "over " companyClaimPrefixes'ten kaldırıldığı için bu senior şartları artık elenmeli
+	for _, d := range []string{
+		"Looking for 5+ years of experience in backend systems.",
+		"Over 5 years of experience required in Go or Python.",
+		"At least 5+ years of experience building distributed services.",
+	} {
+		r := f.Check("Backend Developer", "Acme", d)
+		if !r.Rejected {
+			t.Errorf("%q yüksek deneyim şartı olarak elenmeliydi", d)
+		}
+	}
+}
+
+func TestCheapFilter_BrusselsBilingualLanguageBarriers(t *testing.T) {
+	f := testFilter()
+
+	// Elenmesi gereken Brüksel iki dilli / Fransızca / Felemenkçe bariyerleri
+	for _, d := range []string{
+		"Fluent in English and French is required for this Brussels role.",
+		"Fluent in English and Dutch.",
+		"We are looking for a Bilingual FR/NL engineer.",
+		"Trilingual (EN/FR/NL) profile.",
+		"Français courant exigé pour ce poste.",
+		"French (C1) is required.",
+		"French C1 level needed.",
+		"Dutch (B2) required for client communication.",
+		"French (B2) required.",
+	} {
+		if r := f.Check("Software Engineer", "BrusselsTech", d); !r.Rejected {
+			t.Errorf("%q dil bariyeri olarak elenmeliydi", d)
+		}
+	}
+
+	// Yumuşatıcı ifadeler ve iki satırlı madde yapıları geçmeli
+	for _, d := range []string{
+		"- Fluent in French\n  (nice to have)",
+		"- Fluent in French\r\n\t(preferred)",
+		"French (pas requis) for this role.",
+		"Français courant (non requis).",
+		"Français courant n'est pas nécessaire.",
+		"Français courant pas obligatoire.",
+		"French required: not mandatory for this role.",
+		"Dutch required is not a requirement.",
+		"Fluent in French, you don't need it for daily work.",
+	} {
+		if r := f.Check("Software Engineer", "BrusselsTech", d); r.Rejected {
+			t.Errorf("%q yumuşak dil şartı, elenmemeli: %s", d, r.Reason)
+		}
+	}
+
+	// İki satırlı madde kontrolü normal sonraki satırdaki "plus" kelimesini yanlışlıkla soft saymamalı
+	if r := f.Check("Software Engineer", "BrusselsTech", "- Fluent in French\n- Salary plus annual bonus"); !r.Rejected {
+		t.Error("sonraki satırdaki 'plus' kelimesi dil bariyerini iptal etmemeliydi")
+	}
+
+	// İngilizce-dostu Brüksel ifadeleri Fransızca ağırlıklı metni kurtarmalı
+	fr := strings.Repeat("Nous cherchons un développeur pour notre équipe avec une bonne ambiance pour vos projets. ", 8)
+	for _, phrase := range []string{
+		"French is not required.",
+		"No French required.",
+		"Working language: English.",
+		"Langue de travail : anglais.",
+	} {
+		if r := f.Check("Software Engineer", "BrusselsTech", fr+" "+phrase); r.Rejected {
+			t.Errorf("englishFriendlyPhrase %q içeren ilan geçmeliydi, red: %s", phrase, r.Reason)
+		}
+	}
+}
+
+func TestCheapFilter_ArchitectRejected(t *testing.T) {
+	f := testFilter()
+	for _, title := range []string{
+		"Software Architect",
+		"Solutions Architect",
+		"Cloud Architect",
+	} {
+		if r := f.Check(title, "Acme", "Go and Kubernetes"); !r.Rejected {
+			t.Errorf("%q architect rolü elenmeliydi", title)
+		}
+	}
+}
+
+func TestCheapFilter_NewEntrySignalsAndDerivatives(t *testing.T) {
+	f := testFilter()
+
+	// Başlıkta tech keyword yok ama yeni entry sinyal + teknik açıklama -> geçmeli
+	for _, title := range []string{
+		"IT Starter Programme",
+		"V.I.E Data & Cloud",
+		"VIE Programme Brussels",
+		"Young Potential 2026",
+		"Graduates Programme 2026",
+		"IT Traineeship",
+		"Juniors Track",
+	} {
+		desc := "You will build backend services with Python, SQL and Docker."
+		if r := f.Check(title, "Acme", desc); r.Rejected {
+			t.Errorf("%q entry sinyali + teknik içerik geçmeliydi, red: %s", title, r.Reason)
+		}
+	}
+
+	// "Jr." başlığı yıl kapısını da atlatmalı
+	if r := f.Check("Jr. Backend Developer", "Acme", "4+ years of experience preferred"); r.Rejected {
+		t.Errorf("Jr. başlığı yıl kapısına takılmamalı: %s", r.Reason)
+	}
+}
+
+func TestCheapFilter_DescPreviewUTF8Safe(t *testing.T) {
+	f := testFilter()
+	// 2499 ASCII byte + 2 byte Türkçe karakter ('ğ' = 0xC4 0x9F) -> 2500. byte ortasına denk gelir
+	prefix := strings.Repeat("a", 2499)
+	desc := prefix + "ğ Python and SQL graduate program"
+	// Panik veya UTF-8 bozulması olmadan çalışmalı; "graduate" ve "Python" 2500 sınırından sonra olduğu için
+	// burada amaç 2500. byte sınırında keserken geçerli UTF-8 ürettiğini ve sorunsuz çalıştığını doğrulamaktır.
+	_ = f.Check("Programme 2026", "Acme", desc)
+
+	// 2498 ASCII byte + 'ğ' (2 byte = 2500) + 'ğ' ... sınırda bozulma olmamalı
+	desc2 := strings.Repeat("a", 2498) + "ğ" + " Python"
+	r := f.Check("Backend Developer", "Acme", desc2)
+	if r.Rejected {
+		t.Errorf("UTF-8 sınırındaki açıklama geçmeliydi, red: %s", r.Reason)
+	}
+}

@@ -43,6 +43,7 @@ const SOURCE_META = {
     lever:           { label: 'Lever ATS',        badge: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
     greenhouse:      { label: 'Greenhouse ATS',   badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
     smartrecruiters: { label: 'SmartRecruiters',  badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+    ashby:           { label: 'Ashby ATS',        badge: 'bg-teal-500/15 text-teal-300 border-teal-500/30' },
     techcareer:      { label: 'techcareer.net',   badge: 'bg-pink-500/15 text-pink-300 border-pink-500/30' },
     coderspace:      { label: 'Coderspace 🚀',    badge: 'bg-orange-500/15 text-orange-300 border-orange-500/30' },
     kariyer_net:     { label: 'Kariyer.net',      badge: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30' },
@@ -192,7 +193,7 @@ function isTurkeyJob(j) {
     const comp = (j.company || '').toLowerCase()
     return src === 'techcareer' || src === 'coderspace' || src === 'kariyer_net' ||
            loc.includes('istanbul') || loc.includes('i̇stanbul') || loc.includes('turkey') || loc.includes('türkiye') || loc.includes('ankara') || loc.includes('izmir') || loc.includes('bursa') || loc.includes('kocaeli') ||
-           comp.includes('peak') || comp.includes('trendyol') || comp.includes('commencis') || comp.includes('iyzico')
+           comp.includes('peak games') || comp.includes('trendyol') || comp.includes('commencis') || comp.includes('iyzico')
 }
 
 function isEuropeJob(j) {
@@ -200,12 +201,12 @@ function isEuropeJob(j) {
     const src = (j.source || '').toLowerCase()
     if (isTurkeyJob(j)) return false
     return src === 'arbeitnow' || src === 'eurocontrol' ||
-           hasWord(loc, ['brussels', 'brussel', 'bruxelles', 'belgium', 'netherlands', 'amsterdam', 'rotterdam', 'eindhoven', 'utrecht', 'germany', 'deutschland', 'berlin', 'munich', 'münchen', 'hamburg', 'frankfurt', 'denmark', 'copenhagen', 'københavn', 'kobenhavn', 'aarhus', 'switzerland', 'zurich', 'zürich', 'geneva', 'london', 'united kingdom', 'uk', 'austria', 'vienna', 'dublin', 'ireland', 'stockholm', 'warsaw', 'paris', 'cluj', 'europe', 'emea', 'be', 'nl', 'de', 'dk', 'ch'])
+           hasWord(loc, ['brussels', 'brussel', 'bruxelles', 'belgium', 'belgië', 'belgie', 'belgique', 'antwerp', 'antwerpen', 'ghent', 'gent', 'leuven', 'zaventem', 'mechelen', 'luxembourg', 'netherlands', 'amsterdam', 'rotterdam', 'eindhoven', 'utrecht', 'germany', 'deutschland', 'berlin', 'munich', 'münchen', 'hamburg', 'frankfurt', 'denmark', 'copenhagen', 'københavn', 'kobenhavn', 'aarhus', 'switzerland', 'zurich', 'zürich', 'geneva', 'london', 'united kingdom', 'uk', 'austria', 'vienna', 'dublin', 'ireland', 'stockholm', 'warsaw', 'paris', 'madrid', 'barcelona', 'lisbon', 'milan', 'helsinki', 'oslo', 'prague', 'cluj', 'europe', 'emea', 'nl', 'dk', 'ch'])
 }
 
 function isAtsJob(j) {
     const src = (j.source || '').toLowerCase()
-    return src === 'lever' || src === 'greenhouse' || src === 'smartrecruiters'
+    return src === 'lever' || src === 'greenhouse' || src === 'smartrecruiters' || src === 'ashby'
 }
 
 function toggleOnlyRelevant() {
@@ -353,6 +354,9 @@ function renderJobs() {
     }
 
     container.className = "grid grid-cols-1 lg:grid-cols-2 gap-4"
+
+    const totalPages = Math.max(1, Math.ceil(total / STATE.limit))
+    if (STATE.page > totalPages) STATE.page = totalPages
 
     const start = (STATE.page - 1) * STATE.limit
     const paginated = STATE.filteredJobs.slice(start, start + STATE.limit)
@@ -1322,7 +1326,7 @@ function matchesKanbanCity(j, code) {
     if (code === 'be') return loc.includes('brussel') || loc.includes('bruxelles') || loc.includes('belgium') || hasWord(loc, ['be'])
     if (code === 'nl') return loc.includes('amsterdam') || loc.includes('rotterdam') || loc.includes('eindhoven') || loc.includes('utrecht') || loc.includes('netherlands') || hasWord(loc, ['nl'])
     if (code === 'de') return loc.includes('berlin') || loc.includes('munich') || loc.includes('münchen') || loc.includes('frankfurt') || loc.includes('hamburg') || loc.includes('germany') || loc.includes('deutschland') || hasWord(loc, ['de'])
-    if (code === 'dk') return loc.includes('copenhagen') || loc.includes('københavn') || loc.includes('kobenhavn') || loc.aarhus || loc.includes('denmark') || hasWord(loc, ['dk'])
+    if (code === 'dk') return loc.includes('copenhagen') || loc.includes('københavn') || loc.includes('kobenhavn') || loc.includes('aarhus') || loc.includes('denmark') || hasWord(loc, ['dk'])
     if (code === 'remote') return loc.includes('remote')
     return true
 }
@@ -1386,14 +1390,38 @@ function renderPagination(total) {
         return
     }
 
-    let html = ''
-    for (let i = 1; i <= Math.min(totalPages, 7); i++) {
-        const isActive = i === STATE.page
-        html += `
-            <button onclick="goToPage(${i})" class="w-8 h-8 rounded-lg text-xs font-semibold transition ${isActive ? 'bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/20' : 'bg-dark-card border border-dark-border text-dark-text hover:text-white'}">
-                ${i}
+    const windowSize = 7
+    let startPage = Math.max(1, STATE.page - Math.floor(windowSize / 2))
+    let endPage = startPage + windowSize - 1
+    if (endPage > totalPages) {
+        endPage = totalPages
+        startPage = Math.max(1, endPage - windowSize + 1)
+    }
+
+    const pageBtn = (p, label = String(p)) => {
+        const isActive = p === STATE.page
+        return `
+            <button onclick="goToPage(${p})" class="w-8 h-8 rounded-lg text-xs font-semibold transition ${isActive ? 'bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/20' : 'bg-dark-card border border-dark-border text-dark-text hover:text-white'}">
+                ${label}
             </button>
         `
+    }
+
+    let html = ''
+    if (startPage > 1) {
+        html += pageBtn(1)
+        if (startPage > 2) {
+            html += `<span class="px-1 text-xs text-dark-textMuted select-none">…</span>`
+        }
+    }
+    for (let i = startPage; i <= endPage; i++) {
+        html += pageBtn(i)
+    }
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            html += `<span class="px-1 text-xs text-dark-textMuted select-none">…</span>`
+        }
+        html += pageBtn(totalPages)
     }
     pgEl.innerHTML = html
 }

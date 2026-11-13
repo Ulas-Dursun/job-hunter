@@ -40,7 +40,7 @@ def run_cycle(cfg: dict, sources: list, producer: RedisProducer) -> tuple[int, i
         try:
             jobs = source.fetch(
                 keywords=source_cfg.get("keywords", []),
-                location=source_cfg.get("location", "Istanbul, Turkey"),
+                location=source_cfg.get("location", "Brussels, Belgium"),
             )
             published, skipped = producer.publish_batch(jobs)
             total_published += published
@@ -88,15 +88,23 @@ def main() -> None:
         ttl_days=redis_cfg.get("dedup_ttl_days", 30),
     )
 
-    # ── Sources ───────────────────────────────────────────────────────────
+    # ── Sources (AB/Global önce, TR kaynakları en sonda) ──────────────────
     sources = []
+    if cfg["sources"].get("eurocontrol", {}).get("enabled", False):
+        sources.append(EurocontrolSource(cfg["sources"]["eurocontrol"]))
+        logger.info("eurocontrol source enabled (official brussels portal)")
+
     if cfg["sources"].get("ats", {}).get("enabled", False):
         sources.append(ATSSource(cfg["sources"]["ats"]))
         logger.info("ats source enabled (greenhouse + smartrecruiters)")
 
-    if cfg["sources"].get("eurocontrol", {}).get("enabled", False):
-        sources.append(EurocontrolSource(cfg["sources"]["eurocontrol"]))
-        logger.info("eurocontrol source enabled (official brussels portal)")
+    if cfg["sources"].get("arbeitnow", {}).get("enabled", False):
+        sources.append(ArbeitnowSource(cfg["sources"]["arbeitnow"]))
+        logger.info("arbeitnow source enabled (eu tech jobs)")
+
+    if cfg["sources"].get("jobspy", {}).get("enabled", False):
+        sources.append(JobSpySource(cfg["sources"]["jobspy"]))
+        logger.info("jobspy source enabled (linkedin + indeed)")
 
     if cfg["sources"].get("techcareer", {}).get("enabled", False):
         sources.append(TechcareerSource(cfg["sources"]["techcareer"]))
@@ -109,14 +117,6 @@ def main() -> None:
     if cfg["sources"].get("kariyer_net", {}).get("enabled", False):
         sources.append(KariyerNetSource(cfg["sources"]["kariyer_net"]))
         logger.info("kariyer_net source enabled (kariyer.net nuxt categories)")
-
-    if cfg["sources"].get("arbeitnow", {}).get("enabled", False):
-        sources.append(ArbeitnowSource(cfg["sources"]["arbeitnow"]))
-        logger.info("arbeitnow source enabled (eu tech jobs)")
-
-    if cfg["sources"].get("jobspy", {}).get("enabled", False):
-        sources.append(JobSpySource(cfg["sources"]["jobspy"]))
-        logger.info("jobspy source enabled (linkedin + indeed)")
 
     if not sources:
         logger.warning("no sources enabled — check config.yaml")

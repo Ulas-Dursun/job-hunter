@@ -300,7 +300,7 @@ candidate:
 
 scoring:
   telegram_threshold_primary:   8.0
-  telegram_threshold_secondary: 8.0
+  telegram_threshold_secondary: 8.3
   save_threshold:               0.0
 
 sources:
@@ -335,14 +335,20 @@ sources:
         token: "guardsquare"
       - name: "Contentful"
         token: "contentful"
-      - name: "GetYourGuide"
-        token: "getyourguide"
       - name: "Monzo"
         token: "monzo"
       - name: "Canonical"
         token: "canonical"
       - name: "Trustpilot"
         token: "trustpilot"
+    lever:
+      # Example Lever boards (replace with real company board slugs)
+      - name: "Example Lever Co"
+        slug: "example-lever-slug"
+    ashby:
+      # Example Ashby boards (replace with real company board slugs)
+      - name: "Example Ashby Co"
+        slug: "example-ashby-slug"
     smartrecruiters:
       - name: "Frequentis"
         company_id: "frequentis"

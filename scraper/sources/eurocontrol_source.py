@@ -86,7 +86,7 @@ class EurocontrolSource(BaseSource):
             ext_id = href.rstrip("/").split("/")[-1]
 
             # İlan detay sayfasından açıklama ve lokasyon çek
-            desc, loc = self._fetch_job_detail(full_url)
+            desc, loc = self._fetch_job_detail(full_url, title=title)
 
             jobs.append(Job(
                 source="eurocontrol",
@@ -100,31 +100,45 @@ class EurocontrolSource(BaseSource):
 
         return jobs
 
-    def _fetch_job_detail(self, url: str) -> tuple[str, str]:
+    @staticmethod
+    def _detect_location(url: str, title: str, text: str) -> str:
+        """Başlık/referans veya metin içeriğinden EUROCONTROL lokasyonunu çıkarır."""
+        url_lower = (url or "").lower()
+        title_lower = (title or "").lower()
+        text_lower = (text or "").lower()
+
+        if "noc-ma" in url_lower or "noc-ma" in title_lower or "maastricht" in text_lower:
+            return "Maastricht, Netherlands"
+        if "brétigny" in text_lower or "bretigny" in text_lower:
+            return "Brétigny-sur-Orge, France"
+        if "luxembourg" in text_lower:
+            return "Luxembourg"
+        return "Brussels, Belgium"
+
+    def _fetch_job_detail(self, url: str, title: str = "") -> tuple[str, str]:
         """İlan detay sayfasını çekip açıklama ve lokasyonu ayıklar."""
+        default_loc = self._detect_location(url, title, "")
         try:
             r = self.session.get(url, timeout=10)
             if r.status_code != 200:
-                return "", "Brussels, Belgium"
+                return "", default_loc
 
             soup = BeautifulSoup(r.text, "html.parser")
-            main = soup.find("div", class_="cs-job-detail") or soup.find("div", class_="rich-text-block")
+            # Yeni portal HTML yapısı (jobs-detail-listing / rich-editor-text) + eski yapı fallback
+            main = (
+                soup.find("div", class_="jobs-detail-listing")
+                or soup.find("div", class_="rich-editor-text")
+                or soup.find("div", class_="cs-job-detail")
+                or soup.find("div", class_="rich-text-block")
+            )
             if not main:
-                return "", "Brussels, Belgium"
+                return "", default_loc
 
             raw_text = main.get_text("\n")
             cleaned_desc = re.sub(r"\n{3,}", "\n\n", raw_text).strip()
-
-            # Lokasyon tespiti
-            loc = "Brussels, Belgium"
-            if "Maastricht" in cleaned_desc[:500]:
-                loc = "Maastricht, Netherlands"
-            elif "Brétigny" in cleaned_desc[:500]:
-                loc = "Brétigny-sur-Orge, France"
-            elif "Luxembourg" in cleaned_desc[:500]:
-                loc = "Luxembourg"
+            loc = self._detect_location(url, title, cleaned_desc)
 
             return cleaned_desc, loc
         except Exception as e:
             logger.debug("could not fetch detail for %s: %s", url, e)
-            return "", "Brussels, Belgium"
+            return "", default_loc

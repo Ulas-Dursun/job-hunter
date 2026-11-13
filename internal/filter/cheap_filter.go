@@ -28,7 +28,7 @@ var defaultBlacklistKeywords = []string{
 	"product manager", "project manager", "scrum master", "account management",
 	"customer success", "fincrime", "financial crime", "risk analyst", "operational risk",
 	"credit risk", "deal intelligence", "cost analyst", "strategic finance",
-	"investor relations", "workday", "field engineer", "dijital pazarlama",
+	"investor relations", "workday", "field engineer", "dijital pazarlama", "architect",
 }
 
 // NewCheapFilter, config'deki blacklist_keywords listesinden ve yerleşik kurumsal/kıdem redlerinden filter oluşturur.
@@ -59,7 +59,7 @@ func NewCheapFilter(cfg *config.CandidateConfig) *CheapFilter {
 
 var techTitleKeywords = []string{
 	"developer", "engineer", "software", "backend", "frontend", "fullstack", "full-stack", "full stack",
-	"programmer", "architect", "geliştirici", "mühendis", "yazılım", "bilişim",
+	"programmer", "geliştirici", "mühendis", "yazılım", "bilişim",
 	"devops", "cloud", "platform", "sre", "site reliability",
 	"infrastructure", "sysadmin", "systems",
 	"data", "data analyst", "analytics", "business intelligence", "bi analyst", "bi developer",
@@ -78,7 +78,8 @@ var techTitleKeywords = []string{
 // Başlıkta veya açıklamanın ilk bölümünde bu sinyal varsa ve ilan bariz kara listede değilse,
 // yumuşak filtre (soft pass) devreye girer ve ilanı AI değerlendirmesine geçirir.
 var entrySignals = []string{
-	"graduate", "new grad", "entry level", "entry-level", "junior", "trainee", "associate",
+	"graduate", "graduates", "new grad", "entry level", "entry-level", "junior", "juniors", "jr",
+	"trainee", "traineeship", "associate", "starter", "v.i.e", "vie", "young potential",
 	"yeni mezun", "genç yetenek", "mt programı", "management trainee", "uzman yardımcısı",
 	"0-2 years", "0-1 years", "0-2 yıl", "0-1 yıl", "1-2 years", "1-3 years", "early career", "young graduate",
 }
@@ -114,7 +115,13 @@ func (f *CheapFilter) Check(title, company, description string, source ...string
 	// Ancak başlıkta VEYA açıklamada 0-2 yıl / new grad / junior sinyali varsa ve açıklamada
 	// en az 1 teknik/yazılım/veri sinyali geçiyorsa yumuşak filtre ile geçir (AI değerlendirsin).
 	titleLower := strings.ToLower(title)
-	descPreview := strings.ToLower(description[:min(len(description), 2500)])
+	// Şirket tanıtım metinleri 500-1000 karakter sürebildiği için tarama derinliği
+	// 2500 byte ile genişletildi; çok baytlı (Türkçe/Almanca/Fransızca) karakteri ortadan kesme.
+	checkLen := min(len(description), 2500)
+	for checkLen > 0 && checkLen < len(description) && !utf8.RuneStart(description[checkLen]) {
+		checkLen--
+	}
+	descPreview := strings.ToLower(description[:checkLen])
 	if sourceName != "eurocontrol" && !hasAnyTechKeyword(titleLower) {
 		softEntryPass := (hasEntrySignal(titleLower) || hasEntrySignal(descPreview)) && countTechTerms(descPreview) >= 1
 		if !softEntryPass {
@@ -135,17 +142,7 @@ func (f *CheapFilter) Check(title, company, description string, source ...string
 	}
 
 	// ── Katman 3: Description kontrolü ───────────────────────────────────────
-	// Şirket tanıtım metinleri 500-1000 karakter sürebildiği için tarama derinliği
-	// 2500 karakter ile genişletildi (gereksinimler genelde ortada gelir).
-	checkLen := 2500
-	if len(description) < checkLen {
-		checkLen = len(description)
-	}
-	// Çok baytlı (Türkçe/Almanca) karakteri ortadan kesme.
-	for checkLen > 0 && checkLen < len(description) && !utf8.RuneStart(description[checkLen]) {
-		checkLen--
-	}
-	descLower := strings.ToLower(description[:checkLen])
+	descLower := descPreview
 
 	// Stack blacklist — title'da geçmeyip description'da primary requirement
 	// olarak geçen yanlış teknoloji stack'leri.

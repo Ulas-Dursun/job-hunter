@@ -2,6 +2,7 @@ package intelligence
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -11,17 +12,23 @@ import (
 	"github.com/ulasdursun/job-hunter/internal/notifier"
 )
 
+const schedulerTickInterval = 1 * time.Minute
+
 // Scheduler coordinates market reports (Mon 09:00), daily evening digest (20:00), and queue health monitoring.
 type Scheduler struct {
-	pool          *pgxpool.Pool
-	analyzer      *Analyzer
-	notifier      *notifier.Telegram
-	digest        *EveningDigest
-	healthMonitor *QueueHealthMonitor
+	pool           *pgxpool.Pool
+	analyzer       *Analyzer
+	notifier       *notifier.Telegram
+	digest         *EveningDigest
+	healthMonitor  *QueueHealthMonitor
+	redis          *redis.Client
+	lastDigestDate string
+	lastReportWeek string
 }
 
-// SetRedisMonitor enables queue lag and failed stream monitoring.
+// SetRedisMonitor enables queue lag and failed stream monitoring, and optional Redis schedule state persistence.
 func (s *Scheduler) SetRedisMonitor(client *redis.Client, cfg *config.RedisConfig) {
+	s.redis = client
 	s.healthMonitor = NewQueueHealthMonitor(client, cfg, s.notifier)
 }
 
@@ -48,15 +55,15 @@ func NewScheduler(
 }
 
 // Run starts weekly report, evening digest, and health monitor routines until context cancellation.
+// Uyku modunda monotonic clock donmalarını aşmak için 1 dakikalık ticker ile wall-clock (time.Now()) kontrolü yapar.
 func (s *Scheduler) Run(ctx context.Context) {
 	slog.Info("market report & evening digest scheduler started")
 
-	go s.runEveningDigest(ctx)
 	if s.healthMonitor != nil {
 		go s.healthMonitor.Run(ctx)
 	}
 
-	ticker := time.NewTicker(s.untilNextMonday())
+	ticker := time.NewTicker(schedulerTickInterval)
 	defer ticker.Stop()
 
 	for {
@@ -65,46 +72,94 @@ func (s *Scheduler) Run(ctx context.Context) {
 			slog.Info("market report scheduler stopped")
 			return
 		case <-ticker.C:
-			s.generateAndSend(ctx)
-			ticker.Reset(s.untilNextMonday())
+			s.checkSchedule(ctx, time.Now())
 		}
 	}
 }
 
-func (s *Scheduler) runEveningDigest(ctx context.Context) {
-	ticker := time.NewTicker(untilNextHour(20, 0))
-	defer ticker.Stop()
+func (s *Scheduler) checkSchedule(ctx context.Context, now time.Time) {
+	today := now.Format("2006-01-02")
+	if shouldTriggerEveningDigest(now, s.lastDigestDate) {
+		redisKey := "scheduler:evening_digest:" + today
+		if s.isMarkedInRedis(ctx, redisKey) {
+			s.lastDigestDate = today
+		} else if s.digest.Send(ctx) {
+			s.lastDigestDate = today
+			s.markInRedis(ctx, redisKey, 48*time.Hour)
+		}
+	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.digest.Send(ctx)
-			ticker.Reset(untilNextHour(20, 0))
+	weekKey := isoWeekKey(now)
+	if shouldTriggerWeeklyReport(now, s.lastReportWeek) {
+		redisKey := "scheduler:weekly_report:" + weekKey
+		if s.isMarkedInRedis(ctx, redisKey) {
+			s.lastReportWeek = weekKey
+		} else if s.generateAndSend(ctx) {
+			s.lastReportWeek = weekKey
+			s.markInRedis(ctx, redisKey, 8*24*time.Hour)
 		}
 	}
 }
 
-func (s *Scheduler) generateAndSend(ctx context.Context) {
+func shouldTriggerEveningDigest(now time.Time, lastSentDate string) bool {
+	if now.Hour() < 20 {
+		return false
+	}
+	return lastSentDate != now.Format("2006-01-02")
+}
+
+func shouldTriggerWeeklyReport(now time.Time, lastSentWeek string) bool {
+	if now.Weekday() != time.Monday || now.Hour() < 9 {
+		return false
+	}
+	return lastSentWeek != isoWeekKey(now)
+}
+
+func isoWeekKey(now time.Time) string {
+	year, week := now.ISOWeek()
+	return fmt.Sprintf("%04d-W%02d", year, week)
+}
+
+func (s *Scheduler) isMarkedInRedis(ctx context.Context, key string) bool {
+	if s.redis == nil {
+		return false
+	}
+	val, err := s.redis.Get(ctx, key).Result()
+	if err != nil && err != redis.Nil {
+		slog.Warn("scheduler redis get failed", "key", key, "error", err)
+		return false
+	}
+	return err == nil && val != ""
+}
+
+func (s *Scheduler) markInRedis(ctx context.Context, key string, ttl time.Duration) {
+	if s.redis == nil {
+		return
+	}
+	if err := s.redis.Set(ctx, key, "1", ttl).Err(); err != nil {
+		slog.Warn("scheduler redis set failed", "key", key, "error", err)
+	}
+}
+
+func (s *Scheduler) generateAndSend(ctx context.Context) bool {
 	slog.Info("generating market report")
 
 	report, err := s.analyzer.Analyze(ctx, 7)
 	if err != nil {
 		slog.Error("market report analysis failed", "error", err)
-		return
+		return false
 	}
 
 	if report.TotalJobs == 0 {
 		slog.Warn("no jobs in database yet, skipping report")
-		return
+		return true
 	}
 
 	message := FormatTelegramReport(report)
 
 	if err := s.notifier.SendRaw(ctx, message); err != nil {
 		slog.Error("market report send failed", "error", err)
-		return
+		return false
 	}
 
 	slog.Info("market report sent",
@@ -112,26 +167,5 @@ func (s *Scheduler) generateAndSend(ctx context.Context) {
 		"apply_jobs", report.ApplyJobs,
 		"gap_skills", len(report.GapSkills),
 	)
-}
-
-func untilNextHour(hour, min int) time.Duration {
-	now := time.Now()
-	next := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, now.Location())
-	if !next.After(now) {
-		next = next.Add(24 * time.Hour)
-	}
-	return time.Until(next)
-}
-
-func (s *Scheduler) untilNextMonday() time.Duration {
-	now := time.Now()
-	daysUntilMonday := (int(time.Monday) - int(now.Weekday()) + 7) % 7
-	nextMonday := time.Date(
-		now.Year(), now.Month(), now.Day()+daysUntilMonday,
-		9, 0, 0, 0, now.Location(),
-	)
-	if !nextMonday.After(now) {
-		nextMonday = nextMonday.AddDate(0, 0, 7)
-	}
-	return time.Until(nextMonday)
+	return true
 }

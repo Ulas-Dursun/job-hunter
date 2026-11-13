@@ -60,7 +60,7 @@ func extractCountryScope(locLower string) string {
 		markers []string
 	}{
 		{"tr", []string{"turkey", "türkiye", "turkiye", "istanbul", "ankara", "izmir", "bursa", "kocaeli", "antalya"}},
-		{"be", []string{"belgium", "belgique", "belgië", "belgie", "brussels", "bruxelles", "brüksel", "antwerp", "ghent", "leuven"}},
+		{"be", []string{"belgium", "belgique", "belgië", "belgie", "brussels", "brussel", "bruxelles", "brüksel", "antwerp", "antwerpen", "ghent", "gent", "leuven", "liège", "liege", "zaventem", "mechelen", "charleroi", "namur", "flanders", "vlaanderen", "wallonia", "louvain-la-neuve"}},
 		{"nl", []string{"netherlands", "nederland", "hollanda", "amsterdam", "rotterdam", "eindhoven", "utrecht", "the hague", "delft"}},
 		{"de", []string{"germany", "deutschland", "almanya", "berlin", "munich", "münchen", "frankfurt", "hamburg", "cologne", "köln", "stuttgart", "düsseldorf"}},
 		{"dk", []string{"denmark", "danimarka", "copenhagen", "københavn", "kobenhavn", "aarhus", "odense"}},

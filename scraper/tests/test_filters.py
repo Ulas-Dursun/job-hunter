@@ -26,6 +26,13 @@ class TestFilters(unittest.TestCase):
 
     def test_soft_entry_gate_needs_real_tech_terms(self):
         self.assertTrue(is_tech_title("Graduate Programme", "Python and SQL backend work"))
+        self.assertTrue(is_tech_title("Young Potential Program", "Build REST API and database pipeline"))
+        self.assertTrue(is_tech_title("V.I.E Tech Track", "Software development with cloud services"))
+        self.assertTrue(is_tech_title("Starter Track", "REST API integration"))
+        self.assertTrue(is_tech_title("Traineeship Digital", "Database and pipeline automation"))
+        self.assertTrue(is_tech_title("Graduates 2026", "Software engineering track"))
+        self.assertTrue(is_tech_title("Juniors Welcome", "API development"))
+        self.assertTrue(is_tech_title("Jr Analyst", "SQL database"))
         self.assertFalse(is_tech_title("Graduate Programme", "sales and marketing rotation"))
         self.assertFalse(is_tech_title("Junior HR Associate", "recruiting, cloud-based tools"))
 
@@ -85,12 +92,14 @@ class TestFilters(unittest.TestCase):
             self.assertEqual(set(tpl["sources"].keys()), set(loc["sources"].keys()))
             self.assertIn("Copenhagen, Denmark", loc["sources"]["jobspy"]["locations"])
             for kw in [
-                "junior backend engineer",
-                "junior cloud engineer",
-                "junior go developer",
-                "junior ai engineer",
+                "software engineer",
+                "backend engineer",
+                "junior software engineer",
                 "graduate software engineer",
-                "associate platform engineer",
+                "go developer",
+                "java spring boot developer",
+                "python developer",
+                "data engineer",
             ]:
                 self.assertIn(kw, loc["sources"]["jobspy"]["keywords"])
             for role in ["AI Engineer", "Distributed Systems Engineer", "Solutions Engineer", "Rust Developer"]:
