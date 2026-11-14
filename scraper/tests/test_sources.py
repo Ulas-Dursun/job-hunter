@@ -78,6 +78,7 @@ from scraper.sources.ats_source import ATSSource, is_allowed_location  # noqa: E
 from scraper.sources.eurocontrol_source import EurocontrolSource  # noqa: E402
 from scraper.sources.filters import is_target_location, is_tech_title  # noqa: E402
 from scraper.sources.jobspy_source import JobSpySource, resolve_indeed_country  # noqa: E402
+from scraper.sources.kariyer_source import KariyerNetSource  # noqa: E402
 
 
 class TestPhase2ASources(unittest.TestCase):
@@ -388,6 +389,44 @@ class TestPhase2BSources(unittest.TestCase):
         self.assertEqual(len(jobs), 2)
         self.assertEqual([j.external_id for j in jobs], ["sr:testcorp:sr-cz-1", "sr:testcorp:sr-ro-2"])
         self.assertEqual([j.location for j in jobs], ["Brno, cz", "Timisoara, ro"])
+
+    def test_kariyer_tls_client_and_requests_fallback(self):
+        import scraper.sources.kariyer_source as ks_mod
+
+        # 1) tls_client aktif iken timeout_seconds kullanılır ve 403'te nazikçe 0 ilanla durur
+        fake_tls_session = MagicMock()
+        fake_tls_session.headers = {}
+        fake_tls_session.get.return_value = MagicMock(status_code=403)
+        fake_tls_mod = types.SimpleNamespace(Session=MagicMock(return_value=fake_tls_session))
+
+        with patch.object(ks_mod, "tls_client", fake_tls_mod):
+            src = KariyerNetSource({"category_slugs": ["yazilim-muhendisi", "devops-muhendisi"]})
+            self.assertTrue(src._use_tls_client)
+            jobs = src.fetch(["yazilim"], "Istanbul, Turkey")
+
+        self.assertEqual(jobs, [])
+        fake_tls_session.get.assert_called_once_with(
+            "https://www.kariyer.net/is-ilanlari/yazilim-muhendisi",
+            timeout_seconds=12,
+            allow_redirects=True,
+        )
+
+        # 2) tls_client None veya init hatası verirse requests.Session fallback devreye girer
+        failing_tls_mod = types.SimpleNamespace(Session=MagicMock(side_effect=RuntimeError("init error")))
+        with patch.object(ks_mod, "tls_client", failing_tls_mod):
+            src_fb = KariyerNetSource({"category_slugs": ["yazilim-muhendisi"]})
+            self.assertFalse(src_fb._use_tls_client)
+
+        with patch.object(ks_mod, "tls_client", None):
+            src_none = KariyerNetSource({"category_slugs": ["yazilim-muhendisi"]})
+            self.assertFalse(src_none._use_tls_client)
+            resp_403 = MagicMock(status_code=403)
+            with patch.object(src_none.session, "get", return_value=resp_403) as mock_req_get:
+                self.assertEqual(src_none.fetch(["yazilim"], "Istanbul, Turkey"), [])
+            mock_req_get.assert_called_once_with(
+                "https://www.kariyer.net/is-ilanlari/yazilim-muhendisi",
+                timeout=12,
+            )
 
 
 if __name__ == "__main__":

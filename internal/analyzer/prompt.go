@@ -150,6 +150,7 @@ CRITICAL RULES (MUST OBEY):
    If the candidate is missing only 1-2 secondary infrastructure/tool requirements (e.g., Kubernetes in production, Terraform, Spark/Kafka) but core fundamentals AND primary tech stack align well:
    - Do NOT treat this as disqualifying. Score in the 7.0-7.9 range (or 8.0+ if explicitly graduate/junior).
    - List the specific gap in missing_skills.
+   - PRIMARY STACK MISMATCH CAP: If the role's primary programming language/stack is one the candidate does NOT possess — specifically C#, .NET, PHP, Ruby, Flutter/Dart, Swift, or Kotlin — tech_fit MUST NOT exceed 2.5 (tech_fit <= 2.5).
 
 2c. SOFTWARE ENGINEER / FULLSTACK FLEXIBILITY:
    If a role is titled "Software Engineer", "Associate Software Engineer", or "Full Stack Developer", and the core workload is backend, APIs, data, or cloud (with secondary React/TypeScript tasks):
@@ -190,10 +191,11 @@ CRITICAL RULES (MUST OBEY):
      4. INTERNATIONAL ORGANIZATION SECONDMENT: "Secondment" postings (temporary assignment from member states / national administrations) are ineligible for external individual applicants -> score < 3.5, action "skip" (add "Secondment posting (member-state assignment only)" to red_flags).
 
    - LOCATION ACCESSIBILITY TIERS (guide location_fit 0.0-1.0):
-     * TIER-1 HIGH ACCESSIBILITY (location_fit 0.8-1.0): Brussels & Belgium (work authorization / sponsorship context per Candidate Profile), Netherlands (Amsterdam, Rotterdam, Eindhoven, Utrecht — strong HSM sponsorship ecosystem), EU/Global Remote, and the candidate's secondary home market (per Candidate Profile, no visa required).
+     * TIER-1 HIGH ACCESSIBILITY (location_fit 0.8-1.0): Brussels & Belgium (work authorization / sponsorship context per Candidate Profile), Netherlands (Amsterdam, Rotterdam, Eindhoven, Utrecht — strong HSM sponsorship ecosystem), and EU/Global Remote.
      * TIER-2 EUROPEAN TARGETS (location_fit 0.6-0.8): Germany (Berlin, Munich), Luxembourg, Denmark (Copenhagen).
-     * TIER-3 HIGH-VALUE / SPONSORSHIP-CRITICAL (Switzerland: Zurich, Geneva; UK: London):
-       - Very high-value targets, but sponsorship is critical for junior/new-grad candidates.
+     * TIER-3 HIGH-VALUE / SPONSORSHIP-CRITICAL OR SECONDARY MARKETS (location_fit <= 0.5-0.6):
+       - Turkey (Istanbul, Ankara, Izmir, Turkey, Türkiye): Since the candidate is currently based in Brussels, roles located in Turkey are Tier-3 and MUST be capped at location_fit <= 0.5.
+       - Switzerland (Zurich, Geneva) & UK (London): Very high-value targets, but sponsorship is critical for junior/new-grad candidates.
        - If sponsorship is explicitly offered OR the employer is Big Tech / international org (e.g. CERN, major global tech) -> strong score (location_fit 0.8-1.0, do NOT penalize).
        - If "no sponsorship / must already hold UK or CH permit" -> STRICT SKIP (2.0-3.0, action "skip").
        - If sponsorship is unstated in UK/CH at a smaller/local company -> keep location_fit moderate (0.5-0.6) and note sponsorship uncertainty in red_flags.

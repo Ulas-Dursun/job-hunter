@@ -17,6 +17,11 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+try:
+    import tls_client  # type: ignore
+except ImportError:
+    tls_client = None
+
 from scraper.models.job import Job
 from scraper.sources.base import BaseSource
 from scraper.sources.filters import is_rejected_title
@@ -68,23 +73,46 @@ class KariyerNetSource(BaseSource):
         self.cfg = cfg
         self.slugs = cfg.get("category_slugs", _DEFAULT_SLUGS)
         self.max_details_per_cycle = int(cfg.get("max_details_per_cycle", 50))
-        self.session = requests.Session()
-        self.session.headers.update({
+        headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        })
-        retry_strategy = Retry(
-            total=2,
-            backoff_factor=0.6,
-            status_forcelist=[500, 502, 503, 504],
-            allowed_methods=["GET"],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
+            "Upgrade-Insecure-Requests": "1",
+        }
+
+        self._use_tls_client = False
+        if tls_client is not None:
+            try:
+                self.session = tls_client.Session(
+                    client_identifier="chrome_120",
+                    random_tls_extension_order=True,
+                )
+                self.session.headers.update(headers)
+                self._use_tls_client = True
+            except Exception as exc:
+                logger.warning("kariyer_net tls_client init failed (%s) — falling back to requests.Session", exc)
+
+        if not self._use_tls_client:
+            self.session = requests.Session()
+            self.session.headers.update(headers)
+            retry_strategy = Retry(
+                total=2,
+                backoff_factor=0.6,
+                status_forcelist=[500, 502, 503, 504],
+                allowed_methods=["GET"],
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
+
+    def _http_get(self, url: str, timeout: int = 12):
+        """tls_client.Session ile requests.Session arasındaki timeout parametre farkını soyutlar."""
+        if self._use_tls_client:
+            return self.session.get(url, timeout_seconds=timeout, allow_redirects=True)
+        return self.session.get(url, timeout=timeout)
 
     def fetch(self, keywords: list[str], location: str) -> list[Job]:
         jobs: list[Job] = []
@@ -97,11 +125,17 @@ class KariyerNetSource(BaseSource):
 
             list_url = f"{_BASE_URL}/is-ilanlari/{slug}"
             try:
-                resp = self.session.get(list_url, timeout=12)
-                if resp.status_code in (429, 403):
+                resp = self._http_get(list_url, timeout=12)
+                if resp.status_code == 403:
                     logger.warning(
-                        "kariyer_net rate-limited or blocked (status=%d) on slug=%s — backing off",
-                        resp.status_code, slug,
+                        "kariyer_net blocked (status=403) on slug=%s — stopping gracefully with %d jobs",
+                        slug, len(jobs),
+                    )
+                    break
+                if resp.status_code == 429:
+                    logger.warning(
+                        "kariyer_net rate-limited (status=429) on slug=%s — backing off",
+                        slug,
                     )
                     time.sleep(2.0)
                     continue
@@ -172,7 +206,7 @@ class KariyerNetSource(BaseSource):
 
     def _fetch_detail_description(self, url: str) -> str:
         try:
-            resp = self.session.get(url, timeout=10)
+            resp = self._http_get(url, timeout=10)
             if resp.status_code in (429, 403):
                 logger.warning("kariyer_net detail rate-limited/blocked status=%d url=%s", resp.status_code, url)
                 return ""

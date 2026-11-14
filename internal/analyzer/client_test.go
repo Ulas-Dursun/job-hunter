@@ -282,16 +282,16 @@ func TestCallGroq_MinTokensForReasoningAndProviderLabel(t *testing.T) {
 }
 
 func TestParseScoreResponse_SyncsMatchScoreAndActionWithBreakdown(t *testing.T) {
-	// 1. LocationFit: 0.9 (toplam 7.8) ve match_score: 6.8, action: "watch" -> 7.8 ve "apply"
+	// 1. LocationFit: 0.9, SeniorityFit: 1.8 (toplam 7.8) ve match_score: 6.8, action: "watch" -> 7.8 ve "apply"
 	raw := `{
-		"reasoning": "Strong Go distributed systems fit for Canonical Juju team.",
+		"reasoning": "Strong Go distributed systems fit for Canonical Graduate Juju team.",
 		"role_family": "primary",
 		"skill_overlap": ["Go", "Docker", "Linux"],
 		"missing_skills": ["Juju"],
 		"red_flags": [],
 		"score_breakdown": {
-			"tech_fit": 4.2,
-			"seniority_fit": 1.2,
+			"tech_fit": 3.6,
+			"seniority_fit": 1.8,
 			"domain_fit": 1.5,
 			"location_fit": 0.9
 		},
@@ -442,5 +442,201 @@ func TestAnalyze_RetriesNextEndpointOnMalformedJSONAndMarksTransient(t *testing.
 	}
 	if res.MatchScore != 8.5 || res.Action != "apply" {
 		t.Errorf("unexpected result after failover: %+v", res)
+	}
+}
+
+func TestParseScoreResponse_LanguageBarrierGuard(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "mandatory german in red_flags",
+			raw: `{
+				"reasoning": "Strong Go backend fit in Berlin.",
+				"role_family": "primary",
+				"skill_overlap": ["Go", "Docker"],
+				"missing_skills": [],
+				"red_flags": ["German fluency required for client communication"],
+				"score_breakdown": {"tech_fit": 4.2, "seniority_fit": 2.0, "domain_fit": 1.2, "location_fit": 0.8},
+				"match_score": 8.2,
+				"action": "apply"
+			}`,
+		},
+		{
+			name: "dutch language skills in missing_skills",
+			raw: `{
+				"reasoning": "Good Python role in Brussels.",
+				"role_family": "primary",
+				"skill_overlap": ["Python", "SQL"],
+				"missing_skills": ["Dutch language skills"],
+				"red_flags": [],
+				"score_breakdown": {"tech_fit": 4.0, "seniority_fit": 2.1, "domain_fit": 1.2, "location_fit": 1.0},
+				"match_score": 8.3,
+				"action": "apply"
+			}`,
+		},
+		{
+			name: "requires good dutch language skills in red_flags with technical missing_skills",
+			raw: `{
+				"reasoning": "Utrecht University software engineer role.",
+				"role_family": "primary",
+				"skill_overlap": ["Python", "Java", "Docker"],
+				"missing_skills": ["SOLR"],
+				"red_flags": ["Role requires good Dutch language skills"],
+				"score_breakdown": {"tech_fit": 3.8, "seniority_fit": 2.0, "domain_fit": 1.1, "location_fit": 0.9},
+				"match_score": 7.8,
+				"action": "apply"
+			}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := parseScoreResponse(tc.raw)
+			if err != nil {
+				t.Fatalf("parseScoreResponse failed: %v", err)
+			}
+			if res.ScoreBreakdown.LocationFit != 0.0 {
+				t.Errorf("expected LocationFit 0.0, got %v", res.ScoreBreakdown.LocationFit)
+			}
+			if res.MatchScore > 3.5 {
+				t.Errorf("expected MatchScore <= 3.5, got %v", res.MatchScore)
+			}
+			if res.Action != "skip" {
+				t.Errorf("expected Action %q, got %q", "skip", res.Action)
+			}
+		})
+	}
+}
+
+func TestParseScoreResponse_LanguageBarrierSoftExceptionsNotSkipped(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "preferred asset",
+			raw: `{
+				"reasoning": "Proximus Junior AI Engineer role in Brussels.",
+				"role_family": "primary",
+				"skill_overlap": ["Python", "SQL", "AWS"],
+				"missing_skills": ["French or Dutch (preferred asset)"],
+				"red_flags": [],
+				"score_breakdown": {"tech_fit": 4.0, "seniority_fit": 2.1, "domain_fit": 1.2, "location_fit": 1.0},
+				"match_score": 8.3,
+				"action": "apply"
+			}`,
+		},
+		{
+			name: "strong asset english required",
+			raw: `{
+				"reasoning": "Proximus Junior AI Engineer role in Brussels.",
+				"role_family": "primary",
+				"skill_overlap": ["Python", "SQL", "AWS"],
+				"missing_skills": [],
+				"red_flags": ["French and/or Dutch mentioned as a strong asset (English is required)"],
+				"score_breakdown": {"tech_fit": 4.0, "seniority_fit": 2.1, "domain_fit": 1.2, "location_fit": 1.0},
+				"match_score": 8.3,
+				"action": "apply"
+			}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := parseScoreResponse(tc.raw)
+			if err != nil {
+				t.Fatalf("parseScoreResponse failed: %v", err)
+			}
+			if res.MatchScore != 8.3 {
+				t.Errorf("expected MatchScore 8.3, got %v", res.MatchScore)
+			}
+			if res.Action != "apply" {
+				t.Errorf("expected Action %q, got %q", "apply", res.Action)
+			}
+		})
+	}
+}
+
+func TestParseScoreResponse_SeniorityGateCapsGeneralMidLevelToWatch(t *testing.T) {
+	raw := `{
+		"reasoning": "Strong Go fit for general Canonical Software Engineer role.",
+		"role_family": "primary",
+		"skill_overlap": ["Go", "Docker", "Linux"],
+		"missing_skills": ["Juju"],
+		"red_flags": [],
+		"score_breakdown": {
+			"tech_fit": 4.2,
+			"seniority_fit": 1.2,
+			"domain_fit": 1.5,
+			"location_fit": 0.9
+		},
+		"match_score": 7.8,
+		"action": "apply"
+	}`
+
+	res, err := parseScoreResponse(raw)
+	if err != nil {
+		t.Fatalf("parseScoreResponse failed: %v", err)
+	}
+	if res.MatchScore != 6.8 {
+		t.Errorf("expected MatchScore capped at 6.8 when seniority_fit < 1.7, got %v", res.MatchScore)
+	}
+	if res.Action != "watch" {
+		t.Errorf("expected Action %q when seniority_fit < 1.7, got %q", "watch", res.Action)
+	}
+}
+
+func TestParseScoreResponse_PrimaryStackMismatchCapsCSharpDotNet(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "C# and .NET in missing_skills",
+			raw: `{
+				"reasoning": "Backend role using C# and .NET with Docker and SQL.",
+				"role_family": "primary",
+				"skill_overlap": ["Docker", "SQL", "REST APIs"],
+				"missing_skills": ["C#", ".NET"],
+				"red_flags": [],
+				"score_breakdown": {"tech_fit": 4.0, "seniority_fit": 2.0, "domain_fit": 1.2, "location_fit": 0.9},
+				"match_score": 8.1,
+				"action": "apply"
+			}`,
+		},
+		{
+			name: "Requires C#/.NET stack in red_flags",
+			raw: `{
+				"reasoning": "Backend role using C#/.NET stack with Docker and SQL.",
+				"role_family": "primary",
+				"skill_overlap": ["Docker", "SQL", "REST APIs"],
+				"missing_skills": [],
+				"red_flags": ["Requires C#/.NET stack"],
+				"score_breakdown": {"tech_fit": 4.0, "seniority_fit": 2.0, "domain_fit": 1.2, "location_fit": 0.9},
+				"match_score": 8.1,
+				"action": "apply"
+			}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := parseScoreResponse(tc.raw)
+			if err != nil {
+				t.Fatalf("parseScoreResponse failed: %v", err)
+			}
+			if res.ScoreBreakdown.TechFit != 2.6 {
+				t.Errorf("expected TechFit capped at 2.6, got %v", res.ScoreBreakdown.TechFit)
+			}
+			// 2.6 + 2.0 + 1.2 + 0.9 = 6.7
+			if res.MatchScore != 6.7 {
+				t.Errorf("expected MatchScore synced to 6.7, got %v", res.MatchScore)
+			}
+			if res.Action != "watch" {
+				t.Errorf("expected Action %q, got %q", "watch", res.Action)
+			}
+		})
 	}
 }

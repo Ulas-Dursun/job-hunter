@@ -238,18 +238,31 @@ func parseResult(text string) (*ScoreResult, error) {
 		result.MatchScore = 10
 	}
 
+	langBarrier := hasLanguageBarrier(result.RedFlags, result.MissingSkills)
+	stackMismatch := hasPrimaryStackMismatch(result.RedFlags, result.MissingSkills)
+
 	if b := result.ScoreBreakdown; b != nil {
 		b.TechFit = clampFloat(b.TechFit, 0, 5.0)
 		b.SeniorityFit = clampFloat(b.SeniorityFit, 0, 2.5)
 		b.DomainFit = clampFloat(b.DomainFit, 0, 1.5)
 		b.LocationFit = clampFloat(b.LocationFit, 0, 1.0)
 
+		if langBarrier {
+			b.LocationFit = 0.0
+		}
+
+		techFitCapped := false
+		if !langBarrier && stackMismatch && b.TechFit > 2.6 {
+			b.TechFit = 2.6
+			techFitCapped = true
+		}
+
 		// Alt bileşenlerden herhangi biri doluysa toplam ile match_score arasındaki tutarsızlığı kontrol et.
 		if !rawMatchOutOfRange && (b.TechFit > 0 || b.SeniorityFit > 0 || b.DomainFit > 0 || b.LocationFit > 0) {
 			breakdownSum := b.TechFit + b.SeniorityFit + b.DomainFit + b.LocationFit
 			breakdownSum = clampFloat(math.Round(breakdownSum*10)/10, 0.0, 10.0)
 			diff := math.Abs(breakdownSum - result.MatchScore)
-			if diff > 0.5 {
+			if diff > 0.5 && !techFitCapped && !langBarrier {
 				slog.Warn("ai score_breakdown ile match_score arasında tutarsızlık tespit edildi, breakdown toplamı esas alınıyor",
 					"breakdown_sum", breakdownSum,
 					"original_match_score", result.MatchScore,
@@ -257,11 +270,14 @@ func parseResult(text string) (*ScoreResult, error) {
 				)
 			}
 
-			if b.LocationFit <= 0.1 {
+			if langBarrier || b.LocationFit <= 0.1 {
 				if result.MatchScore > 3.5 {
 					result.MatchScore = 3.5
 				}
 				result.Action = "skip"
+			} else if techFitCapped {
+				result.MatchScore = breakdownSum
+				result.Action = deriveActionFromScore(result.MatchScore)
 			} else if result.MatchScore < 5.0 || result.Action == "skip" {
 				if breakdownSum < result.MatchScore && diff > 0.15 {
 					result.MatchScore = breakdownSum
@@ -273,19 +289,119 @@ func parseResult(text string) (*ScoreResult, error) {
 				explicitHardCap := result.MatchScore <= 6.5 && strings.Contains(strings.ToLower(result.Reasoning), "hard cap")
 				if !explicitHardCap {
 					result.MatchScore = breakdownSum
-					if result.MatchScore >= 7.0 {
-						result.Action = "apply"
-					} else if result.MatchScore >= 5.0 {
-						result.Action = "watch"
-					} else {
-						result.Action = "skip"
-					}
+					result.Action = deriveActionFromScore(result.MatchScore)
 				}
 			}
+		} else if langBarrier {
+			if result.MatchScore > 3.5 {
+				result.MatchScore = 3.5
+			}
+			result.Action = "skip"
 		}
+
+		// Junior/Graduate apply kapısı: dil bariyeri veya lokasyon engeli yoksa,
+		// seniority_fit (0, 1.7) aralığındaki genel/mid-level ilanlar apply olamaz.
+		if !langBarrier && b.LocationFit > 0.1 && b.SeniorityFit > 0 && b.SeniorityFit < 1.7 {
+			if result.MatchScore >= 7.0 {
+				result.MatchScore = 6.8
+			}
+			if result.Action == "apply" {
+				result.Action = "watch"
+			}
+		}
+	} else if langBarrier {
+		if result.MatchScore > 3.5 {
+			result.MatchScore = 3.5
+		}
+		result.Action = "skip"
 	}
 
 	return &result, nil
+}
+
+func deriveActionFromScore(score float64) string {
+	if score >= 7.0 {
+		return "apply"
+	}
+	if score >= 5.0 {
+		return "watch"
+	}
+	return "skip"
+}
+
+func containsAny(s string, needles []string) bool {
+	for _, n := range needles {
+		if strings.Contains(s, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasLanguageBarrier, zorunlu Almanca/Felemenkçe/Fransızca vb. dil bariyeri olup olmadığını kontrol eder.
+// "preferred", "asset", "plus", "nice to have" içeren istisnaları elemez.
+func hasLanguageBarrier(redFlags, missingSkills []string) bool {
+	softExceptions := []string{"preferred", "asset", "plus", "nice to have"}
+	reqWords := []string{"mandatory", "required", "requires", "fluency", "fluent", "native", "c1", "c2", "b2", "must speak", "must be fluent"}
+	langWords := []string{"german", "dutch", "french", "spanish", "italian", "polish", "danish"}
+	directMissingPhrases := []string{
+		"native-level german",
+		"german language fluency",
+		"dutch language skills",
+		"french language",
+		"dutch fluency",
+		"german fluency",
+	}
+
+	for _, item := range redFlags {
+		lower := strings.ToLower(item)
+		if containsAny(lower, softExceptions) {
+			continue
+		}
+		if (containsAny(lower, reqWords) && containsAny(lower, langWords)) || containsAny(lower, directMissingPhrases) {
+			return true
+		}
+	}
+
+	for _, item := range missingSkills {
+		lower := strings.ToLower(item)
+		if containsAny(lower, softExceptions) {
+			continue
+		}
+		if (containsAny(lower, reqWords) && containsAny(lower, langWords)) || containsAny(lower, directMissingPhrases) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasPrimaryStackMismatch, ilanın ana stack'inin C#/.NET olup olmadığını kontrol eder.
+func hasPrimaryStackMismatch(redFlags, missingSkills []string) bool {
+	for _, item := range redFlags {
+		lower := strings.ToLower(item)
+		if strings.Contains(lower, "requires c#") ||
+			strings.Contains(lower, "c#/.net stack") ||
+			strings.Contains(lower, ".net stack") {
+			return true
+		}
+	}
+
+	hasCSharp := false
+	hasDotNet := false
+	for _, item := range missingSkills {
+		lower := strings.ToLower(item)
+		if strings.Contains(lower, "c#/.net") {
+			return true
+		}
+		if strings.Contains(lower, "c#") {
+			hasCSharp = true
+		}
+		if strings.Contains(lower, ".net") {
+			hasDotNet = true
+		}
+	}
+	return hasCSharp && hasDotNet
 }
 
 func parseScoreResponse(text string) (*ScoreResult, error) {
