@@ -117,11 +117,12 @@ func (c *Consumer) processBatch(ctx context.Context) {
 func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) {
 	title := stringField(msg.Values, "title")
 	company := stringField(msg.Values, "company")
+	location := stringField(msg.Values, "location")
 	source := stringField(msg.Values, "source")
 	description := stringField(msg.Values, "description")
 
 	// Cheap filter kontrolü
-	result := c.filter.Check(title, company, description, source)
+	result := c.filter.Check(title, company, description, source, location)
 
 	if result.Rejected {
 		slog.Debug("cheap filter rejected",

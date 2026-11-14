@@ -76,7 +76,7 @@ _install_optional_stubs()
 from scraper.models.job import Job  # noqa: E402
 from scraper.sources.ats_source import ATSSource, is_allowed_location  # noqa: E402
 from scraper.sources.eurocontrol_source import EurocontrolSource  # noqa: E402
-from scraper.sources.filters import is_tech_title  # noqa: E402
+from scraper.sources.filters import is_target_location, is_tech_title  # noqa: E402
 from scraper.sources.jobspy_source import JobSpySource, resolve_indeed_country  # noqa: E402
 
 
@@ -98,6 +98,11 @@ class TestPhase2ASources(unittest.TestCase):
             "Belgique",
         ]:
             self.assertTrue(is_allowed_location(loc), f"expected allowed: {loc}")
+
+        self.assertFalse(is_allowed_location("Remote, KSA"))
+        self.assertFalse(is_allowed_location("San Francisco, CA (Remote)"))
+        self.assertFalse(is_target_location("San Francisco, CA (Remote)"))
+        self.assertTrue(is_allowed_location("Home Based - Americas; Home based - EMEA"))
 
     def test_filters_new_entry_signals_and_tech_terms(self):
         self.assertTrue(is_tech_title("Starter Programme", "Build REST API services"))
@@ -193,13 +198,56 @@ class TestPhase2ASources(unittest.TestCase):
             'cfg["sources"].get("eurocontrol"',
             'cfg["sources"].get("ats"',
             'cfg["sources"].get("arbeitnow"',
-            'cfg["sources"].get("jobspy"',
             'cfg["sources"].get("techcareer"',
             'cfg["sources"].get("coderspace"',
             'cfg["sources"].get("kariyer_net"',
+            'cfg["sources"].get("jobspy"',
         ]
         positions = [content.index(token) for token in order]
         self.assertEqual(positions, sorted(positions))
+
+    def test_jobspy_secondary_keywords_limit_and_on_batch_streaming(self):
+        src = JobSpySource({
+            "locations": ["Brussels, Belgium", "Berlin, Germany", "Antwerp, Belgium", "Istanbul, Turkey"],
+            "secondary_keywords_limit": 2,
+            "country_indeed": "Turkey",
+        })
+        keywords = ["software engineer", "backend engineer", "go developer", "python developer"]
+        queried_pairs = []
+        streamed_batches = []
+
+        def _fake_fetch_kw(keyword, location):
+            queried_pairs.append((location, keyword))
+            return [
+                Job(
+                    source="linkedin",
+                    external_id=f"{location}:{keyword}",
+                    url=f"https://example.com/{keyword}",
+                    title=keyword,
+                    company="Acme",
+                    location=location,
+                )
+            ]
+
+        with patch.object(src, "_fetch_keyword", side_effect=_fake_fetch_kw), patch(
+            "scraper.sources.jobspy_source.time.sleep"
+        ):
+            all_jobs = src.fetch(keywords, "Brussels, Belgium", on_batch=lambda batch: streamed_batches.append(list(batch)))
+
+        # Primary lokasyonlarda (Brussels, Istanbul) 4 keyword'ün tamamı; ikincil lokasyonlarda (Berlin, Antwerp) ilk 2 keyword aranmalı
+        brussels_kws = [kw for loc, kw in queried_pairs if loc == "Brussels, Belgium"]
+        istanbul_kws = [kw for loc, kw in queried_pairs if loc == "Istanbul, Turkey"]
+        berlin_kws = [kw for loc, kw in queried_pairs if loc == "Berlin, Germany"]
+        antwerp_kws = [kw for loc, kw in queried_pairs if loc == "Antwerp, Belgium"]
+
+        self.assertEqual(brussels_kws, keywords)
+        self.assertEqual(istanbul_kws, keywords)
+        self.assertEqual(berlin_kws, keywords[:2])
+        self.assertEqual(antwerp_kws, keywords[:2])
+
+        # Toplam 4 + 2 + 2 + 4 = 12 alt sorgu -> her birinde on_batch anında çağrılmalı ve all_jobs da 12 eleman dönmeli
+        self.assertEqual(len(streamed_batches), 12)
+        self.assertEqual(len(all_jobs), 12)
 
 
 class TestPhase2BSources(unittest.TestCase):

@@ -15,7 +15,12 @@ from bs4 import BeautifulSoup
 
 from scraper.models.job import Job
 from scraper.sources.base import BaseSource
-from scraper.sources.filters import is_tech_title, has_word
+from scraper.sources.filters import (
+    NON_TARGET_REMOTE_INDICATORS,
+    has_word,
+    is_target_location,
+    is_tech_title,
+)
 
 logger = logging.getLogger("scraper.ats")
 
@@ -88,16 +93,20 @@ def is_allowed_location(loc: str, country_code: str = "") -> bool:
             cc = m.group(1)
 
     # Kısa token'lar ('uk', 'us') kelime sınırıyla aranır: "Ukraine" artık 'uk' sayılmaz,
-    # "Remote - US" artık sadece 'remote' içerdiği için geçmez.
+    # "Remote - US" veya "Remote, KSA" artık sadece 'remote' içerdiği için geçmez.
     has_eu_tr = any(has_word(loc_lower, ind) for ind in EU_TR_INDICATORS) or (cc in ALLOWED_EU_COUNTRY_CODES)
-    has_disallowed = any(has_word(loc_lower, dis) for dis in DISALLOWED_REGIONS) or has_word(loc_lower, "us")
+    has_disallowed = (
+        any(has_word(loc_lower, dis) for dis in DISALLOWED_REGIONS)
+        or any(has_word(loc_lower, ind) for ind in NON_TARGET_REMOTE_INDICATORS)
+        or has_word(loc_lower, "us")
+    )
 
     if has_eu_tr:
         return True
     if has_disallowed:
         return False
-    # Global şirketlerde sadece "Remote" yazıyorsa ve ülke kısıtı yoksa kabul et, aksi halde EU/TR şartı ara
-    if "remote" in loc_lower or "hybrid" in loc_lower:
+    # Global şirketlerde sadece "Remote"/"Home Based"/"Anywhere" veya "Hybrid" yazıyorsa ve ülke kısıtı yoksa kabul et
+    if is_target_location(loc) or "hybrid" in loc_lower:
         return True
     return False
 

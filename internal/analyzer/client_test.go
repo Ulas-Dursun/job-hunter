@@ -280,3 +280,167 @@ func TestCallGroq_MinTokensForReasoningAndProviderLabel(t *testing.T) {
 		t.Errorf("expected error to contain provider %q, got %q", ProviderOpenAIComp, err.Error())
 	}
 }
+
+func TestParseScoreResponse_SyncsMatchScoreAndActionWithBreakdown(t *testing.T) {
+	// 1. LocationFit: 0.9 (toplam 7.8) ve match_score: 6.8, action: "watch" -> 7.8 ve "apply"
+	raw := `{
+		"reasoning": "Strong Go distributed systems fit for Canonical Juju team.",
+		"role_family": "primary",
+		"skill_overlap": ["Go", "Docker", "Linux"],
+		"missing_skills": ["Juju"],
+		"red_flags": [],
+		"score_breakdown": {
+			"tech_fit": 4.2,
+			"seniority_fit": 1.2,
+			"domain_fit": 1.5,
+			"location_fit": 0.9
+		},
+		"match_score": 6.8,
+		"action": "watch"
+	}`
+
+	res, err := parseScoreResponse(raw)
+	if err != nil {
+		t.Fatalf("parseScoreResponse failed: %v", err)
+	}
+	if res.MatchScore != 7.8 {
+		t.Errorf("expected MatchScore 7.8, got %v", res.MatchScore)
+	}
+	if res.Action != "apply" {
+		t.Errorf("expected Action %q, got %q", "apply", res.Action)
+	}
+
+	// 2. LocationFit: 0.0 (toplam 7.2) ve match_score: 2.5, action: "skip" -> 7.2 apply'a EZİLMEMELİ (<= 3.5 ve "skip" kalmalı)
+	rawDisqualifiedLoc := `{
+		"reasoning": "Strong tech fit but remote locked to KSA.",
+		"role_family": "primary",
+		"skill_overlap": ["Go", "Docker"],
+		"missing_skills": [],
+		"red_flags": ["Remote locked to KSA"],
+		"score_breakdown": {
+			"tech_fit": 4.2,
+			"seniority_fit": 1.8,
+			"domain_fit": 1.2,
+			"location_fit": 0.0
+		},
+		"match_score": 2.5,
+		"action": "skip"
+	}`
+
+	resDisq, err := parseScoreResponse(rawDisqualifiedLoc)
+	if err != nil {
+		t.Fatalf("parseScoreResponse failed: %v", err)
+	}
+	if resDisq.MatchScore > 3.5 || resDisq.MatchScore != 2.5 {
+		t.Errorf("expected disqualified MatchScore to remain 2.5 (<= 3.5), got %v", resDisq.MatchScore)
+	}
+	if resDisq.Action != "skip" {
+		t.Errorf("expected Action %q, got %q", "skip", resDisq.Action)
+	}
+
+	// 3. LocationFit <= 0.1 iken yüksek match_score (6.0 watch) gelse bile <= 3.5 ve "skip" olmalı
+	rawZeroLoc := `{
+		"reasoning": "Non-target remote region penalty applied.",
+		"role_family": "primary",
+		"skill_overlap": ["Go"],
+		"missing_skills": [],
+		"red_flags": ["Remote locked to non-target region"],
+		"score_breakdown": {
+			"tech_fit": 4.2,
+			"seniority_fit": 1.8,
+			"domain_fit": 1.2,
+			"location_fit": 0.0
+		},
+		"match_score": 6.0,
+		"action": "watch"
+	}`
+
+	resZeroLoc, err := parseScoreResponse(rawZeroLoc)
+	if err != nil {
+		t.Fatalf("parseScoreResponse failed: %v", err)
+	}
+	if resZeroLoc.MatchScore != 3.5 {
+		t.Errorf("expected MatchScore capped at 3.5 when LocationFit <= 0.1, got %v", resZeroLoc.MatchScore)
+	}
+	if resZeroLoc.Action != "skip" {
+		t.Errorf("expected Action %q, got %q", "skip", resZeroLoc.Action)
+	}
+}
+
+func TestParseScoreResponse_AcceptsStringAndFractionFloats(t *testing.T) {
+	raw := `{
+		"reasoning": "Canonical Graduate Software Engineer Open Source and Linux role.",
+		"role_family": "primary",
+		"skill_overlap": ["Go", "Python", "Linux"],
+		"missing_skills": [],
+		"red_flags": [],
+		"score_breakdown": {
+			"tech_fit": "4.2",
+			"seniority_fit": "2.3/2.5",
+			"domain_fit": "1,2 / 1.5",
+			"location_fit": "0.8"
+		},
+		"match_score": "8.5",
+		"action": "apply"
+	}`
+
+	res, err := parseScoreResponse(raw)
+	if err != nil {
+		t.Fatalf("parseScoreResponse failed on string floats: %v", err)
+	}
+	if res.ScoreBreakdown == nil {
+		t.Fatalf("expected non-nil ScoreBreakdown")
+	}
+	if res.ScoreBreakdown.TechFit != 4.2 {
+		t.Errorf("expected TechFit 4.2, got %v", res.ScoreBreakdown.TechFit)
+	}
+	if res.ScoreBreakdown.SeniorityFit != 2.3 {
+		t.Errorf("expected SeniorityFit 2.3, got %v", res.ScoreBreakdown.SeniorityFit)
+	}
+	if res.ScoreBreakdown.DomainFit != 1.2 {
+		t.Errorf("expected DomainFit 1.2, got %v", res.ScoreBreakdown.DomainFit)
+	}
+	if res.ScoreBreakdown.LocationFit != 0.8 {
+		t.Errorf("expected LocationFit 0.8, got %v", res.ScoreBreakdown.LocationFit)
+	}
+	if res.MatchScore != 8.5 {
+		t.Errorf("expected MatchScore 8.5, got %v", res.MatchScore)
+	}
+	if res.Action != "apply" {
+		t.Errorf("expected Action apply, got %q", res.Action)
+	}
+}
+
+func TestAnalyze_RetriesNextEndpointOnMalformedJSONAndMarksTransient(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"not valid json at all"}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"reasoning\":\"Good fit.\",\"role_family\":\"primary\",\"skill_overlap\":[\"Go\"],\"missing_skills\":[],\"red_flags\":[],\"score_breakdown\":{\"tech_fit\":\"4.2\",\"seniority_fit\":\"2.3/2.5\",\"domain_fit\":1.2,\"location_fit\":0.8},\"match_score\":\"8.5\",\"action\":\"apply\"}"}}]}`))
+	}))
+	defer srv.Close()
+
+	ga := &GeminiAnalyzer{
+		client: &LLMClient{
+			endpoints: []providerEndpoint{
+				{provider: ProviderGroq, apiKey: "k1", model: "m1", baseURL: srv.URL, label: "ep1"},
+				{provider: ProviderGroq, apiKey: "k2", model: "m2", baseURL: srv.URL, label: "ep2"},
+			},
+			client: &http.Client{Timeout: 2 * time.Second},
+		},
+		builder: NewPromptBuilder(nil),
+		maxTok:  500,
+	}
+
+	res, err := ga.Analyze(context.Background(), "Graduate Software Engineer", "Canonical", "Remote, EMEA", "Go and Linux")
+	if err != nil {
+		t.Fatalf("expected Analyze to recover on second endpoint after malformed JSON, got: %v", err)
+	}
+	if res.MatchScore != 8.5 || res.Action != "apply" {
+		t.Errorf("unexpected result after failover: %+v", res)
+	}
+}

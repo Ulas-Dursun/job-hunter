@@ -108,7 +108,7 @@ func (p *JobProcessor) Process(ctx context.Context, msg redis.XMessage, workerID
 
 	// ── Ön filtre (kuyrukta bekleyen eski ilanlar için) ───────────────────────
 	if p.preFilter != nil {
-		if fr := p.preFilter.Check(title, company, description, source); fr.Rejected {
+		if fr := p.preFilter.Check(title, company, description, source, location); fr.Rejected {
 			slog.Debug("worker prefilter rejected", "title", title, "reason", fr.Reason)
 			p.metrics.JobsCheapFiltered.Inc()
 			p.Ack(ctx, p.cfg.StreamFiltered, msg.ID)

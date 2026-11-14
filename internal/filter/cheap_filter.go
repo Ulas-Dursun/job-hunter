@@ -92,6 +92,81 @@ var techDescTerms = []string{
 	"computer science", "software engineering", "bilgisayar mühendisliği", "yazılım mühendisliği",
 }
 
+var remoteIndicators = []string{
+	"remote", "home based", "home-based", "anywhere",
+}
+
+var nonTargetRemoteRegions = []string{
+	"ksa", "saudi", "uae", "dubai", "us only", "us", "usa", "united states", "americas",
+	"namer", "north america", "canada", "latam", "latin america", "apac", "india", "brazil",
+	"mexico", "argentina", "colombia", "chile", "australia", "new zealand", "japan", "korea",
+	"singapore", "philippines", "taiwan", "china", "hong kong", "south africa", "indonesia",
+	"vietnam", "nigeria", "egypt", "san francisco", "new york", "seattle", "austin", "boston",
+	"chicago", "california", "texas", "toronto", "vancouver", "sydney", "melbourne", "tokyo",
+	"bengaluru", "bangalore", "mumbai",
+}
+
+var targetRemoteRegions = []string{
+	"emea", "europe", "eu", "european union", "belgium", "belgique", "belgië", "belgie",
+	"brussels", "bruxelles", "brüksel", "leuven", "antwerp", "antwerpen", "ghent", "gent",
+	"zaventem", "liège", "liege", "mechelen", "louvain-la-neuve",
+	"netherlands", "amsterdam", "rotterdam", "eindhoven", "utrecht", "the hague", "maastricht",
+	"germany", "deutschland", "berlin", "munich", "münchen", "frankfurt", "hamburg",
+	"uk", "united kingdom", "london",
+	"france", "paris",
+	"spain", "madrid", "barcelona",
+	"switzerland", "zurich", "zürich", "geneva", "genève",
+	"turkey", "türkiye", "istanbul", "i\u0307stanbul", "ankara", "izmir", "i\u0307zmir",
+	"ireland", "dublin", "cork",
+	"denmark", "danimarka", "copenhagen", "københavn", "kobenhavn", "aarhus", "odense",
+	"luxembourg", "austria", "vienna", "wien",
+	"poland", "warsaw", "portugal", "lisbon",
+	"italy", "milan", "rome", "sweden", "stockholm",
+	"finland", "helsinki", "norway", "estonia", "tallinn",
+	"romania", "bucharest", "cluj", "czech", "prague",
+	"hungary", "bulgaria", "greece",
+}
+
+// CheckLocation, lokasyon metninin hedef dışı bir ülke/bölgeye kilitli remote ilan olup olmadığını denetler.
+// Geçerli ise (true, ""), hedef dışı remote bölge ise (false, "hedef dışı remote bölge: " + location) döner.
+func (f *CheapFilter) CheckLocation(location string) (bool, string) {
+	locTrimmed := strings.TrimSpace(location)
+	if locTrimmed == "" {
+		return true, ""
+	}
+	locLower := strings.ToLower(locTrimmed)
+
+	isRemote := false
+	for _, kw := range remoteIndicators {
+		if containsWord(locLower, kw) {
+			isRemote = true
+			break
+		}
+	}
+	if !isRemote {
+		return true, ""
+	}
+
+	hasNonTarget := false
+	for _, region := range nonTargetRemoteRegions {
+		if containsWord(locLower, region) {
+			hasNonTarget = true
+			break
+		}
+	}
+	if !hasNonTarget {
+		return true, ""
+	}
+
+	for _, target := range targetRemoteRegions {
+		if containsWord(locLower, target) {
+			return true, ""
+		}
+	}
+
+	return false, "hedef dışı remote bölge: " + location
+}
+
 // Check, ilanı dört katmanda filtreler:
 //
 //  1. Şirket adı geçerli mi?
@@ -108,6 +183,16 @@ func (f *CheapFilter) Check(title, company, description string, source ...string
 	companyLower := strings.ToLower(strings.TrimSpace(company))
 	if companyLower == "" || companyLower == "nan" {
 		return FilterResult{Rejected: true, Reason: "empty_company"}
+	}
+
+	// ── Katman 1b: Hedef dışı remote bölge kısıtı ───────────────────────────
+	for _, arg := range source {
+		if ok, reason := f.CheckLocation(arg); !ok {
+			return FilterResult{Rejected: true, Reason: reason}
+		}
+	}
+	if ok, reason := f.CheckLocation(title); !ok {
+		return FilterResult{Rejected: true, Reason: reason}
 	}
 
 	// ── Katman 2: Pozitif Teknoloji/Analitik Uygunluğu + Yumuşak 0-2 Yıl Kapısı ──

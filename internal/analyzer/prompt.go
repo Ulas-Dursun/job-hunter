@@ -197,6 +197,7 @@ CRITICAL RULES (MUST OBEY):
        - If sponsorship is explicitly offered OR the employer is Big Tech / international org (e.g. CERN, major global tech) -> strong score (location_fit 0.8-1.0, do NOT penalize).
        - If "no sponsorship / must already hold UK or CH permit" -> STRICT SKIP (2.0-3.0, action "skip").
        - If sponsorship is unstated in UK/CH at a smaller/local company -> keep location_fit moderate (0.5-0.6) and note sponsorship uncertainty in red_flags.
+     - KRİTİK KURAL (Hedef Dışı Remote & Belirsiz Hybrid): 'Remote, KSA', 'Remote - US', 'Remote, APAC', 'Remote, LATAM', 'Remote, India/Canada/Brazil/Australia' gibi AB/EMEA/Türkiye dışı bir ülkeye veya bölgeye kilitli Remote ilanlara ASLA yüksek puan verme (location_fit: 0.0 ver, match_score <= 3.5 ve action: "skip" yap). Ayrıca lokasyon yalnızca "Hybrid" veya "Onsite" yazıyorsa ve ilan metninde hedef ülkelerden (Belçika, Hollanda, Almanya, Lüksemburg, İsviçre, İngiltere, Türkiye vb.) biri açıkça geçmiyorsa location_fit en fazla 0.4 olabilir.
 
    - TARGET CITY 0-2 YEAR / GRADUATE OPPORTUNITY RULE (WORTH TRYING — DO NOT PENALIZE SILENCE ON VISA IN TIER-1/TIER-2):
      * Most European employers do NOT explicitly mention visa sponsorship in job ads even when they sponsor strong junior/graduate candidates.

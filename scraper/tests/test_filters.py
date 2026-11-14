@@ -5,7 +5,12 @@ from pathlib import Path
 import unittest
 import yaml
 
-from scraper.sources.filters import is_rejected_title, is_tech_title
+from scraper.sources.filters import (
+    NON_TARGET_REMOTE_INDICATORS,
+    is_rejected_title,
+    is_target_location,
+    is_tech_title,
+)
 from scraper.sources.kariyer_source import _should_drop_kariyer_title
 from scraper.sources.jobspy_source import resolve_indeed_country
 from scraper.sources.ats_source import is_allowed_location
@@ -56,6 +61,33 @@ class TestFilters(unittest.TestCase):
         self.assertEqual(resolve_indeed_country("Istanbul, Turkey"), "Turkey")
         self.assertTrue(is_allowed_location("Copenhagen, Denmark"))
         self.assertTrue(is_allowed_location("København"))
+
+    def test_is_target_location_remote_and_non_target_regions(self):
+        self.assertIn("ksa", NON_TARGET_REMOTE_INDICATORS)
+        self.assertIn("apac", NON_TARGET_REMOTE_INDICATORS)
+
+        # Senaryo 1: "Remote, KSA" -> "remote" var ama "ksa" var ve EMEA/EU göstergesi yok -> False
+        self.assertFalse(is_target_location("Remote, KSA"))
+        self.assertFalse(is_target_location("Remote - Saudi Arabia"))
+        self.assertFalse(is_target_location("Remote, UAE"))
+
+        # Senaryo 2: "Remote - US" veya "Remote, India" veya "Home Based - APAC" -> False
+        self.assertFalse(is_target_location("Remote - US"))
+        self.assertFalse(is_target_location("Remote, India"))
+        self.assertFalse(is_target_location("Home Based - APAC"))
+        self.assertFalse(is_target_location("Remote, USA"))
+        self.assertFalse(is_target_location("Anywhere in LATAM"))
+
+        # Senaryo 3: "Home Based - Americas; Home based - EMEA" -> "emea" geçtiği için -> True
+        self.assertTrue(is_target_location("Home Based - Americas; Home based - EMEA"))
+        self.assertTrue(is_target_location("Remote - US or UK"))
+
+        # Senaryo 4: "Remote" veya "Remote, Europe" veya "Anywhere in France, Belgium, Spain" -> True
+        self.assertTrue(is_target_location("Remote"))
+        self.assertTrue(is_target_location("Remote, Europe"))
+        self.assertTrue(is_target_location("Anywhere in France, Belgium, Spain"))
+        self.assertTrue(is_target_location("Brussels, Belgium"))
+        self.assertTrue(is_target_location("Istanbul, Turkey"))
 
     def test_config_key_parity_and_copenhagen_presence(self):
         root = Path(__file__).resolve().parents[2]

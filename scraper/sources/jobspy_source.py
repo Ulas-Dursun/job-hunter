@@ -9,7 +9,7 @@ import hashlib
 import logging
 import random
 import time
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import parse_qs, urlparse
 
 from jobspy import scrape_jobs
@@ -60,8 +60,39 @@ class JobSpySource(BaseSource):
         self._results_per_keyword = source_config.get("results_per_keyword", 20)
         self._country_indeed = source_config.get("country_indeed", "Turkey")
         self._locations = source_config.get("locations", [])
+        self._secondary_keywords_limit = source_config.get("secondary_keywords_limit", 3)
+        self._primary_locations = source_config.get(
+            "primary_locations",
+            [
+                "Brussels, Belgium",
+                "Leuven, Belgium",
+                "Amsterdam, Netherlands",
+                "Luxembourg",
+                "Istanbul, Turkey",
+                "Remote",
+            ],
+        )
 
-    def fetch(self, keywords: list[str], location: str) -> list[Job]:
+    def _is_primary_location(self, loc: str) -> bool:
+        """Birincil merkezlerde (Brüksel, Leuven, Amsterdam, Lüksemburg, İstanbul, Remote) tüm keywordler aranır."""
+        loc_lower = (loc or "").lower()
+        primary_markers = {"brussels", "leuven", "amsterdam", "luxembourg", "istanbul", "remote"}
+        for pl in self._primary_locations:
+            if not pl:
+                continue
+            pl_lower = pl.strip().lower()
+            primary_markers.add(pl_lower)
+            head = pl_lower.split(",")[0].strip()
+            if head:
+                primary_markers.add(head)
+        return any(marker in loc_lower for marker in primary_markers)
+
+    def fetch(
+        self,
+        keywords: list[str],
+        location: str,
+        on_batch: Optional[Callable[[list[Job]], None]] = None,
+    ) -> list[Job]:
         all_jobs: list[Job] = []
         raw_locations = self._locations if self._locations else [location]
         # Türkiye lokasyonlarını en sona sırala: önce Brüksel/Benelüks/AB taransın
@@ -72,8 +103,13 @@ class JobSpySource(BaseSource):
 
         for loc in target_locations:
             is_tr = resolve_indeed_country(loc, self._country_indeed) == "Turkey"
+            loc_keywords = (
+                keywords
+                if self._is_primary_location(loc) or self._secondary_keywords_limit <= 0
+                else keywords[: self._secondary_keywords_limit]
+            )
 
-            for keyword in keywords:
+            for keyword in loc_keywords:
                 # Yurt dışı (örn: Brüksel, Kopenhag) aranırken Türkçe anahtar kelimeleri atlayarak API limitlerini koru
                 if not is_tr and any(
                     tw in keyword.lower()
@@ -85,6 +121,8 @@ class JobSpySource(BaseSource):
                 try:
                     jobs = self._fetch_keyword(keyword, loc)
                     all_jobs.extend(jobs)
+                    if jobs and on_batch is not None:
+                        on_batch(jobs)
                     logger.info(
                         "jobspy result  keyword=%r  location=%r  found=%d",
                         keyword, loc, len(jobs),

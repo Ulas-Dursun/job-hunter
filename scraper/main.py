@@ -6,6 +6,7 @@ okur ve Redis Streams (jobs:raw) kuyruğuna atomik tekilleştirme ile yazar.
 """
 
 import argparse
+import inspect
 import logging
 import time
 
@@ -38,11 +39,42 @@ def run_cycle(cfg: dict, sources: list, producer: RedisProducer) -> tuple[int, i
     for source in sources:
         source_cfg = cfg["sources"].get(source.name, {})
         try:
-            jobs = source.fetch(
-                keywords=source_cfg.get("keywords", []),
-                location=source_cfg.get("location", "Brussels, Belgium"),
+            supports_on_batch = isinstance(source, JobSpySource) or (
+                "on_batch" in inspect.signature(source.fetch).parameters
             )
-            published, skipped = producer.publish_batch(jobs)
+            if supports_on_batch:
+                stream_published = 0
+                stream_skipped = 0
+
+                def _on_batch(batch: list) -> None:
+                    nonlocal stream_published, stream_skipped
+                    try:
+                        pub, skip = producer.publish_batch(batch)
+                        stream_published += pub
+                        stream_skipped += skip
+                        logger.info(
+                            "jobspy incremental publish  batch=%d  published=%d  skipped=%d",
+                            len(batch), pub, skip,
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "jobspy incremental publish failed  batch=%d  error=%s",
+                            len(batch), exc, exc_info=True,
+                        )
+
+                jobs = source.fetch(
+                    keywords=source_cfg.get("keywords", []),
+                    location=source_cfg.get("location", "Brussels, Belgium"),
+                    on_batch=_on_batch,
+                )
+                published, skipped = stream_published, stream_skipped
+            else:
+                jobs = source.fetch(
+                    keywords=source_cfg.get("keywords", []),
+                    location=source_cfg.get("location", "Brussels, Belgium"),
+                )
+                published, skipped = producer.publish_batch(jobs)
+
             total_published += published
             total_skipped += skipped
             logger.info(
@@ -88,7 +120,7 @@ def main() -> None:
         ttl_days=redis_cfg.get("dedup_ttl_days", 30),
     )
 
-    # ── Sources (AB/Global önce, TR kaynakları en sonda) ──────────────────
+    # ── Sources (Hızlı AB/TR kaynakları önce, ağır JobSpy en sonda) ───────
     sources = []
     if cfg["sources"].get("eurocontrol", {}).get("enabled", False):
         sources.append(EurocontrolSource(cfg["sources"]["eurocontrol"]))
@@ -102,10 +134,6 @@ def main() -> None:
         sources.append(ArbeitnowSource(cfg["sources"]["arbeitnow"]))
         logger.info("arbeitnow source enabled (eu tech jobs)")
 
-    if cfg["sources"].get("jobspy", {}).get("enabled", False):
-        sources.append(JobSpySource(cfg["sources"]["jobspy"]))
-        logger.info("jobspy source enabled (linkedin + indeed)")
-
     if cfg["sources"].get("techcareer", {}).get("enabled", False):
         sources.append(TechcareerSource(cfg["sources"]["techcareer"]))
         logger.info("techcareer source enabled (techcareer.net)")
@@ -117,6 +145,10 @@ def main() -> None:
     if cfg["sources"].get("kariyer_net", {}).get("enabled", False):
         sources.append(KariyerNetSource(cfg["sources"]["kariyer_net"]))
         logger.info("kariyer_net source enabled (kariyer.net nuxt categories)")
+
+    if cfg["sources"].get("jobspy", {}).get("enabled", False):
+        sources.append(JobSpySource(cfg["sources"]["jobspy"]))
+        logger.info("jobspy source enabled (linkedin + indeed)")
 
     if not sources:
         logger.warning("no sources enabled — check config.yaml")

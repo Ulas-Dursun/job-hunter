@@ -489,3 +489,54 @@ func TestCheapFilter_DescPreviewUTF8Safe(t *testing.T) {
 		t.Errorf("UTF-8 sınırındaki açıklama geçmeliydi, red: %s", r.Reason)
 	}
 }
+
+func TestCheapFilter_RemoteLocationFilter(t *testing.T) {
+	f := testFilter()
+
+	rejectedLocations := []string{
+		"Remote, KSA",
+		"Remote - US",
+		"Remote, India",
+		"Home Based - APAC",
+		"San Francisco, CA (Remote)",
+	}
+
+	for _, loc := range rejectedLocations {
+		ok, reason := f.CheckLocation(loc)
+		if ok {
+			t.Errorf("expected CheckLocation(%q) to be rejected (false), got true", loc)
+		}
+		wantReason := "hedef dışı remote bölge: " + loc
+		if reason != wantReason {
+			t.Errorf("expected reason %q, got %q", wantReason, reason)
+		}
+
+		res := f.Check("Professional Services Engineer", "GitLab", "Go and cloud infrastructure", loc)
+		if !res.Rejected {
+			t.Errorf("expected Check with location=%q to be rejected, got passed", loc)
+		}
+		if res.Reason != wantReason {
+			t.Errorf("expected Check reason %q, got %q", wantReason, res.Reason)
+		}
+	}
+
+	allowedLocations := []string{
+		"Home Based - Americas; Home based - EMEA",
+		"Remote, Europe",
+		"Remote - US or Dublin",
+		"Remote - EMEA",
+		"Remote, Belgium",
+		"Remote, Turkey",
+	}
+
+	for _, loc := range allowedLocations {
+		ok, reason := f.CheckLocation(loc)
+		if !ok {
+			t.Errorf("expected CheckLocation(%q) to pass (true), got false: %s", loc, reason)
+		}
+		res := f.Check("Backend Software Engineer", "GitLab", "Go and PostgreSQL", loc)
+		if res.Rejected {
+			t.Errorf("expected Check with location=%q to pass, got rejected: %s", loc, res.Reason)
+		}
+	}
+}

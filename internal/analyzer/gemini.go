@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,12 +16,70 @@ import (
 	"github.com/ulasdursun/job-hunter/internal/config"
 )
 
+var reFlexFloat = regexp.MustCompile(`[-+]?\d+(?:\.\d+)?`)
+
+// parseFlexFloat, JSON içindeki sayısal (4.2) veya string ("4.2", "2.3/2.5", "4,2") puan değerlerini float64'e çevirir.
+func parseFlexFloat(raw json.RawMessage) (float64, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return 0, nil
+	}
+
+	var num float64
+	if err := json.Unmarshal(raw, &num); err == nil {
+		return num, nil
+	}
+
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return 0, err
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	if idx := strings.Index(s, "/"); idx != -1 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	s = strings.ReplaceAll(s, ",", ".")
+	if m := reFlexFloat.FindString(s); m != "" {
+		return strconv.ParseFloat(m, 64)
+	}
+	return strconv.ParseFloat(s, 64)
+}
+
 // ScoreBreakdown, AI eşleşme puanının nesnel alt bileşenlerini tutar.
 type ScoreBreakdown struct {
 	TechFit      float64 `json:"tech_fit"`
 	SeniorityFit float64 `json:"seniority_fit"`
 	DomainFit    float64 `json:"domain_fit"`
 	LocationFit  float64 `json:"location_fit"`
+}
+
+func (b *ScoreBreakdown) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		TechFit      json.RawMessage `json:"tech_fit"`
+		SeniorityFit json.RawMessage `json:"seniority_fit"`
+		DomainFit    json.RawMessage `json:"domain_fit"`
+		LocationFit  json.RawMessage `json:"location_fit"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var err error
+	if b.TechFit, err = parseFlexFloat(raw.TechFit); err != nil {
+		return fmt.Errorf("tech_fit: %w", err)
+	}
+	if b.SeniorityFit, err = parseFlexFloat(raw.SeniorityFit); err != nil {
+		return fmt.Errorf("seniority_fit: %w", err)
+	}
+	if b.DomainFit, err = parseFlexFloat(raw.DomainFit); err != nil {
+		return fmt.Errorf("domain_fit: %w", err)
+	}
+	if b.LocationFit, err = parseFlexFloat(raw.LocationFit); err != nil {
+		return fmt.Errorf("location_fit: %w", err)
+	}
+	return nil
 }
 
 // ScoreResult, AI'ın bir ilan için ürettiği yapılandırılmış analiz sonucu.
@@ -32,6 +92,35 @@ type ScoreResult struct {
 	ScoreBreakdown *ScoreBreakdown `json:"score_breakdown,omitempty"`
 	Action         string          `json:"action"`
 	Reasoning      string          `json:"reasoning"`
+}
+
+func (r *ScoreResult) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		MatchScore     json.RawMessage `json:"match_score"`
+		RoleFamily     string          `json:"role_family"`
+		SkillOverlap   []string        `json:"skill_overlap"`
+		MissingSkills  []string        `json:"missing_skills"`
+		RedFlags       []string        `json:"red_flags"`
+		ScoreBreakdown *ScoreBreakdown `json:"score_breakdown,omitempty"`
+		Action         string          `json:"action"`
+		Reasoning      string          `json:"reasoning"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	ms, err := parseFlexFloat(raw.MatchScore)
+	if err != nil {
+		return fmt.Errorf("match_score: %w", err)
+	}
+	r.MatchScore = ms
+	r.RoleFamily = raw.RoleFamily
+	r.SkillOverlap = raw.SkillOverlap
+	r.MissingSkills = raw.MissingSkills
+	r.RedFlags = raw.RedFlags
+	r.ScoreBreakdown = raw.ScoreBreakdown
+	r.Action = raw.Action
+	r.Reasoning = raw.Reasoning
+	return nil
 }
 
 // GeminiAnalyzer, Google Gemini ve Groq API havuzu üzerinden kesintisiz (failover destekli) iş ilanı analizi yapar.
@@ -85,21 +174,40 @@ func (g *GeminiAnalyzer) SetFeedback(feedback string) {
 
 // Analyze, bir iş ilanını AI ile analiz eder.
 // Aktif anahtar 429 (Rate Limit) veya 503 döndüğünde imleci (cursor) kalıcı olarak sıradaki sağlam anahtara kaydırır.
+// Yanıt bozuk JSON ise sıradaki LLM istasyonunda tekrar dener; yine başarısız olursa hatayı geçici (ErrAIBusy) olarak işaretler.
 func (g *GeminiAnalyzer) Analyze(
 	ctx context.Context,
 	title, company, location, description string,
 ) (*ScoreResult, error) {
-	if g.client.EndpointsCount() == 0 {
+	n := g.client.EndpointsCount()
+	if n == 0 {
 		return nil, fmt.Errorf("no AI API keys configured (set GEMINI_API_KEY or GROQ_API_KEY in .env)")
 	}
 
 	prompt := g.builder.Build(title, company, location, description)
-	rawText, err := g.client.Generate(ctx, prompt, g.maxTok, 0.10)
-	if err != nil {
-		return nil, err
+	maxAttempts := min(n, 2)
+	var lastParseErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		rawText, err := g.client.Generate(ctx, prompt, g.maxTok, 0.10)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := parseResult(rawText)
+		if err == nil {
+			return res, nil
+		}
+		lastParseErr = err
+		g.client.cursor.Add(1)
+		if attempt+1 < maxAttempts {
+			slog.Warn("ai analyzer: bozuk JSON yanıtı alındı, sıradaki istasyonda tekrar deneniyor",
+				"attempt", attempt+1,
+				"error", err,
+			)
+		}
 	}
 
-	return parseResult(rawText)
+	return nil, fmt.Errorf("%w: %v", ErrAIBusy, lastParseErr)
 }
 
 func parseResult(text string) (*ScoreResult, error) {
@@ -122,6 +230,7 @@ func parseResult(text string) (*ScoreResult, error) {
 		return nil, fmt.Errorf("parsing score JSON: %w", err)
 	}
 
+	rawMatchOutOfRange := result.MatchScore < 0 || result.MatchScore > 10
 	if result.MatchScore < 0 {
 		result.MatchScore = 0
 	}
@@ -135,21 +244,52 @@ func parseResult(text string) (*ScoreResult, error) {
 		b.DomainFit = clampFloat(b.DomainFit, 0, 1.5)
 		b.LocationFit = clampFloat(b.LocationFit, 0, 1.0)
 
-		// Alt bileşenlerin tamamı doluysa toplam ile match_score arasındaki büyük sapmaları logla.
-		// Hard cap (<= 6.5) ve hard disqualifier low-score kurallarını bozmamak için match_score ezilmez.
-		if b.TechFit > 0 && b.SeniorityFit > 0 && b.DomainFit > 0 && b.LocationFit > 0 {
+		// Alt bileşenlerden herhangi biri doluysa toplam ile match_score arasındaki tutarsızlığı kontrol et.
+		if !rawMatchOutOfRange && (b.TechFit > 0 || b.SeniorityFit > 0 || b.DomainFit > 0 || b.LocationFit > 0) {
 			breakdownSum := b.TechFit + b.SeniorityFit + b.DomainFit + b.LocationFit
-			if math.Abs(breakdownSum-result.MatchScore) > 0.5 {
-				slog.Warn("ai score_breakdown ile match_score arasında tutarsızlık tespit edildi",
+			breakdownSum = clampFloat(math.Round(breakdownSum*10)/10, 0.0, 10.0)
+			diff := math.Abs(breakdownSum - result.MatchScore)
+			if diff > 0.5 {
+				slog.Warn("ai score_breakdown ile match_score arasında tutarsızlık tespit edildi, breakdown toplamı esas alınıyor",
 					"breakdown_sum", breakdownSum,
-					"match_score", result.MatchScore,
-					"diff", math.Abs(breakdownSum-result.MatchScore),
+					"original_match_score", result.MatchScore,
+					"diff", diff,
 				)
+			}
+
+			if b.LocationFit <= 0.1 {
+				if result.MatchScore > 3.5 {
+					result.MatchScore = 3.5
+				}
+				result.Action = "skip"
+			} else if result.MatchScore < 5.0 || result.Action == "skip" {
+				if breakdownSum < result.MatchScore && diff > 0.15 {
+					result.MatchScore = breakdownSum
+				}
+				if result.MatchScore < 5.0 {
+					result.Action = "skip"
+				}
+			} else if diff > 0.15 {
+				explicitHardCap := result.MatchScore <= 6.5 && strings.Contains(strings.ToLower(result.Reasoning), "hard cap")
+				if !explicitHardCap {
+					result.MatchScore = breakdownSum
+					if result.MatchScore >= 7.0 {
+						result.Action = "apply"
+					} else if result.MatchScore >= 5.0 {
+						result.Action = "watch"
+					} else {
+						result.Action = "skip"
+					}
+				}
 			}
 		}
 	}
 
 	return &result, nil
+}
+
+func parseScoreResponse(text string) (*ScoreResult, error) {
+	return parseResult(text)
 }
 
 func clampFloat(v, minVal, maxVal float64) float64 {

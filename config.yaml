@@ -379,6 +379,7 @@ sources:
     poll_interval_minutes: 240
     max_age_days: 3
     results_per_keyword: 20
+    secondary_keywords_limit: 3
     location: "Istanbul, Turkey"
     locations:
       - "Istanbul, Turkey"
